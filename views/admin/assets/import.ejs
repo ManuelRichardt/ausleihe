@@ -1,0 +1,62 @@
+<% pageTitle = 'Import' %>
+<% const safeCsrf = (typeof csrfToken === 'undefined' || !csrfToken) ? '' : csrfToken; %>
+<%
+  const safeLendingLocationId =
+    (typeof lendingLocationId !== 'undefined' && lendingLocationId)
+      ? lendingLocationId
+      : (lendingLocation && lendingLocation.id ? lendingLocation.id : '');
+%>
+<section class="admin assets-import">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Import</h1>
+      <p class="text-muted mb-0">CSV oder Excel in die aktuelle Ausleihe importieren.</p>
+    </div>
+  </div>
+
+  <% if (errors && Object.keys(errors).length) { %>
+    <div class="alert alert-danger" role="alert">
+      <% Object.keys(errors).forEach(function(key) { %>
+        <div><%= errors[key] %></div>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <% if (result) { %>
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Ergebnis</h2>
+        <p class="mb-1">Erfolgreich angelegt: <%= result.created.length %></p>
+        <p class="mb-3">Aktualisiert: <%= result.updated ? result.updated.length : 0 %></p>
+        <% if (result.errors && result.errors.length) { %>
+          <div class="border-top pt-3">
+            <h3 class="h6 mb-2">Fehler</h3>
+            <ul class="mb-0">
+              <% result.errors.forEach(function(item) { %>
+                <li>Zeile <%= item.row %>: <%= item.errors.join(', ') %></li>
+              <% }) %>
+            </ul>
+          </div>
+        <% } else { %>
+          <p class="text-muted mb-0">Keine Fehler.</p>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Datei auswählen</h2>
+      <form method="post" action="/admin/assets/import<%= safeCsrf ? `?csrfToken=${safeCsrf}` : '' %>" enctype="multipart/form-data">
+        <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+        <% if (safeLendingLocationId) { %>
+          <input type="hidden" name="lendingLocationId" value="<%= safeLendingLocationId %>">
+        <% } %>
+        <div class="mb-3">
+          <%- include('../../partials/forms/input', { name: 'file', label: 'CSV oder Excel Datei', type: 'file', required: true }) %>
+        </div>
+        <button type="submit" class="btn btn-outline-primary">Import starten</button>
+      </form>
+    </div>
+  </div>
+</section>

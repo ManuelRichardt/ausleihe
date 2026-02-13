@@ -1,0 +1,69 @@
+<% pageTitle = 'Login' %>
+<% showHeader = false %>
+<% showSidebar = false %>
+<%
+  const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : '';
+  const safeFormData = (typeof formData !== 'undefined' && formData) ? formData : {};
+  const safeErrors = (typeof errors !== 'undefined' && errors) ? errors : {};
+  const samlActive = Boolean(samlEnabled);
+  const ldapActive = Boolean(ldapEnabled);
+  const returnToValue = (typeof next !== 'undefined' && next) ? next : '';
+%>
+
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+      <div class="card shadow-sm mt-5">
+        <div class="card-body">
+          <h1 class="h4 mb-3">Login</h1>
+
+          <% if (flashMessages && flashMessages.error && flashMessages.error.length) { %>
+            <% flashMessages.error.forEach(function(message) { %>
+              <div class="alert alert-danger" role="alert"><%= message %></div>
+            <% }) %>
+          <% } %>
+          <% if (flashMessages && flashMessages.success && flashMessages.success.length) { %>
+            <% flashMessages.success.forEach(function(message) { %>
+              <div class="alert alert-success" role="alert"><%= message %></div>
+            <% }) %>
+          <% } %>
+
+          <form method="post" action="/login" class="mb-3" novalidate>
+            <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+            <input type="hidden" name="next" value="<%= returnToValue %>">
+
+            <div class="mb-3">
+              <label for="username" class="form-label">Benutzername</label>
+              <input
+                type="text"
+                class="form-control <%= safeErrors.username ? 'is-invalid' : '' %>"
+                id="username"
+                name="username"
+                value="<%= safeFormData.username || '' %>"
+                required
+              >
+              <% if (safeErrors.username) { %>
+                <div class="invalid-feedback"><%= safeErrors.username %></div>
+              <% } %>
+            </div>
+
+            <div class="mb-3">
+              <label for="password" class="form-label">Passwort</label>
+              <input
+                type="password"
+                class="form-control <%= safeErrors.password ? 'is-invalid' : '' %>"
+                id="password"
+                name="password"
+              >
+              <% if (safeErrors.password) { %>
+                <div class="invalid-feedback"><%= safeErrors.password %></div>
+              <% } %>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Einloggen</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

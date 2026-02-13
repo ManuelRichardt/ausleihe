@@ -1,0 +1,41 @@
+<% const defs = (typeof customFieldDefinitions !== 'undefined' && customFieldDefinitions) ? customFieldDefinitions : []; %>
+<% const values = (typeof customFieldValues !== 'undefined' && customFieldValues) ? customFieldValues : []; %>
+<% const errs = (typeof errors !== 'undefined' && errors) ? errors : {}; %>
+<% if (Array.isArray(defs) && defs.length) { %>
+  <section class="custom-fields">
+    <% defs.forEach(function(def) { %>
+      <% const fieldId = `custom_${def.id}`; %>
+      <% const valueEntry = values.find(function(item) { return item.customFieldDefinitionId === def.id; }); %>
+      <% const value = valueEntry ? (valueEntry.valueString || valueEntry.valueNumber || valueEntry.valueBoolean || valueEntry.valueDate) : def.defaultValue; %>
+      <% const error = errs[def.key]; %>
+      <div class="form-field">
+        <label for="<%= fieldId %>"><%= def.label %> <% if (def.required) { %><span aria-hidden="true">*</span><% } %></label>
+        <% if (def.type === 'text') { %>
+          <textarea id="<%= fieldId %>" name="customFields[<%= def.id %>]" <%= def.required ? 'required' : '' %>><%= value || '' %></textarea>
+        <% } else if (def.type === 'number') { %>
+          <input id="<%= fieldId %>" type="number" name="customFields[<%= def.id %>]" value="<%= value || '' %>" <%= def.required ? 'required' : '' %> />
+        <% } else if (def.type === 'boolean') { %>
+          <select id="<%= fieldId %>" name="customFields[<%= def.id %>]" <%= def.required ? 'required' : '' %>>
+            <option value="">Auswählen</option>
+            <option value="true" <%= String(value) === 'true' ? 'selected' : '' %>>Ja</option>
+            <option value="false" <%= String(value) === 'false' ? 'selected' : '' %>>Nein</option>
+          </select>
+        <% } else if (def.type === 'date') { %>
+          <input id="<%= fieldId %>" type="date" name="customFields[<%= def.id %>]" value="<%= value || '' %>" <%= def.required ? 'required' : '' %> />
+        <% } else if (def.type === 'enum') { %>
+          <select id="<%= fieldId %>" name="customFields[<%= def.id %>]" <%= def.required ? 'required' : '' %>>
+            <option value="">Auswählen</option>
+            <% (def.enumValues || []).forEach(function(item) { %>
+              <option value="<%= item %>" <%= String(value) === String(item) ? 'selected' : '' %>><%= item %></option>
+            <% }) %>
+          </select>
+        <% } else { %>
+          <input id="<%= fieldId %>" type="text" name="customFields[<%= def.id %>]" value="<%= value || '' %>" <%= def.required ? 'required' : '' %> />
+        <% } %>
+        <% if (error) { %>
+          <div class="field-error" role="alert"><%= error %></div>
+        <% } %>
+      </div>
+    <% }) %>
+  </section>
+<% } %>

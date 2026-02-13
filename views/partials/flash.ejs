@@ -1,0 +1,10 @@
+<% if (flashMessages && Object.keys(flashMessages).length) { %>
+  <section class="flash" aria-live="polite">
+    <% Object.keys(flashMessages).forEach(function(type) { %>
+      <% const messages = Array.isArray(flashMessages[type]) ? flashMessages[type] : [flashMessages[type]]; %>
+      <% messages.forEach(function(message) { %>
+        <div class="flash__message flash__message--<%= type %>"><%= message %></div>
+      <% }) %>
+    <% }) %>
+  </section>
+<% } %>

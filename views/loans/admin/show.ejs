@@ -1,0 +1,170 @@
+<% pageTitle = 'Ausleihdetails' %>
+<% const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : ''; %>
+<% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
+<section class="admin-loan-detail">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Ausleihdetails</h1>
+      <p class="text-muted mb-0">ID: <%= loan.id %></p>
+    </div>
+    <a class="btn btn-outline-secondary" href="/admin/loans">Zurück</a>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="small text-muted">Nutzer</div>
+          <div class="fw-semibold"><%= loan.user ? [loan.user.firstName, loan.user.lastName].filter(Boolean).join(' ') || loan.user.username : '-' %></div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">E-Mail</div>
+          <div class="fw-semibold"><%= loan.user ? loan.user.email || '-' : '-' %></div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Ausleihe</div>
+          <div class="fw-semibold"><%= loan.lendingLocation ? loan.lendingLocation.name : '-' %></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header bg-white">
+      <h2 class="h6 mb-0">Ausleihzeitraum</h2>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/admin/loans/<%= loan.id %>/period" class="row g-2 align-items-end">
+        <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+        <div class="col-md-5">
+          <label class="form-label" for="reservedFrom">Von</label>
+          <input id="reservedFrom" name="reservedFrom" type="datetime-local" class="form-control" value="<%= loan.reservedFrom ? new Date(loan.reservedFrom).toISOString().slice(0,16) : '' %>" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label" for="reservedUntil">Bis</label>
+          <input id="reservedUntil" name="reservedUntil" type="datetime-local" class="form-control" value="<%= loan.reservedUntil ? new Date(loan.reservedUntil).toISOString().slice(0,16) : '' %>" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
+        </div>
+        <div class="col-md-2 d-grid">
+          <button type="submit" class="btn btn-outline-primary" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>Speichern</button>
+        </div>
+      </form>
+      <% if (loan.status !== 'reserved') { %>
+        <div class="small text-muted mt-2">Zeitraum kann nur im Status „reserved“ geändert werden.</div>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header bg-white">
+      <h2 class="h6 mb-0">Item hinzufügen</h2>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/admin/loans/<%= loan.id %>/items" class="row g-2 align-items-end" id="loanItemAddForm">
+        <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+        <div class="col-md-8 position-relative">
+          <label class="form-label" for="assetModelSearch">Suche</label>
+          <input type="text" id="assetModelSearch" class="form-control" autocomplete="off" placeholder="Modell, Hersteller, Kategorie" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
+          <input type="hidden" id="assetModelId" name="assetModelId">
+          <div class="list-group position-absolute w-100 d-none" id="assetModelSuggestions"></div>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="quantity">Menge</label>
+          <input id="quantity" name="quantity" type="number" min="1" value="1" class="form-control" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+          <button type="submit" class="btn btn-outline-primary flex-fill" title="Hinzufügen" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
+            <i class="bi bi-plus-lg"></i>
+          </button>
+          <button type="button" class="btn btn-outline-secondary flex-fill" title="Quickscan">
+            <i class="bi bi-upc-scan"></i>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 justify-content-end mb-2">
+    <button type="button" class="btn btn-outline-secondary"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
+    <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/sign"><i class="bi bi-pen me-1"></i>Unterschreiben</a>
+    <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/print?format=pdf" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Ausleihzettel drucken</a>
+    <% if (loan.status === 'handed_over' || loan.status === 'overdue') { %>
+      <a class="btn btn-outline-secondary" href="/admin/loans/<%= loan.id %>/return"><i class="bi bi-arrow-return-left me-1"></i>Rücknahme</a>
+    <% } %>
+    <button type="submit" form="handoverForm" class="btn btn-success" <%= loan.status !== 'reserved' ? 'disabled' : '' %>><i class="bi bi-check2-circle me-1"></i>Übergabe bestätigen</button>
+  </div>
+
+  <form method="post" id="handoverForm" action="/admin/loans/<%= loan.id %>/hand-over" class="card shadow-sm">
+    <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Inventarnummer</th>
+            <th>Modell</th>
+            <th>Hersteller</th>
+            <th>Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (Array.isArray(loan.loanItems) && loan.loanItems.length) { %>
+            <% loan.loanItems.forEach(function (item, index) { %>
+              <%
+                const model = item.assetModel || (item.asset && item.asset.model) || null;
+                const manufacturer = model && model.manufacturer ? model.manufacturer : null;
+                const modelId = item.assetModelId || (item.asset && item.asset.assetModelId) || null;
+                const assignable = modelId && assetsByModelId ? (assetsByModelId[modelId] || []) : [];
+              %>
+              <tr>
+                <td>
+                  <input type="hidden" name="items[<%= index %>][loanItemId]" value="<%= item.id %>">
+                  <% if (loan.status === 'reserved') { %>
+                    <select class="form-select form-select-sm" name="items[<%= index %>][assetId]">
+                      <option value="">Bitte wählen</option>
+                      <% assignable.forEach(function (asset) { %>
+                        <option value="<%= asset.id %>" <%= item.assetId === asset.id ? 'selected' : '' %>><%= asset.inventoryNumber || asset.serialNumber || asset.id %></option>
+                      <% }) %>
+                    </select>
+                  <% } else { %>
+                    <%= item.asset ? (item.asset.inventoryNumber || item.asset.serialNumber || item.asset.id) : '-' %>
+                  <% } %>
+                </td>
+                <td><%= model ? model.name : '-' %></td>
+                <td><%= manufacturer ? manufacturer.name : '-' %></td>
+                <td class="d-flex gap-2">
+                  <form method="post" action="/admin/loans/<%= loan.id %>/items/<%= item.id %>/model" class="d-flex gap-2">
+                    <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+                    <select name="assetModelId" class="form-select form-select-sm" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
+                      <% (assetModels || []).forEach(function(m) { %>
+                        <option value="<%= m.id %>" <%= model && m.id === model.id ? 'selected' : '' %>><%= m.name %> — <%= m.manufacturer ? m.manufacturer.name : '-' %></option>
+                      <% }) %>
+                    </select>
+                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Modell ändern" <%= loan.status !== 'reserved' ? 'disabled' : '' %>><i class="bi bi-arrow-repeat"></i></button>
+                  </form>
+                  <form method="post" action="/admin/loans/<%= loan.id %>/items/<%= item.id %>/delete">
+                    <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Löschen" <%= loan.status !== 'reserved' ? 'disabled' : '' %>><i class="bi bi-trash3-fill"></i></button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">Keine reservierten Items vorhanden.</td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </form>
+
+  <div class="d-flex flex-wrap gap-2 justify-content-end mt-2">
+    <button type="button" class="btn btn-outline-secondary"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
+    <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/sign"><i class="bi bi-pen me-1"></i>Unterschreiben</a>
+    <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/print?format=pdf" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Ausleihzettel drucken</a>
+    <% if (loan.status === 'handed_over' || loan.status === 'overdue') { %>
+      <a class="btn btn-outline-secondary" href="/admin/loans/<%= loan.id %>/return"><i class="bi bi-arrow-return-left me-1"></i>Rücknahme</a>
+    <% } %>
+    <button type="submit" form="handoverForm" class="btn btn-success" <%= loan.status !== 'reserved' ? 'disabled' : '' %>><i class="bi bi-check2-circle me-1"></i>Übergabe bestätigen</button>
+  </div>
+</section>
+<script src="/js/loan-model-search.js"></script>

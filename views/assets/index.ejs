@@ -1,0 +1,181 @@
+<% pageTitle = 'Assets' %>
+<%
+  const viewModeValue = viewMode || 'grid';
+  const safeFilters = filters || {};
+  const safePagination = pagination || { page: 1, limit: 12, total: 0, hasNext: false };
+  const totalPages = Math.max(Math.ceil((safePagination.total || 0) / (safePagination.limit || 1)), 1);
+  const currentPage = safePagination.page || 1;
+
+  const buildQuery = function (overrides) {
+    const params = Object.assign({}, safeFilters, {
+      view: viewModeValue,
+      sortBy: sortBy || 'name',
+      sortOrder: sortOrder || 'ASC',
+      limit: safePagination.limit,
+      page: currentPage,
+    }, overrides || {});
+    const pairs = Object.keys(params)
+      .filter((key) => params[key] !== undefined && params[key] !== null && params[key] !== '')
+      .map((key) => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`);
+    return pairs.length ? `?${pairs.join('&')}` : '';
+  };
+%>
+
+<section class="assets">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-end justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Asset-Katalog</h1>
+      <p class="text-muted mb-0">Geraete und Raeume reservieren nach Modell.</p>
+    </div>
+    <div class="btn-group" role="group">
+      <a class="btn btn-outline-secondary <%= viewModeValue === 'grid' ? 'active' : '' %>" href="/assets<%= buildQuery({ view: 'grid', page: 1 }) %>">
+        <i class="bi bi-grid-3x3-gap"></i>
+      </a>
+      <a class="btn btn-outline-secondary <%= viewModeValue === 'list' ? 'active' : '' %>" href="/assets<%= buildQuery({ view: 'list', page: 1 }) %>">
+        <i class="bi bi-list"></i>
+      </a>
+    </div>
+  </div>
+
+  <form method="get" action="/assets" class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="q">Suche</label>
+          <input class="form-control" id="q" name="q" value="<%= safeFilters.q || '' %>" placeholder="Modell, Beschreibung, Hersteller">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="categoryId">Kategorie</label>
+          <select id="categoryId" name="categoryId" class="form-select">
+            <option value="">Alle</option>
+            <% (categories || []).forEach(function(cat) { %>
+              <option value="<%= cat.id %>" <%= safeFilters.categoryId === cat.id ? 'selected' : '' %>><%= cat.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="manufacturerId">Hersteller</label>
+          <select id="manufacturerId" name="manufacturerId" class="form-select">
+            <option value="">Alle</option>
+            <% (manufacturers || []).forEach(function(m) { %>
+              <option value="<%= m.id %>" <%= safeFilters.manufacturerId === m.id ? 'selected' : '' %>><%= m.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="sortBy">Sortierung</label>
+          <select id="sortBy" name="sortBy" class="form-select">
+            <option value="name" <%= sortBy === 'name' ? 'selected' : '' %>>Name</option>
+            <option value="manufacturer" <%= sortBy === 'manufacturer' ? 'selected' : '' %>>Hersteller</option>
+            <option value="category" <%= sortBy === 'category' ? 'selected' : '' %>>Kategorie</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label" for="sortOrder">Reihenfolge</label>
+          <select id="sortOrder" name="sortOrder" class="form-select">
+            <option value="ASC" <%= (sortOrder || 'ASC') === 'ASC' ? 'selected' : '' %>>Aufsteigend</option>
+            <option value="DESC" <%= (sortOrder || 'ASC') === 'DESC' ? 'selected' : '' %>>Absteigend</option>
+          </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100">Filtern</button>
+        </div>
+      </div>
+      <input type="hidden" name="view" value="<%= viewModeValue %>">
+      <input type="hidden" name="limit" value="<%= safePagination.limit %>">
+    </div>
+  </form>
+
+  <% if (Array.isArray(assetModels) && assetModels.length) { %>
+    <% if (viewModeValue === 'grid') { %>
+      <div class="row g-4">
+        <% assetModels.forEach(function(model) { %>
+          <%
+            const attachments = Array.isArray(model.attachments) ? model.attachments : [];
+            const primaryImage = attachments.find(function(att) { return att.kind === 'image' && att.isPrimary; }) || attachments.find(function(att) { return att.kind === 'image'; });
+            const imageUrl = primaryImage ? primaryImage.url : (model.imageUrl || null);
+          %>
+          <div class="col-12 col-md-6 col-xl-4">
+            <div class="card h-100 shadow-sm">
+              <% if (imageUrl) { %>
+                <a href="/assets/<%= model.id %>">
+                  <img src="<%= imageUrl %>" class="card-img-top" alt="<%= model.name %>">
+                </a>
+              <% } else { %>
+                <a href="/assets/<%= model.id %>" class="text-decoration-none">
+                  <div class="ratio ratio-4x3 bg-light d-flex align-items-center justify-content-center text-muted">Kein Bild</div>
+                </a>
+              <% } %>
+              <div class="card-body">
+                <h2 class="h6 mb-2"><%= model.name %></h2>
+                <p class="text-muted mb-2"><%= model.manufacturer ? model.manufacturer.name : '-' %></p>
+                <p class="small mb-0">Kategorie: <%= model.category ? model.category.name : '-' %></p>
+                <p class="small mb-0">Standort: <%= model.lendingLocation ? model.lendingLocation.name : '-' %></p>
+              </div>
+              <div class="card-footer d-flex justify-content-between align-items-center">
+                <a class="btn btn-outline-primary btn-sm" href="/assets/<%= model.id %>">Details</a>
+                <% if (can('loan.create')) { %>
+                  <a class="btn btn-primary btn-sm" href="/assets/<%= model.id %>/reserve">Reservieren</a>
+                <% } %>
+              </div>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <div class="card shadow-sm">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Modell</th>
+                <th>Hersteller</th>
+                <th>Kategorie</th>
+                <th>Standort</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <% assetModels.forEach(function(model) { %>
+                <tr>
+                  <td><%= model.name %></td>
+                  <td><%= model.manufacturer ? model.manufacturer.name : '-' %></td>
+                  <td><%= model.category ? model.category.name : '-' %></td>
+                  <td><%= model.lendingLocation ? model.lendingLocation.name : '-' %></td>
+                  <td class="text-end">
+                    <div class="btn-group btn-group-sm" role="group">
+                      <a class="btn btn-outline-primary" href="/assets/<%= model.id %>">Details</a>
+                      <% if (can('loan.create')) { %>
+                        <a class="btn btn-primary" href="/assets/<%= model.id %>/reserve">Reservieren</a>
+                      <% } %>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    <% } %>
+  <% } else { %>
+    <div class="alert alert-light border">Keine Modelle gefunden.</div>
+  <% } %>
+
+  <% if (safePagination.total > safePagination.limit) { %>
+    <nav class="mt-4" aria-label="Asset Pagination">
+      <ul class="pagination">
+        <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
+          <a class="page-link" href="/assets<%= buildQuery({ page: currentPage - 1 }) %>">Zurueck</a>
+        </li>
+        <% for (let i = 1; i <= totalPages; i += 1) { %>
+          <li class="page-item <%= i === currentPage ? 'active' : '' %>">
+            <a class="page-link" href="/assets<%= buildQuery({ page: i }) %>"><%= i %></a>
+          </li>
+        <% } %>
+        <li class="page-item <%= currentPage >= totalPages ? 'disabled' : '' %>">
+          <a class="page-link" href="/assets<%= buildQuery({ page: currentPage + 1 }) %>">Weiter</a>
+        </li>
+      </ul>
+    </nav>
+  <% } %>
+</section>

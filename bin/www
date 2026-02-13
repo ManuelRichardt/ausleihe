@@ -1,0 +1,142 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const debug = require('debug')('new-project:server');
+
+require('dotenv').config();
+
+const app = require('../app');
+
+/**
+ * Get ports and flags from environment.
+ */
+
+const httpPort = normalizePort(process.env.HTTP_PORT || '3000');
+const httpsPort = normalizePort(process.env.HTTPS_PORT || '');
+
+const httpsRedirect = parseBool(process.env.HTTPS_REDIRECT);
+const httpsForce = parseBool(process.env.HTTPS_FORCE);
+
+const keyPath = process.env.SSL_KEY_PATH;
+const certPath = process.env.SSL_CERT_PATH;
+
+const keyExists = keyPath && fs.existsSync(path.resolve(keyPath));
+const certExists = certPath && fs.existsSync(path.resolve(certPath));
+const httpsEnabled = Boolean(httpsPort) && keyExists && certExists;
+
+if (httpsForce && !httpsEnabled) {
+  console.error('HTTPS_FORCE=true but HTTPS is not enabled. Check HTTPS_PORT and certificate paths.');
+  process.exit(1);
+}
+
+/**
+ * Create HTTP server.
+ */
+
+if (!httpsForce) {
+  const httpHandler = httpsEnabled && httpsRedirect ? redirectToHttps : app;
+  const httpServer = http.createServer(httpHandler);
+
+  httpServer.listen(httpPort);
+  httpServer.on('error', (error) => onError(error, 'HTTP', httpPort));
+  httpServer.on('listening', () => onListening(httpServer, 'HTTP'));
+}
+
+/**
+ * Create HTTPS server if possible.
+ */
+
+if (httpsEnabled) {
+  const httpsOptions = {
+    key: fs.readFileSync(path.resolve(keyPath)),
+    cert: fs.readFileSync(path.resolve(certPath)),
+  };
+
+  const httpsServer = https.createServer(httpsOptions, app);
+
+  httpsServer.listen(httpsPort);
+  httpsServer.on('error', (error) => onError(error, 'HTTPS', httpsPort));
+  httpsServer.on('listening', () => onListening(httpsServer, 'HTTPS'));
+} else if (httpsRedirect) {
+  console.warn('HTTPS_REDIRECT=true but HTTPS is not enabled. HTTP will stay reachable without redirect.');
+}
+
+function redirectToHttps(req, res) {
+  const hostHeader = req.headers.host || '';
+  const hostname = hostHeader.split(':')[0] || 'localhost';
+  const location = `https://${hostname}:${httpsPort}${req.url}`;
+
+  res.writeHead(301, { Location: location });
+  res.end();
+}
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  if (val === '' || val === undefined || val === null) {
+    return false;
+  }
+
+  const port = parseInt(val, 10);
+
+  if (Number.isNaN(port)) {
+    return val;
+  }
+
+  if (port >= 0) {
+    return port;
+  }
+
+  return false;
+}
+
+function parseBool(val) {
+  if (val === undefined || val === null) {
+    return false;
+  }
+  return String(val).toLowerCase() === 'true';
+}
+
+/**
+ * Event listener for HTTP/HTTPS server "error" event.
+ */
+
+function onError(error, label, port) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  const bind = typeof port === 'string' ? `Pipe ${port}` : `Port ${port}`;
+
+  switch (error.code) {
+    case 'EACCES':
+      console.error(`${label} ${bind} requires elevated privileges`);
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(`${label} ${bind} is already in use`);
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP/HTTPS server "listening" event.
+ */
+
+function onListening(server, label) {
+  const addr = server.address();
+  const bind = typeof addr === 'string' ? `pipe ${addr}` : `port ${addr.port}`;
+  debug(`${label} listening on ${bind}`);
+}

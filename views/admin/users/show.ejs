@@ -1,0 +1,181 @@
+<% pageTitle = 'Benutzer' %>
+<%
+  const userRoles = Array.isArray(roles) ? roles : [];
+  const roleList = Array.isArray(allRoles) ? allRoles : [];
+  const locationOptions = (typeof lendingLocations !== 'undefined' && Array.isArray(lendingLocations)) ? lendingLocations : [];
+  const permissionList = Array.isArray(permissions) ? permissions : [];
+  const activeLoans = Array.isArray(loans) ? loans : [];
+  const reservations = Array.isArray(reservationsList) ? reservationsList : (Array.isArray(reservations) ? reservations : []);
+%>
+
+<% const canManageLoansForView = (typeof can !== 'undefined' && typeof can === 'function') ? can('loan.manage') : false; %>
+<section class="admin users">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= user.firstName || '' %> <%= user.lastName || '' %></h1>
+      <p class="text-muted mb-0"><%= user.email || '-' %></p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/admin/users/<%= user.id %>/edit" class="btn btn-outline-primary">
+        <i class="bi bi-pencil-fill me-1"></i> Bearbeiten
+      </a>
+      <a href="/admin/users" class="btn btn-outline-secondary">Zur Übersicht</a>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Benutzerdaten</h2>
+          <dl class="row mb-0">
+            <dt class="col-sm-4">Benutzername</dt>
+            <dd class="col-sm-8"><%= user.username || '-' %></dd>
+            <dt class="col-sm-4">Vorname</dt>
+            <dd class="col-sm-8"><%= user.firstName || '-' %></dd>
+            <dt class="col-sm-4">Nachname</dt>
+            <dd class="col-sm-8"><%= user.lastName || '-' %></dd>
+            <dt class="col-sm-4">E-Mail</dt>
+            <dd class="col-sm-8"><%= user.email || '-' %></dd>
+            <dt class="col-sm-4">Status</dt>
+            <dd class="col-sm-8">
+              <% if (user.isActive) { %>
+                <span class="badge text-bg-success">Aktiv</span>
+              <% } else { %>
+                <span class="badge text-bg-danger">Gesperrt</span>
+              <% } %>
+            </dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Rollen</h2>
+          <% if (userRoles.length) { %>
+            <div class="d-flex flex-wrap gap-2">
+              <% userRoles.forEach(function(role) { %>
+                <span class="badge text-bg-secondary">
+                  <%= role.role ? role.role.name : (role.name || role.roleId || '-') %>
+                  <% if (role.lendingLocation && role.lendingLocation.name) { %>
+                    · <%= role.lendingLocation.name %>
+                  <% } %>
+                </span>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <p class="text-muted mb-0">Keine Rollen zugewiesen.</p>
+          <% } %>
+
+          <hr>
+          <h3 class="h6">Verfügbare Rollen</h3>
+          <% if (roleList.length) { %>
+            <div class="d-flex flex-column gap-2">
+              <% roleList.forEach(function(role) { %>
+                <form method="post" action="/admin/users/<%= user.id %>/roles" class="d-flex flex-wrap align-items-center gap-2">
+                  <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                  <input type="hidden" name="roleId" value="<%= role.id %>">
+                  <% if (role.scope === 'ausleihe') { %>
+                    <select name="lendingLocationId" class="form-select form-select-sm" aria-label="Ausleihe wählen">
+                      <option value="">Ausleihe wählen</option>
+                      <% locationOptions.forEach(function(loc) { %>
+                        <option value="<%= loc.id %>"><%= loc.name %></option>
+                      <% }) %>
+                    </select>
+                  <% } %>
+                  <button type="submit" class="btn btn-sm btn-outline-primary"><%= role.name %></button>
+                </form>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <p class="text-muted mb-0">Keine Rollen verfügbar.</p>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Aktive Ausleihen</h2>
+          <% if (activeLoans.length) { %>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead>
+                  <tr>
+                    <th>Ausleihe</th>
+                    <th>Status</th>
+                    <th>Von</th>
+                    <th>Bis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% activeLoans.forEach(function(loan) { %>
+                    <tr>
+                      <td>
+                        <% if (canManageLoansForView) { %>
+                          <a href="/admin/loans/<%= loan.id %>">#<%= loan.id %></a>
+                        <% } else { %>
+                          #<%= loan.id %>
+                        <% } %>
+                      </td>
+                      <td><%= loan.status %></td>
+                      <td><%= loan.reservedFrom ? loan.reservedFrom : '-' %></td>
+                      <td><%= loan.reservedUntil ? loan.reservedUntil : '-' %></td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } else { %>
+            <p class="text-muted mb-0">Keine aktiven Ausleihen.</p>
+          <% } %>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Reservierungen</h2>
+          <% if (reservations.length) { %>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle">
+                <thead>
+                  <tr>
+                    <th>Reservierung</th>
+                    <th>Status</th>
+                    <th>Von</th>
+                    <th>Bis</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% reservations.forEach(function(reservation) { %>
+                    <tr>
+                      <td>
+                        <% if (canManageLoansForView) { %>
+                          <a href="/admin/reservations/<%= reservation.id %>">#<%= reservation.id %></a>
+                        <% } else { %>
+                          #<%= reservation.id %>
+                        <% } %>
+                      </td>
+                      <td><%= reservation.status || '-' %></td>
+                      <td><%= reservation.reservedFrom ? reservation.reservedFrom : '-' %></td>
+                      <td><%= reservation.reservedUntil ? reservation.reservedUntil : '-' %></td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } else { %>
+            <p class="text-muted mb-0">Keine Reservierungen.</p>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

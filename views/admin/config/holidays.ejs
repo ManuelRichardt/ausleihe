@@ -1,0 +1,24 @@
+<% pageTitle = 'Feiertage' %>
+<section class="admin config">
+  <h1>Feiertage</h1>
+  <% if (Array.isArray(holidays) && holidays.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Bezeichnung</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% holidays.forEach(function(h) { %>
+          <tr>
+            <td><%= h.date %></td>
+            <td><%= h.name %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="empty">Keine Feiertage definiert.</p>
+  <% } %>
+</section>

@@ -1,0 +1,79 @@
+<% pageTitle = 'Ausleihdetails' %>
+<% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
+<section>
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Ausleihdetails</h1>
+      <p class="text-muted mb-0">ID: <%= loan.id %></p>
+    </div>
+    <a class="btn btn-outline-secondary" href="/loans">Zurück</a>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-sm-4 text-muted">Ausleihe</dt>
+            <dd class="col-sm-8"><%= loan.lendingLocation ? loan.lendingLocation.name : '-' %></dd>
+            <dt class="col-sm-4 text-muted">Von</dt>
+            <dd class="col-sm-8"><%= safeFormatDateTime(loan.reservedFrom) %></dd>
+            <dt class="col-sm-4 text-muted">Bis</dt>
+            <dd class="col-sm-8"><%= safeFormatDateTime(loan.reservedUntil) %></dd>
+            <dt class="col-sm-4 text-muted">Status</dt>
+            <dd class="col-sm-8">
+              <span class="badge <%= loan.status === 'handed_over' ? 'text-bg-success' : (loan.status === 'reserved' ? 'text-bg-primary' : 'text-bg-secondary') %>">
+                <%= loan.status %>
+              </span>
+            </dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white">
+          <h2 class="h6 mb-0">Ausgeliehene Modelle</h2>
+        </div>
+        <div class="card-body p-0">
+          <%
+            const grouped = {};
+            (loan.loanItems || []).forEach(function (item) {
+              const model = item.assetModel || (item.asset && item.asset.model) || null;
+              const key = model ? model.id : 'unknown';
+              if (!grouped[key]) {
+                grouped[key] = { model: model, quantity: 0 };
+              }
+              grouped[key].quantity += 1;
+            });
+            const groupedItems = Object.values(grouped);
+          %>
+          <% if (groupedItems.length) { %>
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Modell</th>
+                    <th>Hersteller</th>
+                    <th class="text-end">Menge</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% groupedItems.forEach(function (entry) { %>
+                    <tr>
+                      <td><%= entry.model ? entry.model.name : 'Unbekanntes Modell' %></td>
+                      <td><%= entry.model && entry.model.manufacturer ? entry.model.manufacturer.name : '-' %></td>
+                      <td class="text-end"><span class="badge text-bg-primary"><%= entry.quantity %></span></td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } else { %>
+            <div class="p-3 text-muted">Keine Items vorhanden.</div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

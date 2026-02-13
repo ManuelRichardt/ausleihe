@@ -1,0 +1,74 @@
+<% pageTitle = 'Ausleihstelle bearbeiten' %>
+<%
+  const safeFormData = (typeof formData !== 'undefined' && formData) ? formData : null;
+  const safeLocation = (typeof location !== 'undefined' && location) ? location : {};
+  const values = (safeFormData && Object.keys(safeFormData).length) ? safeFormData : safeLocation;
+  const safeErrors = (typeof errors !== 'undefined' && errors) ? errors : null;
+  const errorsList = Array.isArray(safeErrors) ? safeErrors : [];
+  const errorsMap = (!Array.isArray(safeErrors) && safeErrors) ? safeErrors : {};
+  const errorFor = function (field) {
+    if (errorsMap && errorsMap[field]) {
+      return errorsMap[field];
+    }
+    const match = errorsList.find(function (err) { return err.field === field; });
+    return match ? match.message : '';
+  };
+  const safeAdmin = (typeof adminUser !== 'undefined' && adminUser) ? adminUser : null;
+%>
+
+<section class="system lending-locations">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Ausleihstelle bearbeiten</h1>
+      <p class="text-muted mb-0"><%= safeLocation.name || '' %></p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/system/lending-locations/<%= safeLocation.id %>" class="btn btn-outline-secondary">Zurück</a>
+    </div>
+  </div>
+
+  <form method="post" action="/system/lending-locations/<%= safeLocation.id %>" class="card shadow-sm">
+    <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label for="name" class="form-label">Name</label>
+          <input type="text" class="form-control <%= errorFor('name') ? 'is-invalid' : '' %>" id="name" name="name" value="<%= values.name || '' %>">
+          <% if (errorFor('name')) { %><div class="invalid-feedback"><%= errorFor('name') %></div><% } %>
+        </div>
+        <div class="col-md-6">
+          <label for="contactEmail" class="form-label">Kontakt E-Mail</label>
+          <input type="email" class="form-control <%= errorFor('contactEmail') ? 'is-invalid' : '' %>" id="contactEmail" name="contactEmail" value="<%= values.contactEmail || '' %>">
+          <% if (errorFor('contactEmail')) { %><div class="invalid-feedback"><%= errorFor('contactEmail') %></div><% } %>
+        </div>
+        <div class="col-md-6" data-user-lookup>
+          <label for="adminUserSearch" class="form-label">Administrator</label>
+          <div class="position-relative">
+            <input type="text" class="form-control <%= errorFor('adminUserId') ? 'is-invalid' : '' %>" id="adminUserSearch" data-user-lookup-input placeholder="Nach Namen, Username oder E-Mail suchen" value="<%= safeAdmin ? ((safeAdmin.firstName || '') + ' ' + (safeAdmin.lastName || '')).trim() : '' %>">
+            <input type="hidden" name="adminUserId" data-user-lookup-id value="<%= safeAdmin ? safeAdmin.id : '' %>">
+            <div class="list-group position-absolute start-0 top-100 w-100 z-3 d-none" data-user-lookup-results></div>
+            <div class="text-muted small mt-2 d-none" data-user-lookup-empty>Keine passenden Benutzer gefunden.</div>
+            <% if (errorFor('adminUserId')) { %><div class="invalid-feedback d-block"><%= errorFor('adminUserId') %></div><% } %>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label for="isActive" class="form-label">Status</label>
+          <select id="isActive" name="isActive" class="form-select">
+            <option value="true" <%= values.isActive !== false ? 'selected' : '' %>>Aktiv</option>
+            <option value="false" <%= values.isActive === false ? 'selected' : '' %>>Inaktiv</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label for="description" class="form-label">Beschreibung</label>
+          <textarea id="description" name="description" class="form-control" rows="3"><%= values.description || '' %></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card-footer d-flex flex-wrap gap-2 justify-content-end">
+      <button type="submit" class="btn btn-primary">Speichern</button>
+      <a href="/system/lending-locations/<%= safeLocation.id %>" class="btn btn-outline-secondary">Abbrechen</a>
+    </div>
+  </form>
+</section>
+<script src="/js/user-lookup.js"></script>

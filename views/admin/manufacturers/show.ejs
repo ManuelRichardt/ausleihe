@@ -1,0 +1,36 @@
+<% pageTitle = 'Hersteller' %>
+<% const safeManufacturer = (typeof manufacturer !== 'undefined' && manufacturer) ? manufacturer : {}; %>
+
+<section class="admin manufacturers">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= safeManufacturer.name || 'Hersteller' %></h1>
+      <p class="text-muted mb-0"><%= safeManufacturer.website || '-' %></p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/admin/manufacturers/<%= safeManufacturer.id %>/edit" class="btn btn-outline-primary">
+        <i class="bi bi-pencil-fill me-1"></i> Bearbeiten
+      </a>
+      <a href="/admin/manufacturers" class="btn btn-outline-secondary">Zur Übersicht</a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <dl class="row mb-0">
+        <dt class="col-sm-4">Name</dt>
+        <dd class="col-sm-8"><%= safeManufacturer.name || '-' %></dd>
+        <dt class="col-sm-4">Website</dt>
+        <dd class="col-sm-8"><%= safeManufacturer.website || '-' %></dd>
+        <dt class="col-sm-4">Status</dt>
+        <dd class="col-sm-8">
+          <% if (safeManufacturer.isActive) { %>
+            <span class="badge text-bg-success">Aktiv</span>
+          <% } else { %>
+            <span class="badge text-bg-danger">Inaktiv</span>
+          <% } %>
+        </dd>
+      </dl>
+    </div>
+  </div>
+</section>

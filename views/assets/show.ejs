@@ -1,0 +1,161 @@
+<% pageTitle = 'Asset' %>
+<%
+  const model = assetModel || {};
+  const manufacturer = model.manufacturer || null;
+  const category = model.category || null;
+  const attachments = Array.isArray(model.attachments) ? model.attachments : [];
+  const attachmentImages = attachments.filter(function (att) { return att && att.kind === 'image' && att.url; });
+  const fallbackImage = model.imageUrl ? [{ id: 'fallback', url: model.imageUrl, isPrimary: true }] : [];
+  const galleryImages = attachmentImages.length ? attachmentImages : fallbackImage;
+  const primaryImage = galleryImages.find(function (att) { return att.isPrimary; }) || galleryImages[0] || null;
+  const imageUrl = primaryImage ? primaryImage.url : null;
+%>
+
+<section class="assets-detail">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= model.name || 'Asset' %></h1>
+      <p class="text-muted mb-0"><%= manufacturer ? manufacturer.name : '' %></p>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-12 col-lg-5">
+      <div class="card shadow-sm">
+        <% if (Array.isArray(galleryImages) && galleryImages.length) { %>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-3">
+                <div class="d-grid gap-2">
+                  <% galleryImages.forEach(function (img, idx) { %>
+                    <button
+                      type="button"
+                      class="btn p-0 border <%= idx === 0 ? 'border-primary' : 'border-light' %> asset-gallery-thumb"
+                      data-image-url="<%= img.url %>"
+                      data-image-alt="<%= model.name || 'Asset Bild' %>"
+                      data-image-index="<%= idx %>"
+                    >
+                      <img src="<%= img.url %>" class="img-fluid rounded" alt="Thumbnail <%= idx + 1 %>">
+                    </button>
+                  <% }) %>
+                </div>
+              </div>
+              <div class="col-9">
+                <button
+                  type="button"
+                  class="btn p-0 w-100 border rounded overflow-hidden"
+                  id="assetGalleryMainButton"
+                  data-bs-toggle="modal"
+                  data-bs-target="#assetGalleryModal"
+                >
+                  <img src="<%= imageUrl %>" class="img-fluid w-100" id="assetGalleryMainImage" alt="<%= model.name || 'Asset Bild' %>">
+                </button>
+              </div>
+            </div>
+          </div>
+        <% } else { %>
+          <div class="ratio ratio-4x3 bg-light d-flex align-items-center justify-content-center text-muted">Kein Bild vorhanden</div>
+        <% } %>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-5 text-muted">Kategorie</dt>
+            <dd class="col-7"><%= category ? category.name : '-' %></dd>
+            <dt class="col-5 text-muted">Standort</dt>
+            <dd class="col-7"><%= model.lendingLocation ? model.lendingLocation.name : '-' %></dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-7">
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h2 class="h6 mb-0">Beschreibung</h2>
+        </div>
+        <div class="card-body">
+          <p class="mb-0"><%= model.description || 'Keine Beschreibung vorhanden.' %></p>
+        </div>
+      </div>
+
+      <% if (model.technicalDescription && String(model.technicalDescription).trim()) { %>
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Technische Beschreibung</h2>
+          </div>
+          <div class="card-body">
+            <p class="mb-0"><%= model.technicalDescription %></p>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (Array.isArray(customFieldDefinitions) && customFieldDefinitions.length) { %>
+        <div class="card shadow-sm">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Custom Fields</h2>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-striped table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Feld</th>
+                    <th>Standardwert</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% customFieldDefinitions.forEach(function(def) { %>
+                    <tr>
+                      <td><%= def.label %></td>
+                      <td><%= def.defaultValue %></td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      <% } %>
+
+      <div class="d-flex flex-wrap gap-2 mt-4">
+        <% if (can('loan.create')) { %>
+          <a class="btn btn-primary" href="/assets/<%= model.id %>/reserve">Reservieren</a>
+        <% } %>
+        <a class="btn btn-outline-secondary" href="/assets">Zurueck zur Liste</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<% if (Array.isArray(galleryImages) && galleryImages.length) { %>
+  <div class="modal fade" id="assetGalleryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 class="h6 mb-0"><%= model.name || 'Bilder' %></h2>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
+        </div>
+        <div class="modal-body">
+          <div id="assetGalleryCarousel" class="carousel slide" data-bs-ride="false">
+            <div class="carousel-inner">
+              <% galleryImages.forEach(function (img, idx) { %>
+                <div class="carousel-item <%= idx === 0 ? 'active' : '' %>" data-gallery-index="<%= idx %>">
+                  <img src="<%= img.url %>" class="d-block w-100" alt="<%= model.name || 'Asset Bild' %> <%= idx + 1 %>">
+                </div>
+              <% }) %>
+            </div>
+            <% if (galleryImages.length > 1) { %>
+              <button class="carousel-control-prev" type="button" data-bs-target="#assetGalleryCarousel" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Vorheriges</span>
+              </button>
+              <button class="carousel-control-next" type="button" data-bs-target="#assetGalleryCarousel" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Nächstes</span>
+              </button>
+            <% } %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+<% } %>
+<script src="/js/asset-gallery.js"></script>

@@ -1,0 +1,28 @@
+<% pageTitle = 'Report: Assets' %>
+<section class="system reports">
+  <h1>Assets Report</h1>
+  <% if (Array.isArray(assets) && assets.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Inventarnummer</th>
+          <th>Modell</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% assets.forEach(function(asset) { %>
+          <tr>
+            <td><%= asset.id %></td>
+            <td><%= asset.inventoryNumber %></td>
+            <td><%= asset.model ? asset.model.name : asset.assetModelId %></td>
+            <td><%= asset.condition %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="empty">Keine Assets für den Report.</p>
+  <% } %>
+</section>

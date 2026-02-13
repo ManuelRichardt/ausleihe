@@ -1,0 +1,32 @@
+<% pageTitle = 'Exporte' %>
+<%
+  const activeLocationId = (typeof lendingLocationId !== 'undefined' && lendingLocationId)
+    ? lendingLocationId
+    : (lendingLocation && lendingLocation.id ? lendingLocation.id : '');
+  const locationQuery = activeLocationId ? `lendingLocationId=${activeLocationId}` : '';
+  const queryJoin = locationQuery ? '&' : '';
+%>
+
+<section class="admin exports">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Exporte</h1>
+      <p class="text-muted mb-0">Daten als CSV oder Excel herunterladen.</p>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Export</h2>
+          <p class="text-muted">Exportiert alle Assets der aktuellen Ausleihe.</p>
+          <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-primary" href="/api/v1/exports/combined?<%= locationQuery %><%= queryJoin %>format=csv">CSV-Export</a>
+            <a class="btn btn-outline-secondary" href="/api/v1/exports/combined?<%= locationQuery %><%= queryJoin %>format=xlsx">Excel-Export</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

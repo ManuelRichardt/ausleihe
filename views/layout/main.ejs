@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <%- include('../partials/head', { title: (typeof pageTitle === 'undefined' || !pageTitle) ? 'Ausleihsystem' : pageTitle }) %>
+  </head>
+  <%- include('../partials/permissions') %>
+  <%
+    const showHeaderValue = (typeof showHeader === 'undefined') ? true : Boolean(showHeader);
+    const showSidebarValue = (typeof showSidebar === 'undefined') ? true : Boolean(showSidebar);
+    const showAdminSidebarValue =
+      showHeaderValue &&
+      showSidebarValue &&
+      (typeof canAny === 'function'
+        ? canAny([
+            'inventory.manage',
+            'openinghours.manage',
+            'loan.manage',
+            'users.manage',
+            'roles.manage',
+            'permissions.manage',
+            'customfields.manage',
+            'audit.view',
+            'system.admin',
+            'lendinglocations.manage',
+          ])
+        : false);
+  %>
+  <body class="bg-light <%= showAdminSidebarValue ? 'has-admin-panel admin-panel-collapsed' : '' %>">
+    <% if (showHeaderValue) { %>
+      <header>
+        <%- include('../partials/header') %>
+      </header>
+    <% } %>
+
+    <div class="container-fluid pt-5 main-container">
+      <div class="row">
+        <% if (showAdminSidebarValue) { %>
+          <button class="admin-toggle" type="button" data-bs-toggle="offcanvas" data-bs-target="#adminSidebar" aria-controls="adminSidebar" aria-label="Admin-Menü">
+            <i class="bi bi-list-ul"></i>
+          </button>
+          <%- include('../partials/admin-sidebar') %>
+        <% } %>
+        <main class="col-12 bg-white text-dark p-4 min-vh-100 main-content" role="main">
+          <%- body %>
+        </main>
+      </div>
+    </div>
+
+    <script src="/js/bootstrap.bundle.min.js"></script>
+    <% if (showAdminSidebarValue) { %>
+      <script src="/js/admin-panel.js"></script>
+    <% } %>
+  </body>
+</html>

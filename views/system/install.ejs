@@ -1,0 +1,89 @@
+<% pageTitle = 'Installation' %>
+<%
+  const safeErrors = (typeof errors !== 'undefined' && errors) ? errors : {};
+  const safeForm = (typeof formData !== 'undefined' && formData) ? formData : {};
+  const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : '';
+%>
+<section class="install">
+  <div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white">
+          <h1 class="h4 mb-0">Installation</h1>
+        </div>
+        <div class="card-body">
+          <form method="post" action="/install">
+            <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+
+            <h2 class="h6 mt-2">Datenbank</h2>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="dbHost">Host</label>
+                <input class="form-control <%= safeErrors.dbHost ? 'is-invalid' : '' %>" id="dbHost" name="dbHost" value="<%= safeForm.dbHost || 'localhost' %>">
+                <% if (safeErrors.dbHost) { %><div class="invalid-feedback"><%= safeErrors.dbHost %></div><% } %>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="dbPort">Port</label>
+                <input class="form-control" id="dbPort" name="dbPort" value="<%= safeForm.dbPort || '3306' %>">
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="dbDialect">Dialect</label>
+                <select class="form-select" id="dbDialect" name="dbDialect">
+                  <option value="mariadb" <%= (safeForm.dbDialect || 'mariadb') === 'mariadb' ? 'selected' : '' %>>mariadb</option>
+                  <option value="mysql" <%= safeForm.dbDialect === 'mysql' ? 'selected' : '' %>>mysql</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="dbName">Datenbankname</label>
+                <input class="form-control <%= safeErrors.dbName ? 'is-invalid' : '' %>" id="dbName" name="dbName" value="<%= safeForm.dbName || '' %>">
+                <% if (safeErrors.dbName) { %><div class="invalid-feedback"><%= safeErrors.dbName %></div><% } %>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="dbUser">DB Benutzer</label>
+                <input class="form-control <%= safeErrors.dbUser ? 'is-invalid' : '' %>" id="dbUser" name="dbUser" value="<%= safeForm.dbUser || '' %>">
+                <% if (safeErrors.dbUser) { %><div class="invalid-feedback"><%= safeErrors.dbUser %></div><% } %>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="dbPassword">DB Passwort</label>
+                <input class="form-control" id="dbPassword" name="dbPassword" type="password" value="<%= safeForm.dbPassword || '' %>">
+              </div>
+            </div>
+
+            <hr class="my-4">
+
+            <h2 class="h6">Initialer Admin</h2>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="adminUsername">Benutzername</label>
+                <input class="form-control <%= safeErrors.adminUsername ? 'is-invalid' : '' %>" id="adminUsername" name="adminUsername" value="<%= safeForm.adminUsername || '' %>">
+                <% if (safeErrors.adminUsername) { %><div class="invalid-feedback"><%= safeErrors.adminUsername %></div><% } %>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="adminEmail">E-Mail</label>
+                <input class="form-control <%= safeErrors.adminEmail ? 'is-invalid' : '' %>" id="adminEmail" name="adminEmail" value="<%= safeForm.adminEmail || '' %>">
+                <% if (safeErrors.adminEmail) { %><div class="invalid-feedback"><%= safeErrors.adminEmail %></div><% } %>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="adminFirstName">Vorname</label>
+                <input class="form-control" id="adminFirstName" name="adminFirstName" value="<%= safeForm.adminFirstName || '' %>">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="adminLastName">Nachname</label>
+                <input class="form-control" id="adminLastName" name="adminLastName" value="<%= safeForm.adminLastName || '' %>">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="adminPassword">Passwort</label>
+                <input class="form-control <%= safeErrors.adminPassword ? 'is-invalid' : '' %>" id="adminPassword" name="adminPassword" type="password" value="<%= safeForm.adminPassword || '' %>">
+                <% if (safeErrors.adminPassword) { %><div class="invalid-feedback"><%= safeErrors.adminPassword %></div><% } %>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-end mt-4">
+              <button type="submit" class="btn btn-primary">Installation starten</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

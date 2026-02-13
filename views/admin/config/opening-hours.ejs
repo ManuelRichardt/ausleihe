@@ -1,0 +1,63 @@
+<% pageTitle = 'Öffnungszeiten' %>
+<section class="admin config">
+  <h1>Öffnungszeiten</h1>
+  <h2>Regulär</h2>
+  <% if (Array.isArray(hours) && hours.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Tag</th>
+          <th>Von</th>
+          <th>Bis</th>
+          <th>Abholung</th>
+          <th>Rückgabe</th>
+          <th>Geschlossen</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% hours.forEach(function(h) { %>
+          <tr>
+            <td><%= h.dayOfWeek %></td>
+            <td><%= h.openTime || '-' %></td>
+            <td><%= h.closeTime || '-' %></td>
+            <td><%= h.pickupOpenTime || h.openTime || '-' %> - <%= h.pickupCloseTime || h.closeTime || '-' %></td>
+            <td><%= h.returnOpenTime || h.openTime || '-' %> - <%= h.returnCloseTime || h.closeTime || '-' %></td>
+            <td><%= h.isClosed ? 'Ja' : 'Nein' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="empty">Keine regulären Öffnungszeiten.</p>
+  <% } %>
+
+  <h2>Ausnahmen</h2>
+  <% if (Array.isArray(exceptions) && exceptions.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Von</th>
+          <th>Bis</th>
+          <th>Abholung</th>
+          <th>Rückgabe</th>
+          <th>Geschlossen</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% exceptions.forEach(function(e) { %>
+          <tr>
+            <td><%= e.date %></td>
+            <td><%= e.openTime || '-' %></td>
+            <td><%= e.closeTime || '-' %></td>
+            <td><%= e.pickupOpenTime || e.openTime || '-' %> - <%= e.pickupCloseTime || e.closeTime || '-' %></td>
+            <td><%= e.returnOpenTime || e.openTime || '-' %> - <%= e.returnCloseTime || e.closeTime || '-' %></td>
+            <td><%= e.isClosed ? 'Ja' : 'Nein' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="empty">Keine Ausnahmen.</p>
+  <% } %>
+</section>

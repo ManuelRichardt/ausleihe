@@ -1,0 +1,14 @@
+<% pageTitle = 'Einstellungen' %>
+<section class="admin config">
+  <h1>Einstellungen</h1>
+  <p>Systemweite Einstellungen und Ausleihe-Optionen.</p>
+  <% if (Array.isArray(locations) && locations.length) { %>
+    <ul>
+      <% locations.forEach(function(loc) { %>
+        <li><%= loc.name %> (<%= loc.contactEmail || '-' %>)</li>
+      <% }) %>
+    </ul>
+  <% } else { %>
+    <p class="empty">Keine Ausleihstellen vorhanden.</p>
+  <% } %>
+</section>

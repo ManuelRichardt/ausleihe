@@ -1,0 +1,57 @@
+<% pageTitle = 'Meine Reservierungen' %>
+<% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
+<% const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : ''; %>
+<section>
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Meine Reservierungen</h1>
+      <p class="text-muted mb-0">Deine offenen und vergangenen Reservierungen.</p>
+    </div>
+    <a class="btn btn-primary" href="/cart">Zum Warenkorb</a>
+  </div>
+
+  <% if (Array.isArray(reservations) && reservations.length) { %>
+    <div class="card shadow-sm">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Ausleihe</th>
+              <th>Gegenstände</th>
+              <th>Von</th>
+              <th>Bis</th>
+              <th>Status</th>
+              <th class="text-end">Aktion</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% reservations.forEach(function (reservation) { %>
+              <tr>
+                <td><%= reservation.lendingLocation ? reservation.lendingLocation.name : '-' %></td>
+                <td><%= Array.isArray(reservation.loanItems) ? reservation.loanItems.length : 0 %></td>
+                <td><%= safeFormatDateTime(reservation.reservedFrom) %></td>
+                <td><%= safeFormatDateTime(reservation.reservedUntil) %></td>
+                <td>
+                  <span class="badge <%= reservation.status === 'reserved' ? 'text-bg-primary' : (reservation.status === 'cancelled' ? 'text-bg-secondary' : 'text-bg-light') %>">
+                    <%= reservation.status %>
+                  </span>
+                </td>
+                <td class="text-end">
+                  <a class="btn btn-outline-primary btn-sm" href="/reservations/<%= reservation.id %>">Details</a>
+                  <% if (reservation.status === 'reserved') { %>
+                    <form method="post" action="/reservations/<%= reservation.id %>/cancel" class="d-inline">
+                      <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+                      <button type="submit" class="btn btn-outline-danger btn-sm">Stornieren</button>
+                    </form>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  <% } else { %>
+    <div class="alert alert-light border">Keine Reservierungen vorhanden.</div>
+  <% } %>
+</section>

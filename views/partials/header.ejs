@@ -1,0 +1,72 @@
+<% const can = typeof permissionHelper !== 'undefined' && permissionHelper ? permissionHelper.can : function () { return false; }; %>
+<% const canAny = typeof permissionHelper !== 'undefined' && permissionHelper ? permissionHelper.canAny : function () { return false; }; %>
+<% const currentPathValue = (typeof activePath !== 'undefined' && activePath) ? activePath : ''; %>
+<% const safeCurrentUser = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : ((typeof user !== 'undefined' && user) ? user : null); %>
+<% const safeCsrfToken = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : ''; %>
+<% const safeLendingLocations = (typeof lendingLocations !== 'undefined' && Array.isArray(lendingLocations)) ? lendingLocations : []; %>
+<% const isActive = function (path) { return currentPathValue === path; }; %>
+<nav class="navbar navbar-expand-lg navbar-dark navbar-custom fixed-top navbar-height">
+  <div class="container-fluid align-items-center">
+    <a class="navbar-brand d-flex align-items-center" href="/" aria-label="Startseite">
+      <img src="/images/Rundlogo_weiss.png" alt="Universität Logo" height="50">
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Navigation umschalten">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="mainNavbar">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link <%= isActive('/') ? 'active' : '' %>" aria-current="<%= isActive('/') ? 'page' : '' %>" href="/">Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link <%= isActive('/system/lending-locations') ? 'active' : '' %>" aria-current="<%= isActive('/system/lending-locations') ? 'page' : '' %>" href="/system/lending-locations">LendingLocations</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link <%= isActive('/admin/categories') ? 'active' : '' %>" aria-current="<%= isActive('/admin/categories') ? 'page' : '' %>" href="/admin/categories">Categories</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link <%= isActive('/assets') ? 'active' : '' %>" aria-current="<%= isActive('/assets') ? 'page' : '' %>" href="/assets">Assets</a>
+        </li>
+      </ul>
+
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-person-circle"></i>
+            <span><%= safeCurrentUser && safeCurrentUser.username ? safeCurrentUser.username : 'Gast' %></span>
+          </a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="/profile">Profil</a></li>
+            <li><a class="dropdown-item" href="/reservations">Meine Reservierungen</a></li>
+            <li><a class="dropdown-item" href="/loans">Meine Ausleihen</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <form action="/logout" method="post" class="dropdown-item p-0">
+                <input type="hidden" name="csrfToken" value="<%= safeCsrfToken %>">
+                <button type="submit" class="btn btn-link dropdown-item">Logout</button>
+              </form>
+            </li>
+          </ul>
+        </li>
+      </ul>
+
+      <% if (safeLendingLocations.length > 1) { %>
+        <form class="d-flex align-items-center ms-lg-3 mt-2 mt-lg-0" method="post" action="/system/lending-locations/select">
+          <input type="hidden" name="csrfToken" value="<%= safeCsrfToken %>">
+          <input type="hidden" name="returnTo" value="<%= currentPathValue || '/' %>">
+          <div class="input-group input-group-sm">
+            <label class="input-group-text" for="lendingLocationSelect">Ausleihe</label>
+            <select id="lendingLocationSelect" name="lendingLocationId" class="form-select" aria-label="Ausleihe wählen">
+              <option value="">Bitte wählen</option>
+              <% safeLendingLocations.forEach(function(loc) { %>
+                <option value="<%= loc.id %>" <%= (activeLendingLocation && activeLendingLocation.id === loc.id) ? 'selected' : '' %>><%= loc.name %></option>
+              <% }) %>
+            </select>
+            <button class="btn btn-outline-light" type="submit">Setzen</button>
+          </div>
+        </form>
+      <% } %>
+    </div>
+  </div>
+</nav>

@@ -1,0 +1,298 @@
+const {
+  services,
+  renderPage,
+  handleError,
+  parseListQuery,
+  parseIncludeDeleted,
+  buildPagination,
+} = require('../_controllerUtils');
+
+class AssetModelAdminController {
+  async index(req, res, next) {
+    try {
+      const { page, limit, offset, order, sortBy, sortOrder } = parseListQuery(
+        req,
+        ['name', 'createdAt', 'isActive'],
+        { order: [['name', 'ASC']] }
+      );
+      const filter = { lendingLocationId: req.lendingLocationId || undefined };
+      const includeDeleted = parseIncludeDeleted(req);
+      if (req.query.q) {
+        filter.query = req.query.q;
+      }
+      if (req.query.status === 'active') {
+        filter.isActive = true;
+      }
+      if (req.query.status === 'blocked') {
+        filter.isActive = false;
+      }
+      if (req.query.manufacturerId) {
+        filter.manufacturerId = req.query.manufacturerId;
+      }
+      if (req.query.categoryId) {
+        filter.categoryId = req.query.categoryId;
+      }
+      if (includeDeleted) {
+        filter.includeDeleted = true;
+      }
+
+      const total = await services.assetModelService.countAssetModels(filter);
+      const models = await services.assetModelService.getAll(filter, { limit, offset, order });
+      const manufacturers = await services.manufacturerService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const categories = await services.assetCategoryService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+
+      return renderPage(res, 'admin/models/index', req, {
+        breadcrumbs: [
+          { label: 'Admin', href: '/admin/assets' },
+          { label: 'Asset Models', href: '/admin/asset-models' },
+        ],
+        models,
+        manufacturers,
+        categories,
+        filters: {
+          q: req.query.q || '',
+          status: req.query.status || '',
+          manufacturerId: req.query.manufacturerId || '',
+          categoryId: req.query.categoryId || '',
+          includeDeleted: includeDeleted ? '1' : '',
+          sortBy,
+          sortOrder,
+        },
+        pagination: buildPagination(page, limit, total),
+      });
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async show(req, res, next) {
+    try {
+      const model = await services.assetModelService.getById(req.params.id);
+      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
+      return renderPage(res, 'admin/models/show', req, {
+        breadcrumbs: [
+          { label: 'Admin', href: '/admin/assets' },
+          { label: 'Asset Models', href: '/admin/asset-models' },
+          { label: model.name, href: `/admin/asset-models/${model.id}` },
+        ],
+        model,
+      });
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async new(req, res, next) {
+    try {
+      const manufacturers = res.locals.viewData && res.locals.viewData.manufacturers
+        ? res.locals.viewData.manufacturers
+        : await services.manufacturerService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const categories = res.locals.viewData && res.locals.viewData.categories
+        ? res.locals.viewData.categories
+        : await services.assetCategoryService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      return renderPage(res, 'admin/models/new', req, {
+        breadcrumbs: [
+          { label: 'Admin', href: '/admin/assets' },
+          { label: 'Asset Models', href: '/admin/asset-models' },
+          { label: 'New', href: '/admin/asset-models/new' },
+        ],
+        manufacturers,
+        categories,
+      });
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async create(req, res, next) {
+    try {
+      const model = await services.assetModelService.createAssetModel({
+        lendingLocationId: req.lendingLocationId,
+        manufacturerId: req.body.manufacturerId,
+        categoryId: req.body.categoryId,
+        name: req.body.name,
+        description: req.body.description,
+        technicalDescription: req.body.technicalDescription,
+        isActive: req.body.isActive !== 'false',
+      });
+      await this.attachFiles(model, req.files);
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Asset Model angelegt');
+      }
+      return res.redirect(`/admin/asset-models/${model.id}`);
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async edit(req, res, next) {
+    try {
+      const model = res.locals.viewData && res.locals.viewData.model
+        ? res.locals.viewData.model
+        : await services.assetModelService.getById(req.params.id);
+      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
+      const manufacturers = res.locals.viewData && res.locals.viewData.manufacturers
+        ? res.locals.viewData.manufacturers
+        : await services.manufacturerService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const categories = res.locals.viewData && res.locals.viewData.categories
+        ? res.locals.viewData.categories
+        : await services.assetCategoryService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      return renderPage(res, 'admin/models/edit', req, {
+        breadcrumbs: [
+          { label: 'Admin', href: '/admin/assets' },
+          { label: 'Asset Models', href: '/admin/asset-models' },
+          { label: model.name, href: `/admin/asset-models/${model.id}` },
+          { label: 'Edit', href: `/admin/asset-models/${model.id}/edit` },
+        ],
+        model,
+        manufacturers,
+        categories,
+      });
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async update(req, res, next) {
+    try {
+      const model = res.locals.viewData && res.locals.viewData.model
+        ? res.locals.viewData.model
+        : await services.assetModelService.getById(req.params.id);
+      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
+      await services.assetModelService.updateAssetModel(model.id, {
+        manufacturerId: req.body.manufacturerId,
+        categoryId: req.body.categoryId,
+        name: req.body.name,
+        description: req.body.description,
+        technicalDescription: req.body.technicalDescription,
+        isActive: req.body.isActive !== 'false',
+      });
+      await this.attachFiles(model, req.files);
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Asset Model gespeichert');
+      }
+      return res.redirect(`/admin/asset-models/${model.id}`);
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async remove(req, res, next) {
+    try {
+      const model = await services.assetModelService.getById(req.params.id);
+      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
+      await services.assetModelService.deleteAssetModel(model.id);
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Asset Model gelöscht');
+      }
+      return res.redirect('/admin/asset-models');
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async restore(req, res, next) {
+    try {
+      const includeDeleted = parseIncludeDeleted(req) || req.body.includeDeleted === '1';
+      const model = await services.assetModelService.getById(req.params.id, { includeDeleted: true });
+      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
+      await services.assetModelService.restoreAssetModel(model.id);
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Asset Model wiederhergestellt');
+      }
+      return res.redirect(includeDeleted ? '/admin/asset-models?includeDeleted=1' : '/admin/asset-models');
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async attachFiles(model, files) {
+    if (!files) {
+      return;
+    }
+    const groupedFiles = files || {};
+    const images = Array.isArray(groupedFiles.images) ? groupedFiles.images : [];
+    const manuals = Array.isArray(groupedFiles.manuals) ? groupedFiles.manuals : [];
+    const documents = Array.isArray(groupedFiles.documents) ? groupedFiles.documents : [];
+    const others = Array.isArray(groupedFiles.others) ? groupedFiles.others : [];
+
+    if (!images.length && !manuals.length && !documents.length && !others.length) {
+      return;
+    }
+
+    const existingImages = await services.assetAttachmentService.getAll({
+      assetModelId: model.id,
+      kind: 'image',
+    });
+    let hasPrimary = existingImages.some((item) => item.isPrimary);
+
+    for (const file of images) {
+      const url = `/uploads/asset-models/${file.filename}`;
+      const isPrimary = !hasPrimary;
+      await services.assetAttachmentService.addAttachment({
+        assetModelId: model.id,
+        kind: 'image',
+        url,
+        isPrimary,
+      });
+      if (!hasPrimary) {
+        hasPrimary = true;
+        if (!model.imageUrl) {
+          await services.assetModelService.updateAssetModel(model.id, { imageUrl: url });
+        }
+      }
+    }
+
+    for (const file of manuals) {
+      await services.assetAttachmentService.addAttachment({
+        assetModelId: model.id,
+        kind: 'manual',
+        url: `/uploads/asset-models/${file.filename}`,
+        title: file.originalname || null,
+        isPrimary: false,
+      });
+    }
+
+    for (const file of documents) {
+      await services.assetAttachmentService.addAttachment({
+        assetModelId: model.id,
+        kind: 'document',
+        url: `/uploads/asset-models/${file.filename}`,
+        title: file.originalname || null,
+        isPrimary: false,
+      });
+    }
+
+    for (const file of others) {
+      await services.assetAttachmentService.addAttachment({
+        assetModelId: model.id,
+        kind: 'other',
+        url: `/uploads/asset-models/${file.filename}`,
+        title: file.originalname || null,
+        isPrimary: false,
+      });
+    }
+  }
+}
+
+module.exports = AssetModelAdminController;

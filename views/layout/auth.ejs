@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <%- include('../partials/head', { title: (typeof pageTitle === 'undefined' || !pageTitle) ? 'Login' : pageTitle }) %>
+  </head>
+  <body class="bg-light">
+    <%- include('../partials/permissions') %>
+    <% const can = typeof permissionHelper !== 'undefined' && permissionHelper ? permissionHelper.can : function () { return false; }; %>
+    <% const canAny = typeof permissionHelper !== 'undefined' && permissionHelper ? permissionHelper.canAny : function () { return false; }; %>
+    <% const canAll = typeof permissionHelper !== 'undefined' && permissionHelper ? permissionHelper.canAll : function () { return false; }; %>
+    <div class="container py-5">
+      <%- include('../partials/flash') %>
+      <main class="content" role="main">
+        <%- body %>
+      </main>
+    </div>
+  </body>
+</html>

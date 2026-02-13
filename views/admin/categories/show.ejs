@@ -1,0 +1,36 @@
+<% pageTitle = 'Kategorie' %>
+<% const cat = (typeof category !== 'undefined' && category) ? category : {}; %>
+
+<section class="admin categories">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= cat.name || 'Kategorie' %></h1>
+      <p class="text-muted mb-0"><%= cat.description || '-' %></p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/admin/categories/<%= cat.id %>/edit" class="btn btn-outline-primary">
+        <i class="bi bi-pencil-fill me-1"></i> Bearbeiten
+      </a>
+      <a href="/admin/categories" class="btn btn-outline-secondary">Zur Übersicht</a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <dl class="row mb-0">
+        <dt class="col-sm-4">Name</dt>
+        <dd class="col-sm-8"><%= cat.name || '-' %></dd>
+        <dt class="col-sm-4">Beschreibung</dt>
+        <dd class="col-sm-8"><%= cat.description || '-' %></dd>
+        <dt class="col-sm-4">Status</dt>
+        <dd class="col-sm-8">
+          <% if (cat.isActive) { %>
+            <span class="badge text-bg-success">Aktiv</span>
+          <% } else { %>
+            <span class="badge text-bg-danger">Inaktiv</span>
+          <% } %>
+        </dd>
+      </dl>
+    </div>
+  </div>
+</section>

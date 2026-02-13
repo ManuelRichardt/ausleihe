@@ -1,0 +1,28 @@
+<% pageTitle = 'Audit Log' %>
+<section class="system audit-log">
+  <h1>Audit Log</h1>
+  <% if (Array.isArray(logs) && logs.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Zeit</th>
+          <th>Benutzer</th>
+          <th>Aktion</th>
+          <th>Objekt</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% logs.forEach(function(log) { %>
+          <tr>
+            <td><%= log.createdAt %></td>
+            <td><%= log.userId || '-' %></td>
+            <td><%= log.action %></td>
+            <td><%= log.entity %> <%= log.entityId %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="empty">Keine Aktivitäten vorhanden.</p>
+  <% } %>
+</section>

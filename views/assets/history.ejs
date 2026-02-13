@@ -1,0 +1,28 @@
+<% pageTitle = 'Asset Historie' %>
+<section class="asset-history">
+  <h1>Historie</h1>
+  <% if (Array.isArray(history) && history.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Ausleihe</th>
+          <th>Status</th>
+          <th>Von</th>
+          <th>Bis</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% history.forEach(function(entry) { %>
+          <tr>
+            <td><%= entry.id %></td>
+            <td><%= entry.status %></td>
+            <td><%= entry.reservedFrom || '-' %></td>
+            <td><%= entry.reservedUntil || '-' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="empty">Keine Historie vorhanden.</p>
+  <% } %>
+</section>

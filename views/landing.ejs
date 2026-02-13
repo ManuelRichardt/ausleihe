@@ -1,0 +1,56 @@
+<% pageTitle = 'Login' %>
+<% showHeader = false %>
+<% showSidebar = false %>
+
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-md-4">
+      <div class="card shadow-sm mt-5">
+        <div class="card-body">
+          <h1 class="h4 mb-3">Login</h1>
+
+          <% if (flashMessages && flashMessages.error && flashMessages.error.length) { %>
+            <% flashMessages.error.forEach(function(message) { %>
+              <div class="alert alert-danger" role="alert"><%= message %></div>
+            <% }) %>
+          <% } %>
+
+          <form method="post" action="/login" novalidate>
+            <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+
+            <div class="mb-3">
+              <label for="username" class="form-label">Benutzername</label>
+              <input
+                type="text"
+                class="form-control <%= errors && errors.username ? 'is-invalid' : '' %>"
+                id="username"
+                name="username"
+                value="<%= formData && formData.username ? formData.username : '' %>"
+                required
+              >
+              <% if (errors && errors.username) { %>
+                <div class="invalid-feedback"><%= errors.username %></div>
+              <% } %>
+            </div>
+
+            <div class="mb-3">
+              <label for="password" class="form-label">Passwort</label>
+              <input
+                type="password"
+                class="form-control <%= errors && errors.password ? 'is-invalid' : '' %>"
+                id="password"
+                name="password"
+                required
+              >
+              <% if (errors && errors.password) { %>
+                <div class="invalid-feedback"><%= errors.password %></div>
+              <% } %>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Einloggen</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

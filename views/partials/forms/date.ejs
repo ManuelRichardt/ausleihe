@@ -1,0 +1,21 @@
+<% const fieldName = name || ''; %>
+<% const fieldId = (typeof id === 'undefined' || id === null) ? fieldName : id; %>
+<% const fieldError = (typeof error !== 'undefined' ? error : null) || (typeof errors !== 'undefined' && errors && errors[fieldName]); %>
+<% const fieldLabel = label || fieldName; %>
+<% const fieldValue = (typeof value !== 'undefined' && value !== null) ? value : ''; %>
+<% const isRequired = (typeof required !== 'undefined') ? Boolean(required) : false; %>
+<% const fieldAriaLabel = (typeof ariaLabel !== 'undefined' && ariaLabel) ? ariaLabel : fieldLabel; %>
+<div class="form-field">
+  <label for="<%= fieldId %>"><%= fieldLabel %> <% if (isRequired) { %><span aria-hidden="true">*</span><% } %></label>
+  <input
+    id="<%= fieldId %>"
+    name="<%= fieldName %>"
+    type="date"
+    value="<%= fieldValue %>"
+    <%= isRequired ? 'required' : '' %>
+    aria-label="<%= fieldAriaLabel %>"
+  />
+  <% if (fieldError) { %>
+    <div class="field-error" role="alert"><%= fieldError %></div>
+  <% } %>
+</div>

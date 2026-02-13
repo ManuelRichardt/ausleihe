@@ -1,0 +1,24 @@
+<%
+  const helper = (typeof permissionHelper !== 'undefined' && permissionHelper) ? permissionHelper : null;
+  const safePermissions = typeof permissions === 'undefined' || permissions === null ? {} : permissions;
+  const permissionList = safePermissions.list || [];
+  const permissionMap = safePermissions.map || {};
+  const can = function (key, scope) {
+    if (helper && typeof helper.can === 'function') {
+      return helper.can(key, scope);
+    }
+    return permissionList.includes(key);
+  };
+  const canAny = function (keys, scope) {
+    if (helper && typeof helper.canAny === 'function') {
+      return helper.canAny(keys, scope);
+    }
+    return Array.isArray(keys) && keys.some((key) => permissionList.includes(key));
+  };
+  const canAll = function (keys, scope) {
+    if (helper && typeof helper.canAll === 'function') {
+      return helper.canAll(keys, scope);
+    }
+    return Array.isArray(keys) && keys.every((key) => permissionList.includes(key));
+  };
+%>

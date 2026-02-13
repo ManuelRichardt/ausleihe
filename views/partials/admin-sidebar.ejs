@@ -1,0 +1,86 @@
+<% const sidebarCan = typeof permissionHelper !== 'undefined' && permissionHelper ? permissionHelper.can : function () { return false; }; %>
+<% const sidebarCanAny = typeof permissionHelper !== 'undefined' && permissionHelper ? permissionHelper.canAny : function () { return false; }; %>
+<div class="offcanvas offcanvas-start admin-drawer" data-bs-scroll="true" data-bs-backdrop="false" tabindex="-1" id="adminSidebar" aria-labelledby="adminSidebarLabel">
+  <div class="admin-drawer-header">
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-dismiss="offcanvas" aria-label="Admin-Panel schließen">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <h2 class="admin-drawer-title h6" id="adminSidebarLabel">Admin-Panel</h2>
+  </div>
+  <div class="admin-drawer-content">
+    <nav class="nav flex-column">
+
+    <!-- Manage LendingLocation -->
+    <% if (sidebarCan('openinghours.manage')) { %>
+      <div class="mb-3">
+        <div class="text-uppercase small text-muted fw-semibold mt-2">Ausleih Verwaltung</div>
+        <a class="nav-link" href="/admin/opening-hours">Opening Hours</a>
+      </div>
+    <% } %>
+
+      <!-- Manage Assets -->
+    <% if (sidebarCan('inventory.manage')) { %>
+      <div class="mb-3">
+      <div class="text-uppercase small text-muted fw-semibold mt-2">Inventar Verwaltung</div>
+      <a class="nav-link" href="/admin/categories">Categories</a>
+      <a class="nav-link" href="/admin/manufacturers">Manufacturers</a>
+      <a class="nav-link" href="/admin/asset-models">Asset Models</a>
+      <a class="nav-link" href="/admin/assets">Assets</a>
+      <hr class="my-0">
+      <a class="nav-link" href="/admin/assets/import">Import</a>
+      <a class="nav-link" href="/admin/exports">Export</a>
+      </div>
+    <% } %>
+
+    <!-- Manage Loans -->
+    <% if (sidebarCan('loan.manage')) { %>
+      <div class="mb-3">
+      <div class="text-uppercase small text-muted fw-semibold mt-2">Ausleihe</div>
+      <a class="nav-link" href="/admin/loans">Aktive Ausleihen</a>
+      <a class="nav-link" href="/admin/reservations">Offene Reservierungen</a>
+      <a class="nav-link" href="/admin/loans?status=overdue">Überfällige Rückgaben</a>
+      </div>
+    <% } %>
+
+    <!-- Manage Users and Permissions -->
+    <% if (sidebarCanAny(['users.manage', 'roles.manage', 'permissions.manage'])) { %>
+      <div class="mb-3">
+      <div class="text-uppercase small text-muted fw-semibold mt-4">Benutzerverwaltung</div>
+      <% if (sidebarCan('users.manage')) { %>
+        <a class="nav-link" href="/admin/users">Users</a>
+      <% } %>
+      <% if (sidebarCan('roles.manage')) { %>
+        <a class="nav-link" href="/admin/roles">Roles</a>
+      <% } %>
+      <% if (sidebarCan('permissions.manage')) { %>
+        <a class="nav-link" href="/admin/permissions">Permissions</a>
+      <% } %>
+      </div>
+    <% } %>
+
+    <!-- System Settings -->
+    <% if (sidebarCanAny(['system.admin', 'customfields.manage', 'audit.view', 'lendinglocations.manage', 'system.auth.manage'])) { %>
+      <div class="mb-3">
+      <div class="text-uppercase small text-muted fw-semibold mt-4">System</div>
+      <% if (sidebarCan('system.admin')) { %>
+        <a class="nav-link" href="/system/lending-locations">Lending Locations</a>
+      <% } %>
+      <% if (!sidebarCan('system.admin') && sidebarCan('lendinglocations.manage') && activeLendingLocation) { %>
+        <a class="nav-link" href="/system/lending-locations/<%= activeLendingLocation.id %>/edit">Lending Location</a>
+      <% } %>
+      <% if (sidebarCan('customfields.manage')) { %>
+        <a class="nav-link" href="/admin/custom-fields">Custom Fields</a>
+      <% } %>
+      <% if (sidebarCan('system.auth.manage')) { %>
+        <a class="nav-link" href="/system/auth-config">Auth Config</a>
+      <% } %>
+      <% if (sidebarCan('audit.view') || sidebarCan('system.admin')) { %>
+        <a class="nav-link" href="/system/audit-log">Audit Log</a>
+      <% } %>
+      </div>
+    <% } %>
+    </nav>
+  </div>
+</div>

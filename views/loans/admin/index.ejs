@@ -1,0 +1,73 @@
+<% pageTitle = 'Ausleihen' %>
+<% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
+<section class="admin-loans">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-end justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-2"><%= heading || 'Ausleihen' %></h1>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+      <a class="nav-link <%= (activeStatus || '') === 'reserved' ? 'active' : '' %>" href="/admin/loans?status=reserved">Offen</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= (activeStatus || '') === 'handed_over' ? 'active' : '' %>" href="/admin/loans?status=handed_over">Übergeben</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= (activeStatus || '') === 'overdue' ? 'active' : '' %>" href="/admin/loans?status=overdue">Überfällig</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= (activeStatus || '') === 'returned' ? 'active' : '' %>" href="/admin/loans?status=returned">Zurückgegeben</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= (activeStatus || '') === '' ? 'active' : '' %>" href="/admin/loans?status=">Alle</a>
+    </li>
+  </ul>
+
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Nutzer</th>
+            <th>E-Mail</th>
+            <th>Ausleihe</th>
+            <th>Gegenstände</th>
+            <th>Von</th>
+            <th>Bis</th>
+            <th>Status</th>
+            <th class="text-end">Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (Array.isArray(loans) && loans.length) { %>
+            <% loans.forEach(function (loan) { %>
+              <tr>
+                <td><%= loan.user ? [loan.user.firstName, loan.user.lastName].filter(Boolean).join(' ') || loan.user.username : '-' %></td>
+                <td><%= loan.user ? loan.user.email || '-' : '-' %></td>
+                <td><%= loan.lendingLocation ? loan.lendingLocation.name : '-' %></td>
+                <td><%= Array.isArray(loan.loanItems) ? loan.loanItems.length : 0 %></td>
+                <td><%= safeFormatDateTime(loan.reservedFrom) %></td>
+                <td><%= safeFormatDateTime(loan.reservedUntil) %></td>
+                <td>
+                  <span class="badge <%= loan.status === 'handed_over' ? 'text-bg-success' : (loan.status === 'reserved' ? 'text-bg-primary' : 'text-bg-secondary') %>"><%= loan.status %></span>
+                </td>
+                <td class="text-end">
+                  <a class="btn btn-outline-primary btn-sm" href="/admin/loans/<%= loan.id %>">Details</a>
+                  <% if (loan.status === 'handed_over' || loan.status === 'overdue') { %>
+                    <a class="btn btn-outline-secondary btn-sm" href="/admin/loans/<%= loan.id %>/return">Rücknahme</a>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">Keine Ausleihen vorhanden.</td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

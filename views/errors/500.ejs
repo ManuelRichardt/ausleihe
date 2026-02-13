@@ -1,0 +1,9 @@
+<% pageTitle = 'Serverfehler' %>
+<section class="error">
+  <h1>500 – Serverfehler</h1>
+  <p>Ein unerwarteter Fehler ist aufgetreten.</p>
+  <% if (error) { %>
+    <p class="text-muted"><%= error %></p>
+  <% } %>
+  <a href="/">Zurück zur Startseite</a>
+</section>

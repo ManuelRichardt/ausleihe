@@ -1,0 +1,49 @@
+<% pageTitle = 'Ausleihstelle' %>
+<%
+  const safeLocation = (typeof location !== 'undefined' && location) ? location : {};
+  const safeAdmin = (typeof adminUser !== 'undefined' && adminUser) ? adminUser : null;
+%>
+
+<section class="system lending-locations">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= safeLocation.name || 'Ausleihstelle' %></h1>
+      <p class="text-muted mb-0"><%= safeLocation.contactEmail || '-' %></p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/system/lending-locations/<%= safeLocation.id %>/edit" class="btn btn-outline-primary">
+        <i class="bi bi-pencil-fill me-1"></i> Bearbeiten
+      </a>
+      <a href="/system/lending-locations" class="btn btn-outline-secondary">Zur Übersicht</a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <dl class="row mb-0">
+        <dt class="col-sm-3">Name</dt>
+        <dd class="col-sm-9"><%= safeLocation.name || '-' %></dd>
+        <dt class="col-sm-3">Kontakt E-Mail</dt>
+        <dd class="col-sm-9"><%= safeLocation.contactEmail || '-' %></dd>
+        <dt class="col-sm-3">Status</dt>
+        <dd class="col-sm-9">
+          <% if (safeLocation.isActive) { %>
+            <span class="badge text-bg-success">Aktiv</span>
+          <% } else { %>
+            <span class="badge text-bg-danger">Inaktiv</span>
+          <% } %>
+        </dd>
+        <dt class="col-sm-3">Beschreibung</dt>
+        <dd class="col-sm-9"><%= safeLocation.description || '-' %></dd>
+        <dt class="col-sm-3">Administrator</dt>
+        <dd class="col-sm-9">
+          <% if (safeAdmin) { %>
+            <%= (safeAdmin.firstName || '') + ' ' + (safeAdmin.lastName || '') %> (<%= safeAdmin.email || safeAdmin.username || '' %>)
+          <% } else { %>
+            -
+          <% } %>
+        </dd>
+      </dl>
+    </div>
+  </div>
+</section>

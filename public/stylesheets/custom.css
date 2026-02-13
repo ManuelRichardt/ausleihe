@@ -1,0 +1,118 @@
+.navbar-custom {
+  background-color: #004a80;
+}
+
+.navbar-height {
+  height: 60px;
+}
+
+.main-container {
+  background-color: white;
+}
+.navbar-custom .navbar-brand,
+.navbar-custom .navbar-nav .nav-link,
+.navbar-custom .dropdown-toggle,
+.navbar-custom .navbar-toggler {
+  color: #ffffff;
+}
+
+.navbar-custom .nav-link:hover,
+.navbar-custom .nav-link:focus,
+.navbar-custom .dropdown-item:hover,
+.navbar-custom .dropdown-item:focus {
+  color: #ffffff;
+}
+
+.navbar-custom .dropdown-menu {
+  background-color: #f8f9fa;
+  border-color: #dee2e6;
+}
+
+.navbar-custom .dropdown-item {
+  color: #000000;
+}
+
+.navbar-custom .dropdown-item:hover,
+.navbar-custom .dropdown-item:focus {
+  color: #000000;
+  background-color: #e9ecef;
+}
+
+.admin-toggle {
+  position: fixed;
+  left: 0;
+  top: 70px;
+  z-index: 100;
+  width: 48px;
+  height: 64px;
+  border-radius: 0 200px 200px 0;
+  background-color: #004a80;
+  color: #ffffff;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-toggle:focus {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.has-admin-panel .admin-toggle {
+  display: inline-flex;
+}
+
+.admin-drawer {
+  background-color: #f8f9fa;
+  margin-top:60px;
+  max-width:250px;
+}
+
+.admin-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.admin-drawer-content {
+  padding: 0.5rem 0.5rem;
+}
+
+.admin-drawer-title {
+  font-weight: 600;
+  margin: 0;
+}
+
+.admin-drawer .nav-link {
+  color: var(--bs-secondary-color)!important
+}
+.admin-drawer .nav-link:hover {
+  color: var(--bs--primary)!important
+}
+.main-content {
+  max-width: 1000px;
+  margin: auto;
+}
+.panel {
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 0.25rem;
+}
+@media (max-width:992px) {
+  .navbar-height {
+    height: auto;
+    padding:0px;
+  }
+  .main-content {
+    margin-left: 50px;
+    margin-right: 50px;
+    padding-top: 2rem!important;
+  }
+  .main-content.admin-panel-open {
+    margin-left: 250px;
+  }
+}

@@ -1,0 +1,99 @@
+<% pageTitle = 'Dashboard' %>
+<% const safeActiveLoans = typeof activeLoans === 'undefined' || !activeLoans ? [] : activeLoans; %>
+<% const safeReservations = typeof reservations === 'undefined' || !reservations ? [] : reservations; %>
+<% const safeOverdueLoans = typeof overdueLoans === 'undefined' || !overdueLoans ? [] : overdueLoans; %>
+<% var formatDateTimeSafe = (typeof formatDateTime !== 'undefined' && formatDateTime) ? formatDateTime : function () { return '-'; }; %>
+<% const canManageLoans = (typeof can !== 'undefined' && typeof can === 'function') ? can('loan.manage') : false; %>
+<section class="dashboard">
+  <h1>Dashboard</h1>
+
+  <section class="dashboard-section">
+    <h2>Aktive Ausleihen</h2>
+    <% if (Array.isArray(safeActiveLoans) && safeActiveLoans.length) { %>
+      <table>
+        <thead>
+          <tr>
+            <th>Ausleihe</th>
+            <th>Status</th>
+            <th>Bis</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% safeActiveLoans.forEach(function(loan) { %>
+            <tr>
+              <td><%= loan.lendingLocation ? loan.lendingLocation.name : loan.id %></td>
+              <td><%= loan.status %></td>
+              <td><%= formatDateTimeSafe(loan.reservedUntil) %></td>
+              <td><a href="<%= canManageLoans ? '/admin/loans/' : '/loans/' %><%= loan.id %>">Details</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p class="empty">Keine aktiven Ausleihen.</p>
+    <% } %>
+  </section>
+
+  <section class="dashboard-section">
+    <h2>Offene Reservierungen</h2>
+    <% if (Array.isArray(safeReservations) && safeReservations.length) { %>
+      <table>
+        <thead>
+          <tr>
+            <th>Reservierung</th>
+            <th>Von</th>
+            <th>Bis</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% safeReservations.forEach(function(reservation) { %>
+            <tr>
+              <td><%= reservation.lendingLocation ? reservation.lendingLocation.name : reservation.id %></td>
+              <td><%= formatDateTimeSafe(reservation.reservedFrom) %></td>
+              <td><%= formatDateTimeSafe(reservation.reservedUntil) %></td>
+              <td><a href="<%= canManageLoans ? '/admin/reservations/' : '/reservations/' %><%= reservation.id %>">Details</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p class="empty">Keine offenen Reservierungen.</p>
+    <% } %>
+  </section>
+
+  <section class="dashboard-section">
+    <h2>Überfällige Rückgaben</h2>
+    <% if (Array.isArray(safeOverdueLoans) && safeOverdueLoans.length) { %>
+      <table>
+        <thead>
+          <tr>
+            <th>Ausleihe</th>
+            <th>Seit</th>
+            <th>Aktion</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% safeOverdueLoans.forEach(function(loan) { %>
+            <tr>
+              <td><%= loan.lendingLocation ? loan.lendingLocation.name : loan.id %></td>
+              <td><%= formatDateTimeSafe(loan.reservedUntil) %></td>
+              <td><a href="<%= canManageLoans ? '/admin/loans/' : '/loans/' %><%= loan.id %>">Details</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } else { %>
+      <p class="empty">Keine überfälligen Rückgaben.</p>
+    <% } %>
+  </section>
+
+  <section class="dashboard-section">
+    <h2>Schnellaktionen</h2>
+    <div class="actions">
+      <a class="button" href="/assets">Assets durchsuchen</a>
+      <a class="button" href="/cart">Zum Warenkorb</a>
+    </div>
+  </section>
+</section>

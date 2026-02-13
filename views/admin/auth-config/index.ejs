@@ -1,0 +1,283 @@
+<% pageTitle = 'Auth Config' %>
+<%
+  const safeErrors = (typeof errors !== 'undefined' && errors) ? errors : {};
+  const saml = samlConfig || { enabled: false, displayName: 'Shibboleth', config: {} };
+  const ldap = ldapConfig || { enabled: false, displayName: 'LDAP', config: {} };
+  const formValues = (typeof formData !== 'undefined' && formData) ? formData : {};
+
+  const samlForm = (formValues && (formValues.spEntityId || formValues.idpEntityId || formValues.acsUrl)) ? formValues : {};
+  const ldapForm = (formValues && (formValues.url || formValues.baseDn || formValues.userFilter || formValues.userDnTemplate)) ? formValues : {};
+
+  const samlConfigValues = saml.config || {};
+  const ldapConfigValues = ldap.config || {};
+
+  const samlValue = function (key, fallback) {
+    if (samlForm[key] !== undefined) {
+      return samlForm[key];
+    }
+    if (samlConfigValues[key] !== undefined) {
+      return samlConfigValues[key];
+    }
+    return fallback || '';
+  };
+
+  const ldapValue = function (key, fallback) {
+    if (ldapForm[key] !== undefined) {
+      return ldapForm[key];
+    }
+    if (ldapConfigValues[key] !== undefined) {
+      return ldapConfigValues[key];
+    }
+    return fallback || '';
+  };
+  const roleMapValue = ldapValue('roleMapJson', '');
+
+  const samlEnabledValue = samlForm.enabled !== undefined ? (samlForm.enabled === 'on' || samlForm.enabled === 'true') : Boolean(saml.enabled);
+  const ldapEnabledValue = ldapForm.ldapEnabled !== undefined ? (ldapForm.ldapEnabled === 'on' || ldapForm.ldapEnabled === 'true') : Boolean(ldap.enabled);
+%>
+
+<section class="admin auth-config">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-end justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-2">Auth Konfiguration</h1>
+      <p class="text-muted mb-0">SAML und LDAP ohne sensible Secrets verwalten.</p>
+    </div>
+  </div>
+
+  <% if (flashMessages && flashMessages.success && flashMessages.success.length) { %>
+    <% flashMessages.success.forEach(function(message) { %>
+      <div class="alert alert-success" role="alert"><%= message %></div>
+    <% }) %>
+  <% } %>
+  <% if (flashMessages && flashMessages.error && flashMessages.error.length) { %>
+    <% flashMessages.error.forEach(function(message) { %>
+      <div class="alert alert-danger" role="alert"><%= message %></div>
+    <% }) %>
+  <% } %>
+
+  <div class="row g-4">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5 mb-3">SAML (Shibboleth)</h2>
+          <form method="post" action="/system/auth-config/saml" novalidate>
+            <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" id="samlEnabled" name="enabled" <%= samlEnabledValue ? 'checked' : '' %>>
+              <label class="form-check-label" for="samlEnabled">SAML aktivieren</label>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="samlDisplayName">Anzeigename</label>
+              <input class="form-control" id="samlDisplayName" name="displayName" value="<%= samlForm.displayName || saml.displayName || '' %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="spEntityId">SP Entity ID</label>
+              <input class="form-control <%= safeErrors.spEntityId ? 'is-invalid' : '' %>" id="spEntityId" name="spEntityId" value="<%= samlValue('spEntityId') %>">
+              <% if (safeErrors.spEntityId) { %><div class="invalid-feedback"><%= safeErrors.spEntityId %></div><% } %>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="acsUrl">ACS URL</label>
+              <input class="form-control <%= safeErrors.acsUrl ? 'is-invalid' : '' %>" id="acsUrl" name="acsUrl" value="<%= samlValue('acsUrl') %>">
+              <% if (safeErrors.acsUrl) { %><div class="invalid-feedback"><%= safeErrors.acsUrl %></div><% } %>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="sloUrl">SLO URL (optional)</label>
+              <input class="form-control" id="sloUrl" name="sloUrl" value="<%= samlValue('sloUrl') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="idpEntityId">IdP Entity ID</label>
+              <input class="form-control <%= safeErrors.idpEntityId ? 'is-invalid' : '' %>" id="idpEntityId" name="idpEntityId" value="<%= samlValue('idpEntityId') %>">
+              <% if (safeErrors.idpEntityId) { %><div class="invalid-feedback"><%= safeErrors.idpEntityId %></div><% } %>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="idpSsoUrl">IdP SSO URL</label>
+              <input class="form-control <%= safeErrors.idpSsoUrl ? 'is-invalid' : '' %>" id="idpSsoUrl" name="idpSsoUrl" value="<%= samlValue('idpSsoUrl') %>">
+              <% if (safeErrors.idpSsoUrl) { %><div class="invalid-feedback"><%= safeErrors.idpSsoUrl %></div><% } %>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="idpSloUrl">IdP SLO URL (optional)</label>
+              <input class="form-control" id="idpSloUrl" name="idpSloUrl" value="<%= samlValue('idpSloUrl') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="nameIdFormat">NameID Format (optional)</label>
+              <input class="form-control" id="nameIdFormat" name="nameIdFormat" value="<%= samlValue('nameIdFormat') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="clockSkewSec">Clock Skew (Sekunden)</label>
+              <input class="form-control" id="clockSkewSec" name="clockSkewSec" value="<%= samlValue('clockSkewSec', 120) %>">
+            </div>
+
+            <% if (safeErrors.idpCert) { %>
+              <div class="alert alert-warning" role="alert"><%= safeErrors.idpCert %></div>
+            <% } %>
+
+            <button type="submit" class="btn btn-primary">SAML speichern</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5 mb-3">LDAP</h2>
+          <form method="post" action="/system/auth-config/ldap" novalidate>
+            <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" id="ldapEnabled" name="ldapEnabled" <%= ldapEnabledValue ? 'checked' : '' %>>
+              <label class="form-check-label" for="ldapEnabled">LDAP aktivieren</label>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="ldapDisplayName">Anzeigename</label>
+              <input class="form-control" id="ldapDisplayName" name="ldapDisplayName" value="<%= ldapForm.ldapDisplayName || ldap.displayName || '' %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="url">LDAP URL</label>
+              <input class="form-control <%= safeErrors.url ? 'is-invalid' : '' %>" id="url" name="url" value="<%= ldapValue('url') %>">
+              <% if (safeErrors.url) { %><div class="invalid-feedback"><%= safeErrors.url %></div><% } %>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="baseDn">Base DN</label>
+              <input class="form-control <%= safeErrors.baseDn ? 'is-invalid' : '' %>" id="baseDn" name="baseDn" value="<%= ldapValue('baseDn') %>">
+              <% if (safeErrors.baseDn) { %><div class="invalid-feedback"><%= safeErrors.baseDn %></div><% } %>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="bindDn">LDAP Bind Username</label>
+              <input class="form-control" id="bindDn" name="bindDn" value="<%= ldapValue('bindDn') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="bindPassword">LDAP Bind Password</label>
+              <input class="form-control" id="bindPassword" name="bindPassword" type="password" value="<%= ldapValue('bindPassword') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="userFilter">User Filter</label>
+              <input class="form-control <%= safeErrors.userFilter ? 'is-invalid' : '' %>" id="userFilter" name="userFilter" value="<%= ldapValue('userFilter') %>">
+              <% if (safeErrors.userFilter) { %><div class="invalid-feedback"><%= safeErrors.userFilter %></div><% } %>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="userDnTemplate">LDAP Authentication Query</label>
+              <input class="form-control" id="userDnTemplate" name="userDnTemplate" value="<%= ldapValue('userDnTemplate') %>">
+              <div class="form-text">Beispiel: uid={{username}},ou=people,dc=example,dc=com oder uid= (wird mit Base DN kombiniert).</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="searchScope">Search Scope</label>
+              <select class="form-select <%= safeErrors.searchScope ? 'is-invalid' : '' %>" id="searchScope" name="searchScope">
+                <option value="sub" <%= ldapValue('searchScope', 'sub') === 'sub' ? 'selected' : '' %>>sub</option>
+                <option value="one" <%= ldapValue('searchScope', 'sub') === 'one' ? 'selected' : '' %>>one</option>
+                <option value="base" <%= ldapValue('searchScope', 'sub') === 'base' ? 'selected' : '' %>>base</option>
+              </select>
+              <% if (safeErrors.searchScope) { %><div class="invalid-feedback"><%= safeErrors.searchScope %></div><% } %>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="attrUsername">Attribut Benutzername</label>
+              <input class="form-control" id="attrUsername" name="attrUsername" value="<%= ldapValue('attrUsername', 'uid') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="attrEmail">Attribut E-Mail</label>
+              <input class="form-control" id="attrEmail" name="attrEmail" value="<%= ldapValue('attrEmail', 'mail') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="attrDisplayName">Attribut Anzeigename</label>
+              <input class="form-control" id="attrDisplayName" name="attrDisplayName" value="<%= ldapValue('attrDisplayName', 'displayName') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="attrFirstName">Attribut Vorname</label>
+              <input class="form-control" id="attrFirstName" name="attrFirstName" value="<%= ldapValue('attrFirstName', 'givenName') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="attrLastName">Attribut Nachname</label>
+              <input class="form-control" id="attrLastName" name="attrLastName" value="<%= ldapValue('attrLastName', 'sn') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="attrExternalId">Attribut External ID</label>
+              <input class="form-control" id="attrExternalId" name="attrExternalId" value="<%= ldapValue('attrExternalId', 'entryUUID') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="attrGroups">Attribut Gruppen</label>
+              <input class="form-control" id="attrGroups" name="attrGroups" value="<%= ldapValue('attrGroups', 'memberOf') %>">
+            </div>
+
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" id="startTls" name="startTls" <%= ldapValue('startTls') ? 'checked' : '' %>>
+              <label class="form-check-label" for="startTls">StartTLS verwenden</label>
+            </div>
+
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" id="tlsRejectUnauthorized" name="tlsRejectUnauthorized" <%= ldapValue('tlsRejectUnauthorized', true) ? 'checked' : '' %>>
+              <label class="form-check-label" for="tlsRejectUnauthorized">TLS Zertifikate pruefen</label>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="timeoutMs">Timeout (ms)</label>
+              <input class="form-control" id="timeoutMs" name="timeoutMs" value="<%= ldapValue('timeoutMs', 8000) %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="connectTimeoutMs">Connect Timeout (ms)</label>
+              <input class="form-control" id="connectTimeoutMs" name="connectTimeoutMs" value="<%= ldapValue('connectTimeoutMs', 8000) %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="defaultRole">Default Rolle</label>
+              <input class="form-control" id="defaultRole" name="defaultRole" value="<%= ldapValue('defaultRole', 'Students') %>">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="roleMapJson">Role Map (JSON)</label>
+              <textarea class="form-control <%= safeErrors.roleMapJson ? 'is-invalid' : '' %>" id="roleMapJson" name="roleMapJson" rows="4"><%= roleMapValue && typeof roleMapValue === 'object' ? JSON.stringify(roleMapValue, null, 2) : roleMapValue %></textarea>
+              <% if (safeErrors.roleMapJson) { %><div class="invalid-feedback"><%= safeErrors.roleMapJson %></div><% } %>
+            </div>
+
+            <button type="submit" class="btn btn-primary">LDAP speichern</button>
+          </form>
+
+          <hr class="my-4">
+
+          <h3 class="h6 mb-3">LDAP Verbindung testen</h3>
+          <form method="post" action="/system/auth-config/ldap/test" novalidate>
+            <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+
+            <div class="mb-3">
+              <label class="form-label" for="testUsername">Test Benutzername (optional)</label>
+              <input class="form-control" id="testUsername" name="testUsername" autocomplete="username">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="testPassword">Test Passwort (optional)</label>
+              <input class="form-control" id="testPassword" name="testPassword" type="password" autocomplete="current-password">
+              <div class="form-text">Optional: Bei Angabe wird ein Benutzer-Login getestet.</div>
+            </div>
+
+            <button type="submit" class="btn btn-outline-secondary">Verbindung testen</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

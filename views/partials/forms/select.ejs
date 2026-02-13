@@ -1,0 +1,22 @@
+<% const fieldName = name || ''; %>
+<% const fieldId = (typeof id === 'undefined' || id === null) ? fieldName : id; %>
+<% const fieldError = (typeof error !== 'undefined' ? error : null) || (typeof errors !== 'undefined' && errors && errors[fieldName]); %>
+<% const fieldLabel = label || fieldName; %>
+<% const fieldValue = (typeof value !== 'undefined' && value !== null) ? value : ''; %>
+<% const fieldPlaceholder = (typeof placeholder !== 'undefined' && placeholder !== null) ? placeholder : null; %>
+<% const fieldAriaLabel = (typeof ariaLabel !== 'undefined' && ariaLabel) ? ariaLabel : fieldLabel; %>
+<% const isRequired = (typeof required !== 'undefined') ? Boolean(required) : false; %>
+<div class="form-field">
+  <label for="<%= fieldId %>"><%= fieldLabel %> <% if (isRequired) { %><span aria-hidden="true">*</span><% } %></label>
+  <select id="<%= fieldId %>" name="<%= fieldName %>" <%= isRequired ? 'required' : '' %> aria-label="<%= fieldAriaLabel %>">
+    <% if (fieldPlaceholder) { %>
+      <option value=""><%= fieldPlaceholder %></option>
+    <% } %>
+    <% (options || []).forEach(function(option) { %>
+      <option value="<%= option.value %>" <%= String(fieldValue) === String(option.value) ? 'selected' : '' %>><%= option.label %></option>
+    <% }) %>
+  </select>
+  <% if (fieldError) { %>
+    <div class="field-error" role="alert"><%= fieldError %></div>
+  <% } %>
+</div>

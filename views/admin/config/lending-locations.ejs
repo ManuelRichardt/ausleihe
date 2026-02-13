@@ -1,0 +1,24 @@
+<% pageTitle = 'Lending Locations' %>
+<section class="admin config">
+  <h1>Ausleihstellen</h1>
+  <% if (Array.isArray(lendingLocations) && lendingLocations.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Kontakt</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% lendingLocations.forEach(function(loc) { %>
+          <tr>
+            <td><%= loc.name %></td>
+            <td><%= loc.contactEmail || '-' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="empty">Keine Ausleihstellen vorhanden.</p>
+  <% } %>
+</section>

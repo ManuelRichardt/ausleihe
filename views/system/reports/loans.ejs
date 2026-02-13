@@ -1,0 +1,30 @@
+<% pageTitle = 'Report: Ausleihen' %>
+<section class="system reports">
+  <h1>Ausleihen Report</h1>
+  <% if (Array.isArray(loans) && loans.length) { %>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Benutzer</th>
+          <th>Status</th>
+          <th>Von</th>
+          <th>Bis</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% loans.forEach(function(loan) { %>
+          <tr>
+            <td><%= loan.id %></td>
+            <td><%= loan.userId %></td>
+            <td><%= loan.status %></td>
+            <td><%= loan.reservedFrom || '-' %></td>
+            <td><%= loan.reservedUntil || '-' %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="empty">Keine Ausleihen für den Report.</p>
+  <% } %>
+</section>
