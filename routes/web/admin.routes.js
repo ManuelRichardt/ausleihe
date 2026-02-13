@@ -419,6 +419,20 @@ router.post(
   requirePermission('inventory.manage', locationScope),
   assetModelAdminController.restore.bind(assetModelAdminController)
 );
+router.post(
+  '/admin/asset-models/:id/attachments/:attachmentId',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  assetModelAdminController.updateAttachment.bind(assetModelAdminController)
+);
+router.post(
+  '/admin/asset-models/:id/attachments/:attachmentId/delete',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  assetModelAdminController.removeAttachment.bind(assetModelAdminController)
+);
 
 router.get(
   '/admin/assets',

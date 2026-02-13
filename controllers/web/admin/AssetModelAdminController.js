@@ -226,6 +226,78 @@ class AssetModelAdminController {
     }
   }
 
+  async updateAttachment(req, res, next) {
+    try {
+      const model = await services.assetModelService.getById(req.params.id);
+      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
+      const attachment = await services.assetAttachmentService.getById(req.params.attachmentId);
+      if (attachment.assetModelId !== model.id) {
+        const err = new Error('Attachment not found');
+        err.status = 404;
+        throw err;
+      }
+
+      const nextKind = req.body.kind || attachment.kind;
+      const nextTitle = req.body.title || null;
+      const makePrimary = req.body.isPrimary === '1' || req.body.isPrimary === 'true' || req.body.isPrimary === true;
+
+      await services.assetAttachmentService.updateAttachment(attachment.id, {
+        kind: nextKind,
+        title: nextTitle,
+      });
+
+      if (nextKind === 'image' && makePrimary) {
+        const images = await services.assetAttachmentService.getAll({
+          assetModelId: model.id,
+          kind: 'image',
+        });
+        for (const image of images) {
+          await services.assetAttachmentService.updateAttachment(image.id, { isPrimary: image.id === attachment.id });
+        }
+      }
+
+      await this.syncModelImageUrl(model.id);
+
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Anhang gespeichert');
+      }
+      return res.redirect(`/admin/asset-models/${model.id}`);
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async removeAttachment(req, res, next) {
+    try {
+      const model = await services.assetModelService.getById(req.params.id);
+      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
+      const attachment = await services.assetAttachmentService.getById(req.params.attachmentId);
+      if (attachment.assetModelId !== model.id) {
+        const err = new Error('Attachment not found');
+        err.status = 404;
+        throw err;
+      }
+
+      await services.assetAttachmentService.deleteAttachment(attachment.id);
+      await this.syncModelImageUrl(model.id);
+
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Anhang gelöscht');
+      }
+      return res.redirect(`/admin/asset-models/${model.id}`);
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
   async attachFiles(model, files) {
     if (!files) {
       return;
@@ -291,6 +363,25 @@ class AssetModelAdminController {
         title: file.originalname || null,
         isPrimary: false,
       });
+    }
+  }
+
+  async syncModelImageUrl(modelId) {
+    const model = await services.assetModelService.getById(modelId);
+    const images = await services.assetAttachmentService.getAll({
+      assetModelId: modelId,
+      kind: 'image',
+    });
+    if (!images.length) {
+      await services.assetModelService.updateAssetModel(modelId, { imageUrl: null });
+      return;
+    }
+    const primary = images.find((item) => item.isPrimary) || images[0];
+    if (!primary.isPrimary) {
+      await services.assetAttachmentService.updateAttachment(primary.id, { isPrimary: true });
+    }
+    if (model.imageUrl !== primary.url) {
+      await services.assetModelService.updateAssetModel(modelId, { imageUrl: primary.url });
     }
   }
 }

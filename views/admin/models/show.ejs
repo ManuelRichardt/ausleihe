@@ -4,6 +4,10 @@
   const manufacturerName = safeModel.manufacturer ? safeModel.manufacturer.name : '-';
   const categoryName = safeModel.category ? safeModel.category.name : '-';
   const attachments = Array.isArray(safeModel.attachments) ? safeModel.attachments : [];
+  const images = attachments.filter(function (item) { return item && item.kind === 'image'; });
+  const manuals = attachments.filter(function (item) { return item && item.kind === 'manual'; });
+  const documents = attachments.filter(function (item) { return item && item.kind === 'document'; });
+  const others = attachments.filter(function (item) { return item && item.kind === 'other'; });
 %>
 
 <section class="admin models">
@@ -47,20 +51,115 @@
             -
           <% } %>
         </dd>
-        <dt class="col-sm-3">Bilder</dt>
+        <dt class="col-sm-3">Anhänge</dt>
         <dd class="col-sm-9">
           <% if (attachments.length) { %>
-            <div class="d-flex flex-wrap gap-2">
-              <% attachments.forEach(function(img) { %>
-                <a href="<%= img.url %>" target="_blank" rel="noreferrer" class="d-inline-block w-25">
-                  <div class="ratio ratio-4x3">
-                    <img src="<%= img.url %>" alt="Asset Model Bild" class="img-thumbnail object-fit-cover w-100 h-100">
+            <div class="d-grid gap-4">
+              <div>
+                <div class="fw-semibold mb-2">Bilder</div>
+                <% if (images.length) { %>
+                  <div class="d-grid gap-2">
+                    <% images.forEach(function(file) { %>
+                      <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="border rounded p-2">
+                        <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                        <div class="row g-2 align-items-center">
+                          <div class="col-md-3">
+                            <a href="<%= file.url %>" target="_blank" rel="noreferrer">
+                              <img src="<%= file.url %>" alt="Asset Model Bild" class="img-thumbnail w-100">
+                            </a>
+                          </div>
+                          <div class="col-md-5">
+                            <input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel">
+                          </div>
+                          <div class="col-md-2">
+                            <select name="kind" class="form-select form-select-sm">
+                              <option value="image" selected>image</option>
+                              <option value="manual">manual</option>
+                              <option value="document">document</option>
+                              <option value="other">other</option>
+                            </select>
+                          </div>
+                          <div class="col-md-2 d-flex justify-content-end gap-2">
+                            <div class="form-check mt-1">
+                              <input class="form-check-input" type="checkbox" name="isPrimary" value="1" <%= file.isPrimary ? 'checked' : '' %> title="Primärbild">
+                            </div>
+                            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button>
+                            <button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button>
+                          </div>
+                        </div>
+                      </form>
+                    <% }) %>
                   </div>
-                </a>
-              <% }) %>
+                <% } else { %>
+                  <div class="text-muted small">Keine Bilder vorhanden.</div>
+                <% } %>
+              </div>
+
+              <div>
+                <div class="fw-semibold mb-2">Manuals</div>
+                <% if (manuals.length) { %>
+                  <div class="list-group">
+                    <% manuals.forEach(function(file) { %>
+                      <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="list-group-item">
+                        <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                        <div class="row g-2 align-items-center">
+                          <div class="col-md-5"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
+                          <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual" selected>manual</option><option value="document">document</option><option value="other">other</option></select></div>
+                          <div class="col-md-2"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                          <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
+                        </div>
+                      </form>
+                    <% }) %>
+                  </div>
+                <% } else { %>
+                  <div class="text-muted small">Keine Manuals vorhanden.</div>
+                <% } %>
+              </div>
+
+              <div>
+                <div class="fw-semibold mb-2">Documents</div>
+                <% if (documents.length) { %>
+                  <div class="list-group">
+                    <% documents.forEach(function(file) { %>
+                      <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="list-group-item">
+                        <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                        <div class="row g-2 align-items-center">
+                          <div class="col-md-5"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
+                          <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual">manual</option><option value="document" selected>document</option><option value="other">other</option></select></div>
+                          <div class="col-md-2"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                          <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
+                        </div>
+                      </form>
+                    <% }) %>
+                  </div>
+                <% } else { %>
+                  <div class="text-muted small">Keine Documents vorhanden.</div>
+                <% } %>
+              </div>
+
+              <div>
+                <div class="fw-semibold mb-2">Other</div>
+                <% if (others.length) { %>
+                  <div class="list-group">
+                    <% others.forEach(function(file) { %>
+                      <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="list-group-item">
+                        <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                        <div class="row g-2 align-items-center">
+                          <div class="col-md-5"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
+                          <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual">manual</option><option value="document">document</option><option value="other" selected>other</option></select></div>
+                          <div class="col-md-2"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                          <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
+                        </div>
+                      </form>
+                    <% }) %>
+                  </div>
+                <% } else { %>
+                  <div class="text-muted small">Keine weiteren Anhänge vorhanden.</div>
+                <% } %>
+              </div>
             </div>
           <% } else { %>
-            -\n
+            -
           <% } %>
         </dd>
       </dl>

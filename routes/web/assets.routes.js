@@ -24,6 +24,13 @@ router.get(
   controller.show.bind(controller)
 );
 router.get(
+  '/assets/:id/attachments/:attachmentId/download',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission(viewPermissions, scopeResolver),
+  controller.downloadAttachment.bind(controller)
+);
+router.get(
   '/assets/:id/reserve',
   requireLogin,
   lendingLocationContext,
