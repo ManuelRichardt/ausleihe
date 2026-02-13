@@ -1,4 +1,5 @@
 const { services, renderPage, handleError } = require('./_controllerUtils');
+const path = require('path');
 
 class AssetController {
   async index(req, res, next) {
@@ -89,6 +90,45 @@ class AssetController {
         dailyAvailability: await services.availabilityService.getDailyAvailability(assetModel.id, new Date(), 90),
       });
     } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async downloadAttachment(req, res, next) {
+    try {
+      const assetModel = await services.assetModelService.getById(req.params.id);
+      const attachments = Array.isArray(assetModel.attachments) ? assetModel.attachments : [];
+      const attachment = attachments.find((item) => item.id === req.params.attachmentId);
+      if (!attachment || !attachment.url) {
+        const err = new Error('Attachment not found');
+        err.status = 404;
+        throw err;
+      }
+
+      const rawUrl = String(attachment.url);
+      if (/^https?:\/\//i.test(rawUrl)) {
+        return res.redirect(rawUrl);
+      }
+
+      const normalizedUrl = rawUrl.replace(/^\/?public\//, '/');
+      const relativePath = normalizedUrl.startsWith('/') ? normalizedUrl.slice(1) : normalizedUrl;
+      const filePath = path.join(process.cwd(), 'public', relativePath);
+      const safeBase = path.join(process.cwd(), 'public');
+      if (!filePath.startsWith(safeBase)) {
+        const err = new Error('Attachment path is invalid');
+        err.status = 400;
+        throw err;
+      }
+
+      const ext = path.extname(filePath);
+      const filename = attachment.title
+        ? `${attachment.title}${ext && !attachment.title.endsWith(ext) ? ext : ''}`
+        : path.basename(filePath);
+      return res.download(filePath, filename);
+    } catch (err) {
+      if (err && err.code === 'ENOENT') {
+        err.status = 404;
+      }
       return handleError(res, next, req, err);
     }
   }

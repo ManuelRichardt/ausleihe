@@ -48,7 +48,7 @@ const uploadAssetModelImages = multer({
   fileFilter,
   limits: {
     files: 30,
-    fileSize: 5 * 1024 * 1024,
+    fileSize: 15 * 1024 * 1024,
   },
 }).fields([
   { name: 'images', maxCount: 10 },

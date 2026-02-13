@@ -5,6 +5,9 @@
   const category = model.category || null;
   const attachments = Array.isArray(model.attachments) ? model.attachments : [];
   const attachmentImages = attachments.filter(function (att) { return att && att.kind === 'image' && att.url; });
+  const manuals = attachments.filter(function (att) { return att && att.kind === 'manual' && att.url; });
+  const documents = attachments.filter(function (att) { return att && att.kind === 'document' && att.url; });
+  const others = attachments.filter(function (att) { return att && att.kind === 'other' && att.url; });
   const fallbackImage = model.imageUrl ? [{ id: 'fallback', url: model.imageUrl, isPrimary: true }] : [];
   const galleryImages = attachmentImages.length ? attachmentImages : fallbackImage;
   const primaryImage = galleryImages.find(function (att) { return att.isPrimary; }) || galleryImages[0] || null;
@@ -111,6 +114,66 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (manuals.length || documents.length || others.length) { %>
+        <div class="card shadow-sm mt-4">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Anhänge</h2>
+          </div>
+          <div class="card-body">
+            <% if (manuals.length) { %>
+              <h3 class="h6 mb-2">Manuals</h3>
+              <div class="list-group mb-3">
+                <% manuals.forEach(function (file, idx) { %>
+                  <div class="list-group-item d-flex align-items-center justify-content-between gap-3">
+                    <div class="text-truncate">
+                      <i class="bi bi-journal-text me-2"></i>
+                      <%= file.title || `Manual ${idx + 1}` %>
+                    </div>
+                    <a class="btn btn-outline-primary btn-sm" href="/assets/<%= model.id %>/attachments/<%= file.id %>/download">
+                      <i class="bi bi-download me-1"></i>Download
+                    </a>
+                  </div>
+                <% }) %>
+              </div>
+            <% } %>
+
+            <% if (documents.length) { %>
+              <h3 class="h6 mb-2">Documents</h3>
+              <div class="list-group mb-3">
+                <% documents.forEach(function (file, idx) { %>
+                  <div class="list-group-item d-flex align-items-center justify-content-between gap-3">
+                    <div class="text-truncate">
+                      <i class="bi bi-file-earmark-text me-2"></i>
+                      <%= file.title || `Document ${idx + 1}` %>
+                    </div>
+                    <a class="btn btn-outline-primary btn-sm" href="/assets/<%= model.id %>/attachments/<%= file.id %>/download">
+                      <i class="bi bi-download me-1"></i>Download
+                    </a>
+                  </div>
+                <% }) %>
+              </div>
+            <% } %>
+
+            <% if (others.length) { %>
+              <h3 class="h6 mb-2">Other</h3>
+              <div class="list-group">
+                <% others.forEach(function (file, idx) { %>
+                  <div class="list-group-item d-flex align-items-center justify-content-between gap-3">
+                    <div class="text-truncate">
+                      <i class="bi bi-paperclip me-2"></i>
+                      <%= file.title || `Datei ${idx + 1}` %>
+                    </div>
+                    <a class="btn btn-outline-primary btn-sm" href="/assets/<%= model.id %>/attachments/<%= file.id %>/download">
+                      <i class="bi bi-download me-1"></i>Download
+                    </a>
+                  </div>
+                <% }) %>
+              </div>
+            <% } %>
           </div>
         </div>
       <% } %>
