@@ -8,6 +8,13 @@
   const includeDeleted = query.includeDeleted === '1' || query.includeDeleted === 'true' || query.includeDeleted === 'yes';
   const includeDeletedToggleLabel = includeDeleted ? 'Nur aktive anzeigen' : 'Gelöschte anzeigen';
   const locationOptions = (typeof lendingLocations !== 'undefined' && Array.isArray(lendingLocations)) ? lendingLocations : [];
+  const fmt = function (value) {
+    if (!value) return '-';
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+    const p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ' - ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  };
   const buildQuery = function (overrides) {
     const params = Object.assign({}, query, overrides || {});
     const parts = [];
@@ -46,6 +53,27 @@
         <option value="active" <%= query.status === 'active' ? 'selected' : '' %>>Aktiv</option>
         <option value="blocked" <%= query.status === 'blocked' ? 'selected' : '' %>>Gesperrt</option>
       </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label for="externalProvider" class="form-label">Provider</label>
+      <select id="externalProvider" name="externalProvider" class="form-select">
+        <option value="">Alle</option>
+        <option value="local" <%= query.externalProvider === 'local' ? 'selected' : '' %>>Lokal</option>
+        <option value="ldap" <%= query.externalProvider === 'ldap' ? 'selected' : '' %>>LDAP</option>
+        <option value="saml" <%= query.externalProvider === 'saml' ? 'selected' : '' %>>SAML</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label for="externalId" class="form-label">External ID</label>
+      <input type="text" class="form-control" id="externalId" name="externalId" value="<%= query.externalId || '' %>" placeholder="Teiltreffer">
+    </div>
+    <div class="col-12 col-md-3">
+      <label for="lastLoginAtFrom" class="form-label">Letzter Login von</label>
+      <input type="date" class="form-control" id="lastLoginAtFrom" name="lastLoginAtFrom" value="<%= query.lastLoginAtFrom || '' %>">
+    </div>
+    <div class="col-12 col-md-3">
+      <label for="lastLoginAtTo" class="form-label">Letzter Login bis</label>
+      <input type="date" class="form-control" id="lastLoginAtTo" name="lastLoginAtTo" value="<%= query.lastLoginAtTo || '' %>">
     </div>
     <div class="col-12 col-md-3 d-flex gap-2">
       <button type="submit" class="btn btn-outline-primary w-100">
@@ -88,6 +116,9 @@
             <th scope="col"><a class="text-decoration-none" href="<%= sortLink('firstName') %>">Vorname</a></th>
             <th scope="col"><a class="text-decoration-none" href="<%= sortLink('lastName') %>">Nachname</a></th>
             <th scope="col"><a class="text-decoration-none" href="<%= sortLink('email') %>">E-Mail</a></th>
+            <th scope="col"><a class="text-decoration-none" href="<%= sortLink('externalProvider') %>">Provider</a></th>
+            <th scope="col">External ID</th>
+            <th scope="col"><a class="text-decoration-none" href="<%= sortLink('lastLoginAt') %>">Letzter Login</a></th>
             <th scope="col">Rollen</th>
             <th scope="col">Status / Aktionen</th>
           </tr>
@@ -106,6 +137,9 @@
                 <td><%= u.firstName || '-' %></td>
                 <td><%= u.lastName || '-' %></td>
                 <td><%= u.email || '-' %></td>
+                <td><%= u.externalProvider || 'local' %></td>
+                <td><%= u.externalId || '-' %></td>
+                <td><%= fmt(u.lastLoginAt) %></td>
                 <td>
                   <% if (u.roles && u.roles.length) { %>
                     <span class="text-muted"><%= u.roles.map(function(r){ return r.name; }).join(', ') %></span>
@@ -140,7 +174,7 @@
             <% }) %>
           <% } else { %>
             <tr>
-              <td colspan="6" class="text-center text-muted py-4">Keine Benutzer vorhanden.</td>
+              <td colspan="9" class="text-center text-muted py-4">Keine Benutzer vorhanden.</td>
             </tr>
           <% } %>
         </tbody>

@@ -40,6 +40,10 @@ const openingHoursValidation = [
     .optional({ nullable: true, checkFalsy: true })
     .isISO8601()
     .withMessage('validTo ist ungültig'),
+  body('isSpecial')
+    .optional({ nullable: true })
+    .isIn(['true', 'false'])
+    .withMessage('Sonderzeit-Status ist ungültig'),
   body('exceptionType')
     .optional({ nullable: true })
     .isString(),

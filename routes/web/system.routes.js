@@ -6,6 +6,7 @@ const AuditLogController = require('../../controllers/web/system/AuditLogControl
 const LendingLocationContextController = require('../../controllers/web/system/LendingLocationContextController');
 const validate = require('../../middleware/validate');
 const { lendingLocationValidation } = require('../../validation');
+const uploadLendingLocationImage = require('../../middleware/lendingLocationImageUpload');
 
 const router = express.Router();
 const globalScope = () => null;
@@ -35,6 +36,7 @@ router.post(
   '/system/lending-locations',
   requireLogin,
   requirePermission('system.admin', globalScope),
+  uploadLendingLocationImage,
   lendingLocationValidation,
   validate('system/lending-locations/new'),
   lendingLocationController.create.bind(lendingLocationController)
@@ -55,6 +57,7 @@ router.post(
   '/system/lending-locations/:id',
   requireLogin,
   requirePermission(['system.admin', 'lendinglocations.manage'], locationScope),
+  uploadLendingLocationImage,
   lendingLocationValidation,
   validate('system/lending-locations/edit'),
   lendingLocationController.update.bind(lendingLocationController)

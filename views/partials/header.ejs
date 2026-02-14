@@ -17,13 +17,10 @@
     <div class="collapse navbar-collapse" id="mainNavbar">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item">
-          <a class="nav-link <%= isActive('/') ? 'active' : '' %>" aria-current="<%= isActive('/') ? 'page' : '' %>" href="/">Home</a>
+          <a class="nav-link <%= isActive('/lending-locations') ? 'active' : '' %>" aria-current="<%= isActive('/lending-locations') ? 'page' : '' %>" href="/lending-locations">Labore</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link <%= isActive('/system/lending-locations') ? 'active' : '' %>" aria-current="<%= isActive('/system/lending-locations') ? 'page' : '' %>" href="/system/lending-locations">LendingLocations</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link <%= isActive('/admin/categories') ? 'active' : '' %>" aria-current="<%= isActive('/admin/categories') ? 'page' : '' %>" href="/admin/categories">Categories</a>
+          <a class="nav-link <%= isActive('/categories') ? 'active' : '' %>" aria-current="<%= isActive('/categories') ? 'page' : '' %>" href="/categories">Categories</a>
         </li>
         <li class="nav-item">
           <a class="nav-link <%= isActive('/assets') ? 'active' : '' %>" aria-current="<%= isActive('/assets') ? 'page' : '' %>" href="/assets">Assets</a>
@@ -38,6 +35,7 @@
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
             <li><a class="dropdown-item" href="/profile">Profil</a></li>
+            <li><a class="dropdown-item" href="/cart">Warenkorb</a></li>
             <li><a class="dropdown-item" href="/reservations">Meine Reservierungen</a></li>
             <li><a class="dropdown-item" href="/loans">Meine Ausleihen</a></li>
             <li><hr class="dropdown-divider"></li>

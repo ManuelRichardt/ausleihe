@@ -141,8 +141,20 @@ class LoanService {
             },
           ],
         },
-        { model: this.models.LoanSignature, as: 'loanSignatures' },
-        { model: this.models.LoanEvent, as: 'events' },
+        {
+          model: this.models.LoanSignature,
+          as: 'loanSignatures',
+          include: [{ model: this.models.User, as: 'user' }],
+          separate: true,
+          order: [['signedAt', 'DESC'], ['createdAt', 'DESC']],
+        },
+        {
+          model: this.models.LoanEvent,
+          as: 'events',
+          include: [{ model: this.models.User, as: 'user' }],
+          separate: true,
+          order: [['occurredAt', 'DESC'], ['createdAt', 'DESC']],
+        },
       ],
     });
     if (!loan) {
@@ -383,13 +395,15 @@ class LoanService {
       if (!loan) {
         throw new Error('Loan not found');
       }
-      if (loan.status !== 'reserved') {
-        throw new Error('Loan period can only be changed for reserved loans');
+      if (!['reserved', 'handed_over', 'overdue'].includes(loan.status)) {
+        throw new Error('Loan period cannot be changed in current status');
       }
       if (!data.reservedFrom || !data.reservedUntil) {
         throw new Error('Reserved from and until are required');
       }
-      await assertOpenForRange(this.models, loan.lendingLocationId, data.reservedFrom, data.reservedUntil);
+      if (!data.skipOpeningHours) {
+        await assertOpenForRange(this.models, loan.lendingLocationId, data.reservedFrom, data.reservedUntil);
+      }
 
       await loan.update(
         {
@@ -477,8 +491,6 @@ class LoanService {
           if (entry && entry.loanItemId) byId[entry.loanItemId] = entry;
         });
       }
-      const returnedMeta = [];
-
       for (const item of items) {
         const payload = byId[item.id] || {};
         await item.update(
@@ -493,12 +505,6 @@ class LoanService {
           const isActive = payload.assetStatus === 'inactive' ? false : true;
           await item.asset.update({ isActive }, { transaction });
         }
-        returnedMeta.push({
-          loanItemId: item.id,
-          conditionOnReturn: payload.conditionOnReturn || null,
-          completeness: payload.completeness || null,
-          assetStatus: payload.assetStatus || null,
-        });
       }
 
       const remaining = await LoanItem.count({
@@ -524,10 +530,6 @@ class LoanService {
           userId: data.userId || null,
           type: 'returned',
           note: data.note || null,
-          metadata: {
-            returnedItemIds: selectedItemIds,
-            items: returnedMeta,
-          },
         },
         { transaction }
       );

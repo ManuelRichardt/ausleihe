@@ -14,6 +14,7 @@
     return match ? match.message : '';
   };
   const modelOptions = Array.isArray(models) ? models : [];
+  const storageLocationOptions = Array.isArray(storageLocations) ? storageLocations : [];
   const conditionValue = values.condition || 'good';
 %>
 
@@ -46,6 +47,16 @@
           <label for="inventoryNumber" class="form-label">Inventarnummer</label>
           <input type="text" class="form-control <%= errorFor('inventoryNumber') ? 'is-invalid' : '' %>" id="inventoryNumber" name="inventoryNumber" value="<%= values.inventoryNumber || '' %>">
           <% if (errorFor('inventoryNumber')) { %><div class="invalid-feedback"><%= errorFor('inventoryNumber') %></div><% } %>
+        </div>
+        <div class="col-md-6">
+          <label for="storageLocationId" class="form-label">Lagerort</label>
+          <select id="storageLocationId" name="storageLocationId" class="form-select <%= errorFor('storageLocationId') ? 'is-invalid' : '' %>">
+            <option value="">Kein Lagerort</option>
+            <% storageLocationOptions.forEach(function(s) { %>
+              <option value="<%= s.id %>" <%= values.storageLocationId === s.id ? 'selected' : '' %>><%= s.name %></option>
+            <% }) %>
+          </select>
+          <% if (errorFor('storageLocationId')) { %><div class="invalid-feedback"><%= errorFor('storageLocationId') %></div><% } %>
         </div>
         <div class="col-md-6">
           <label for="serialNumber" class="form-label">Seriennummer</label>

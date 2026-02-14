@@ -20,11 +20,24 @@
 
   <div class="card shadow-sm">
     <div class="card-body">
+      <% if (safeLocation.imageUrl) { %>
+        <div class="mb-3">
+          <img src="<%= safeLocation.imageUrl %>" alt="<%= safeLocation.name || 'Ausleihstelle' %>" width="260" height="160" class="rounded border object-fit-cover">
+        </div>
+      <% } %>
       <dl class="row mb-0">
         <dt class="col-sm-3">Name</dt>
         <dd class="col-sm-9"><%= safeLocation.name || '-' %></dd>
         <dt class="col-sm-3">Kontakt E-Mail</dt>
         <dd class="col-sm-9"><%= safeLocation.contactEmail || '-' %></dd>
+        <dt class="col-sm-3">Bild</dt>
+        <dd class="col-sm-9">
+          <% if (safeLocation.imageUrl) { %>
+            <a href="<%= safeLocation.imageUrl %>" target="_blank" rel="noreferrer">Bild öffnen</a>
+          <% } else { %>
+            -
+          <% } %>
+        </dd>
         <dt class="col-sm-3">Status</dt>
         <dd class="col-sm-9">
           <% if (safeLocation.isActive) { %>

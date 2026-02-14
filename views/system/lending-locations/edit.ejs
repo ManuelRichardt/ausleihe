@@ -27,7 +27,7 @@
     </div>
   </div>
 
-  <form method="post" action="/system/lending-locations/<%= safeLocation.id %>" class="card shadow-sm">
+  <form method="post" action="/system/lending-locations/<%= safeLocation.id %>" class="card shadow-sm" enctype="multipart/form-data">
     <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
     <div class="card-body">
       <div class="row g-3">
@@ -62,6 +62,27 @@
           <label for="description" class="form-label">Beschreibung</label>
           <textarea id="description" name="description" class="form-control" rows="3"><%= values.description || '' %></textarea>
         </div>
+        <div class="col-12">
+          <label for="image" class="form-label">Bild</label>
+          <input type="file" class="form-control <%= errorFor('image') ? 'is-invalid' : '' %>" id="image" name="image" accept="image/*">
+          <% if (errorFor('image')) { %><div class="invalid-feedback"><%= errorFor('image') %></div><% } %>
+        </div>
+        <% if (safeLocation.imageUrl) { %>
+          <div class="col-12">
+            <div class="card bg-light border-0">
+              <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                  <img src="<%= safeLocation.imageUrl %>" alt="Ausleihe Bild" width="120" height="90" class="rounded border object-fit-cover">
+                  <div class="small text-muted">Aktuelles Bild</div>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" value="1" id="removeImage" name="removeImage">
+                  <label class="form-check-label" for="removeImage">Bild entfernen</label>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% } %>
       </div>
     </div>
 

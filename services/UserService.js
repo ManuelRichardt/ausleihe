@@ -22,50 +22,85 @@ class UserService {
   buildUserWhere(filter = {}) {
     const { sequelize } = this.models;
     const where = {};
+    const andParts = [];
     if (filter.isActive !== undefined) {
       where.isActive = filter.isActive;
     }
     if (filter.query) {
       const likeValue = `%${String(filter.query).toLowerCase()}%`;
-      where[Op.or] = [
+      andParts.push({
+        [Op.or]: [
         sequelize.where(sequelize.fn('LOWER', sequelize.col('username')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('first_name')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('last_name')), { [Op.like]: likeValue }),
-      ];
+        ],
+      });
     } else {
       if (filter.username) {
-        where[Op.and] = where[Op.and] || [];
-        where[Op.and].push(
+        andParts.push(
           sequelize.where(sequelize.fn('LOWER', sequelize.col('username')), {
             [Op.eq]: String(filter.username).toLowerCase(),
           })
         );
       }
       if (filter.email) {
-        where[Op.and] = where[Op.and] || [];
-        where[Op.and].push(
+        andParts.push(
           sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), {
             [Op.eq]: String(filter.email).toLowerCase(),
           })
         );
       }
       if (filter.firstName) {
-        where[Op.and] = where[Op.and] || [];
-        where[Op.and].push(
+        andParts.push(
           sequelize.where(sequelize.fn('LOWER', sequelize.col('first_name')), {
             [Op.eq]: String(filter.firstName).toLowerCase(),
           })
         );
       }
       if (filter.lastName) {
-        where[Op.and] = where[Op.and] || [];
-        where[Op.and].push(
+        andParts.push(
           sequelize.where(sequelize.fn('LOWER', sequelize.col('last_name')), {
             [Op.eq]: String(filter.lastName).toLowerCase(),
           })
         );
       }
+    }
+    if (filter.externalProvider) {
+      if (filter.externalProvider === 'local') {
+        where.externalProvider = null;
+      } else {
+        where.externalProvider = filter.externalProvider;
+      }
+    }
+    if (filter.externalId) {
+      andParts.push(
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('external_id')), {
+          [Op.like]: `%${String(filter.externalId).toLowerCase()}%`,
+        })
+      );
+    }
+    if (filter.lastLoginAtFrom || filter.lastLoginAtTo) {
+      const range = {};
+      if (filter.lastLoginAtFrom) {
+        const fromDate = new Date(filter.lastLoginAtFrom);
+        if (!Number.isNaN(fromDate.getTime())) {
+          range[Op.gte] = fromDate;
+        }
+      }
+      if (filter.lastLoginAtTo) {
+        const toDate = new Date(filter.lastLoginAtTo);
+        if (!Number.isNaN(toDate.getTime())) {
+          toDate.setHours(23, 59, 59, 999);
+          range[Op.lte] = toDate;
+        }
+      }
+      if (Object.keys(range).length) {
+        andParts.push({ lastLoginAt: range });
+      }
+    }
+    if (andParts.length) {
+      where[Op.and] = andParts;
     }
     return where;
   }
@@ -383,6 +418,12 @@ class UserService {
     const role = await Role.findByPk(data.roleId, { transaction });
     if (!role) {
       throw new Error('Role not found');
+    }
+    if (role.scope === 'ausleihe' && !data.lendingLocationId) {
+      throw new Error('LendingLocation is required for ausleihe roles');
+    }
+    if (role.scope !== 'ausleihe' && data.lendingLocationId) {
+      throw new Error('Global roles must not be assigned to a lending location');
     }
     if (data.lendingLocationId) {
       const location = await LendingLocation.findByPk(data.lendingLocationId, { transaction });

@@ -29,6 +29,8 @@
       <dl class="row mb-0">
         <dt class="col-sm-3">Wochentag</dt>
         <dd class="col-sm-9"><%= dayLabels[safeHour.dayOfWeek] || safeHour.dayOfWeek || '-' %></dd>
+        <dt class="col-sm-3">Typ</dt>
+        <dd class="col-sm-9"><%= safeHour.isSpecial ? 'Sonderzeit' : 'Regulär' %></dd>
         <dt class="col-sm-3">Öffnet</dt>
         <dd class="col-sm-9"><%= safeHour.openTime || '-' %></dd>
         <dt class="col-sm-3">Schließt</dt>

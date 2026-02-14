@@ -56,7 +56,7 @@ class UserAdminController {
     try {
       const { page, limit, offset, order, sortBy, sortOrder } = parseListQuery(
         req,
-        ['firstName', 'lastName', 'email', 'username', 'createdAt', 'isActive'],
+        ['firstName', 'lastName', 'email', 'username', 'createdAt', 'isActive', 'externalProvider', 'lastLoginAt'],
         { order: [['createdAt', 'DESC']] }
       );
       const filter = {};
@@ -69,6 +69,18 @@ class UserAdminController {
       }
       if (req.query.status === 'blocked') {
         filter.isActive = false;
+      }
+      if (req.query.externalProvider) {
+        filter.externalProvider = req.query.externalProvider;
+      }
+      if (req.query.externalId) {
+        filter.externalId = req.query.externalId;
+      }
+      if (req.query.lastLoginAtFrom) {
+        filter.lastLoginAtFrom = req.query.lastLoginAtFrom;
+      }
+      if (req.query.lastLoginAtTo) {
+        filter.lastLoginAtTo = req.query.lastLoginAtTo;
       }
       if (includeDeleted) {
         filter.includeDeleted = true;
@@ -90,6 +102,10 @@ class UserAdminController {
         filters: {
           q: req.query.q || '',
           status: req.query.status || '',
+          externalProvider: req.query.externalProvider || '',
+          externalId: req.query.externalId || '',
+          lastLoginAtFrom: req.query.lastLoginAtFrom || '',
+          lastLoginAtTo: req.query.lastLoginAtTo || '',
           includeDeleted: includeDeleted ? '1' : '',
           sortBy,
           sortOrder,
@@ -145,7 +161,7 @@ class UserAdminController {
         return res.redirect(`/admin/users/${userId}`);
       }
       const role = await services.roleService.getById(roleId);
-      const lendingLocationId = req.body.lendingLocationId || null;
+      const lendingLocationId = role.scope === 'ausleihe' ? (req.body.lendingLocationId || null) : null;
       if (role.scope === 'ausleihe' && !lendingLocationId) {
         if (typeof req.flash === 'function') {
           req.flash('error', 'Bitte eine Ausleihe auswählen.');
@@ -462,8 +478,13 @@ class UserAdminController {
         for (const userId of userIds) {
           try {
             for (const assignment of assignments) {
+              const scope = roleScopeMap.get(assignment.roleId);
               await services.userService.assignRole(
-                { userId, roleId: assignment.roleId, lendingLocationId: assignment.lendingLocationId || null },
+                {
+                  userId,
+                  roleId: assignment.roleId,
+                  lendingLocationId: scope === 'ausleihe' ? (assignment.lendingLocationId || null) : null,
+                },
                 { actorId: req.user ? req.user.id : null }
               );
             }

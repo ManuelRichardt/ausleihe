@@ -8,6 +8,33 @@
   const manuals = attachments.filter(function (item) { return item && item.kind === 'manual'; });
   const documents = attachments.filter(function (item) { return item && item.kind === 'document'; });
   const others = attachments.filter(function (item) { return item && item.kind === 'other'; });
+  const customFieldDefinitionsList = Array.isArray(customFieldDefinitions) ? customFieldDefinitions : [];
+  const customFieldData = (safeModel.specs && typeof safeModel.specs === 'object')
+    ? safeModel.specs
+    : {};
+  const customFieldRows = customFieldDefinitionsList
+    .map(function (definition) {
+      let value = Object.prototype.hasOwnProperty.call(customFieldData, definition.id)
+        ? customFieldData[definition.id]
+        : undefined;
+      if (value === undefined || value === null || value === '') {
+        value = definition.defaultValue;
+      }
+      if (value === undefined || value === null || value === '') {
+        return null;
+      }
+      let renderedValue = value;
+      if (definition.type === 'boolean') {
+        renderedValue = (value === true || String(value).toLowerCase() === 'true' || String(value) === '1')
+          ? 'Ja'
+          : 'Nein';
+      }
+      return {
+        label: definition.label || definition.key,
+        value: renderedValue,
+      };
+    })
+    .filter(Boolean);
 %>
 
 <section class="admin models">
@@ -43,6 +70,18 @@
         <dd class="col-sm-9"><%= safeModel.description || '-' %></dd>
         <dt class="col-sm-3">Technische Beschreibung</dt>
         <dd class="col-sm-9"><%= safeModel.technicalDescription || '-' %></dd>
+        <dt class="col-sm-3">Custom Fields</dt>
+        <dd class="col-sm-9">
+          <% if (customFieldRows.length) { %>
+            <ul class="list-unstyled mb-0">
+              <% customFieldRows.forEach(function(field) { %>
+                <li><span class="fw-semibold"><%= field.label %>:</span> <%= field.value %></li>
+              <% }) %>
+            </ul>
+          <% } else { %>
+            -
+          <% } %>
+        </dd>
         <dt class="col-sm-3">Bild-URL</dt>
         <dd class="col-sm-9">
           <% if (safeModel.imageUrl) { %>

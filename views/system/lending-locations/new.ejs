@@ -25,7 +25,7 @@
     </div>
   </div>
 
-  <form method="post" action="/system/lending-locations" class="card shadow-sm">
+  <form method="post" action="/system/lending-locations" class="card shadow-sm" enctype="multipart/form-data">
     <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
     <div class="card-body">
       <div class="row g-3">
@@ -52,6 +52,11 @@
         <div class="col-12">
           <label for="description" class="form-label">Beschreibung</label>
           <textarea id="description" name="description" class="form-control" rows="3"><%= values.description || '' %></textarea>
+        </div>
+        <div class="col-12">
+          <label for="image" class="form-label">Bild</label>
+          <input type="file" class="form-control <%= errorFor('image') ? 'is-invalid' : '' %>" id="image" name="image" accept="image/*">
+          <% if (errorFor('image')) { %><div class="invalid-feedback"><%= errorFor('image') %></div><% } %>
         </div>
       </div>
     </div>

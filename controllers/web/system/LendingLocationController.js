@@ -1,4 +1,5 @@
 const { services, renderPage, handleError, parseIncludeDeleted } = require('../_controllerUtils');
+const { toPublicUploadUrl, removePublicFileByUrl } = require('../../../helpers/uploadImage.helper');
 
 class LendingLocationController {
   parseListQuery(req) {
@@ -80,7 +81,14 @@ class LendingLocationController {
         throw notFound;
       }
 
-      const location = await services.lendingLocationService.createLocation(req.body);
+      const uploadedImageUrl = toPublicUploadUrl(req.file, 'lending-locations');
+      const location = await services.lendingLocationService.createLocation({
+        name: req.body.name,
+        description: req.body.description,
+        imageUrl: uploadedImageUrl,
+        contactEmail: req.body.contactEmail,
+        isActive: req.body.isActive !== 'false',
+      });
       const adminRoles = await services.roleService.searchRoles({ name: 'Admin', scope: 'ausleihe' });
       if (!adminRoles.length) {
         const missing = new Error('Admin-Rolle (Scope: ausleihe) fehlt');
@@ -163,12 +171,20 @@ class LendingLocationController {
 
   async update(req, res, next) {
     try {
+      const currentLocation = await services.lendingLocationService.getById(req.params.id);
+      const removeImage = req.body.removeImage === '1' || req.body.removeImage === 'true';
+      const nextImageUrl = toPublicUploadUrl(req.file, 'lending-locations');
+      const imageUrl = nextImageUrl || (removeImage ? null : currentLocation.imageUrl || null);
       await services.lendingLocationService.updateLocation(req.params.id, {
         name: req.body.name,
         description: req.body.description,
+        imageUrl,
         contactEmail: req.body.contactEmail,
         isActive: req.body.isActive !== 'false',
       });
+      if ((nextImageUrl || removeImage) && currentLocation.imageUrl && currentLocation.imageUrl !== imageUrl) {
+        removePublicFileByUrl(currentLocation.imageUrl);
+      }
       if (req.body.adminUserId) {
         const adminRole = await services.roleService.searchRoles({ name: 'Admin', scope: 'ausleihe' });
         if (!adminRole.length) {

@@ -25,7 +25,7 @@
   <div class="d-flex flex-column flex-lg-row align-items-lg-end justify-content-between gap-3 mb-4">
     <div>
       <h1 class="h3 mb-1">Asset-Katalog</h1>
-      <p class="text-muted mb-0">Geraete und Raeume reservieren nach Modell.</p>
+      <p class="text-muted mb-0">Geräte reservieren nach Modell.</p>
     </div>
     <div class="btn-group" role="group">
       <a class="btn btn-outline-secondary <%= viewModeValue === 'grid' ? 'active' : '' %>" href="/assets<%= buildQuery({ view: 'grid', page: 1 }) %>">
@@ -83,8 +83,48 @@
       </div>
       <input type="hidden" name="view" value="<%= viewModeValue %>">
       <input type="hidden" name="limit" value="<%= safePagination.limit %>">
+      <input type="hidden" name="lendingLocationId" value="<%= safeFilters.lendingLocationId || '' %>">
     </div>
   </form>
+
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <% if (safePagination.total > safePagination.limit) { %>
+      <nav aria-label="Asset Pagination Top">
+        <ul class="pagination mb-0">
+          <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
+            <a class="page-link" href="/assets<%= buildQuery({ page: currentPage - 1 }) %>">Zurück</a>
+          </li>
+          <% for (let i = 1; i <= totalPages; i += 1) { %>
+            <li class="page-item <%= i === currentPage ? 'active' : '' %>">
+              <a class="page-link" href="/assets<%= buildQuery({ page: i }) %>"><%= i %></a>
+            </li>
+          <% } %>
+          <li class="page-item <%= currentPage >= totalPages ? 'disabled' : '' %>">
+            <a class="page-link" href="/assets<%= buildQuery({ page: currentPage + 1 }) %>">Weiter</a>
+          </li>
+        </ul>
+      </nav>
+    <% } else { %>
+      <div class="text-muted small"><%= safePagination.total %> Eintrag(e)</div>
+    <% } %>
+
+    <form method="get" action="/assets" class="d-flex align-items-center gap-2">
+      <input type="hidden" name="q" value="<%= safeFilters.q || '' %>">
+      <input type="hidden" name="categoryId" value="<%= safeFilters.categoryId || '' %>">
+      <input type="hidden" name="manufacturerId" value="<%= safeFilters.manufacturerId || '' %>">
+      <input type="hidden" name="lendingLocationId" value="<%= safeFilters.lendingLocationId || '' %>">
+      <input type="hidden" name="sortBy" value="<%= sortBy || 'name' %>">
+      <input type="hidden" name="sortOrder" value="<%= sortOrder || 'ASC' %>">
+      <input type="hidden" name="view" value="<%= viewModeValue %>">
+      <input type="hidden" name="page" value="1">
+      <select id="limitTop" name="limit" class="form-select form-select-sm">
+        <% [12, 24, 36, 48].forEach(function(limitOption) { %>
+          <option value="<%= limitOption %>" <%= Number(safePagination.limit) === limitOption ? 'selected' : '' %>><%= limitOption %></option>
+        <% }) %>
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-secondary">OK</button>
+    </form>
+  </div>
 
   <% if (Array.isArray(assetModels) && assetModels.length) { %>
     <% if (viewModeValue === 'grid') { %>
@@ -161,21 +201,42 @@
     <div class="alert alert-light border">Keine Modelle gefunden.</div>
   <% } %>
 
-  <% if (safePagination.total > safePagination.limit) { %>
-    <nav class="mt-4" aria-label="Asset Pagination">
-      <ul class="pagination">
-        <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
-          <a class="page-link" href="/assets<%= buildQuery({ page: currentPage - 1 }) %>">Zurueck</a>
-        </li>
-        <% for (let i = 1; i <= totalPages; i += 1) { %>
-          <li class="page-item <%= i === currentPage ? 'active' : '' %>">
-            <a class="page-link" href="/assets<%= buildQuery({ page: i }) %>"><%= i %></a>
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mt-4">
+    <% if (safePagination.total > safePagination.limit) { %>
+      <nav aria-label="Asset Pagination Bottom">
+        <ul class="pagination mb-0">
+          <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
+            <a class="page-link" href="/assets<%= buildQuery({ page: currentPage - 1 }) %>">Zurück</a>
           </li>
-        <% } %>
-        <li class="page-item <%= currentPage >= totalPages ? 'disabled' : '' %>">
-          <a class="page-link" href="/assets<%= buildQuery({ page: currentPage + 1 }) %>">Weiter</a>
-        </li>
-      </ul>
-    </nav>
-  <% } %>
+          <% for (let i = 1; i <= totalPages; i += 1) { %>
+            <li class="page-item <%= i === currentPage ? 'active' : '' %>">
+              <a class="page-link" href="/assets<%= buildQuery({ page: i }) %>"><%= i %></a>
+            </li>
+          <% } %>
+          <li class="page-item <%= currentPage >= totalPages ? 'disabled' : '' %>">
+            <a class="page-link" href="/assets<%= buildQuery({ page: currentPage + 1 }) %>">Weiter</a>
+          </li>
+        </ul>
+      </nav>
+    <% } else { %>
+      <div class="text-muted small"><%= safePagination.total %> Eintrag(e)</div>
+    <% } %>
+
+    <form method="get" action="/assets" class="d-flex align-items-center gap-2">
+      <input type="hidden" name="q" value="<%= safeFilters.q || '' %>">
+      <input type="hidden" name="categoryId" value="<%= safeFilters.categoryId || '' %>">
+      <input type="hidden" name="manufacturerId" value="<%= safeFilters.manufacturerId || '' %>">
+      <input type="hidden" name="lendingLocationId" value="<%= safeFilters.lendingLocationId || '' %>">
+      <input type="hidden" name="sortBy" value="<%= sortBy || 'name' %>">
+      <input type="hidden" name="sortOrder" value="<%= sortOrder || 'ASC' %>">
+      <input type="hidden" name="view" value="<%= viewModeValue %>">
+      <input type="hidden" name="page" value="1">
+      <select id="limitBottom" name="limit" class="form-select form-select-sm">
+        <% [12, 24, 36, 48].forEach(function(limitOption) { %>
+          <option value="<%= limitOption %>" <%= Number(safePagination.limit) === limitOption ? 'selected' : '' %>><%= limitOption %></option>
+        <% }) %>
+      </select>
+      <button type="submit" class="btn btn-sm btn-outline-secondary">OK</button>
+    </form>
+  </div>
 </section>

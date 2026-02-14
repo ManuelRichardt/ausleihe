@@ -14,7 +14,9 @@ const { userCreateValidation, userUpdateValidation } = require('./user.validatio
 const { roleValidation } = require('./role.validation');
 const { permissionValidation } = require('./permission.validation');
 const { openingHoursValidation } = require('./openingHours.validation');
+const { openingExceptionValidation } = require('./openingException.validation');
 const { lendingLocationValidation } = require('./lendingLocation.validation');
+const { storageLocationValidation } = require('./storageLocation.validation');
 
 module.exports = {
   loginValidation,
@@ -33,5 +35,7 @@ module.exports = {
   roleValidation,
   permissionValidation,
   openingHoursValidation,
+  openingExceptionValidation,
   lendingLocationValidation,
+  storageLocationValidation,
 };

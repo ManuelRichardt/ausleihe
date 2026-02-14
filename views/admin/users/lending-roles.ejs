@@ -1,0 +1,106 @@
+<% pageTitle = 'Benutzerrollen (Ausleihe)' %>
+<%
+  const safeUsers = Array.isArray(users) ? users : [];
+  const roleOptions = Array.isArray(roles) ? roles.filter(function (role) { return role && role.scope === 'ausleihe'; }) : [];
+  const search = typeof query === 'string' ? query : '';
+  const activeLocation = (typeof lendingLocation !== 'undefined' && lendingLocation) ? lendingLocation : null;
+  const currentUserId = (typeof user !== 'undefined' && user && user.id) ? user.id : null;
+  const displayName = function (entry) {
+    const full = [entry.firstName || '', entry.lastName || ''].join(' ').trim();
+    return full || entry.username || '-';
+  };
+%>
+
+<section class="admin users">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-end justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-2">Benutzerrollen (Ausleihe)</h1>
+      <p class="text-muted mb-0">
+        Aktive Ausleihe:
+        <strong><%= activeLocation ? activeLocation.name : 'nicht gewählt' %></strong>
+      </p>
+    </div>
+  </div>
+
+  <form method="get" action="/admin/lending-user-roles" class="row g-2 align-items-end mb-4 panel">
+    <div class="col-12 col-md-8">
+      <label for="q" class="form-label">Benutzer suchen</label>
+      <input type="text" class="form-control" id="q" name="q" value="<%= search %>" placeholder="Vorname, Nachname, E-Mail, Benutzername">
+    </div>
+    <div class="col-12 col-md-4 d-flex gap-2">
+      <button type="submit" class="btn btn-outline-primary w-100">
+        <i class="bi bi-search me-1"></i> Suchen
+      </button>
+    </div>
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>E-Mail</th>
+              <th>Rollen in dieser Ausleihe</th>
+              <th>Rolle zuweisen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (safeUsers.length) { %>
+              <% safeUsers.forEach(function(entry) { %>
+                <% const locationRoles = Array.isArray(entry.userRoles) ? entry.userRoles.filter(function (userRole) { return userRole && userRole.role && userRole.role.scope === 'ausleihe'; }) : []; %>
+                <tr>
+                  <td><%= displayName(entry) %></td>
+                  <td><%= entry.email || '-' %></td>
+                  <td>
+                    <% if (locationRoles.length) { %>
+                      <div class="d-flex flex-wrap gap-2">
+                        <% locationRoles.forEach(function(userRole) { %>
+                          <form method="post" action="/admin/lending-user-roles/<%= entry.id %>/roles/<%= userRole.roleId %>/revoke" class="d-inline-flex">
+                            <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                            <input type="hidden" name="returnTo" value="/admin/lending-user-roles<%= search ? ('?q=' + encodeURIComponent(search)) : '' %>">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary" <%= currentUserId === entry.id ? 'disabled title=\"Eigene Rollen können hier nicht geändert werden\"' : '' %>>
+                              <%= userRole.role.name %> <i class="bi bi-x-lg ms-1"></i>
+                            </button>
+                          </form>
+                        <% }) %>
+                      </div>
+                    <% } else { %>
+                      <span class="text-muted">Keine</span>
+                    <% } %>
+                  </td>
+                  <td>
+                    <form method="post" action="/admin/lending-user-roles/<%= entry.id %>/roles/assign" class="d-flex gap-2">
+                      <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                      <input type="hidden" name="returnTo" value="/admin/lending-user-roles<%= search ? ('?q=' + encodeURIComponent(search)) : '' %>">
+                      <select name="roleId" class="form-select form-select-sm" <%= currentUserId === entry.id ? 'disabled' : '' %> required>
+                        <option value="">Rolle wählen</option>
+                        <% roleOptions.forEach(function(role) { %>
+                          <option value="<%= role.id %>"><%= role.name %></option>
+                        <% }) %>
+                      </select>
+                      <button type="submit" class="btn btn-sm btn-primary" <%= currentUserId === entry.id ? 'disabled' : '' %>>
+                        <i class="bi bi-plus-lg"></i>
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="4" class="text-center text-muted py-4">
+                  <% if (search) { %>
+                    Keine Benutzer gefunden.
+                  <% } else { %>
+                    Keine zugewiesenen Benutzerrollen in dieser Ausleihe.
+                  <% } %>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>

@@ -167,39 +167,59 @@ class OpeningHourService {
 
   async setException(data) {
     const { OpeningException } = this.models;
-    const existing = await OpeningException.findOne({
-      where: {
-        lendingLocationId: data.lendingLocationId,
-        date: data.date,
-      },
-    });
-
-    if (existing) {
-      await existing.update({
-        openTime: data.openTime || null,
-        closeTime: data.closeTime || null,
-        pickupOpenTime: data.pickupOpenTime || null,
-        pickupCloseTime: data.pickupCloseTime || null,
-        returnOpenTime: data.returnOpenTime || null,
-        returnCloseTime: data.returnCloseTime || null,
-        isClosed: Boolean(data.isClosed),
-        reason: data.reason || null,
-      });
-      return existing;
+    const from = data.dateFrom || data.date;
+    const to = data.dateTo || from;
+    if (!from) {
+      throw new Error('date is required');
+    }
+    const start = new Date(`${from}T00:00:00.000Z`);
+    const end = new Date(`${to}T00:00:00.000Z`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+      throw new Error('Invalid date range');
     }
 
-    return OpeningException.create({
-      lendingLocationId: data.lendingLocationId,
-      date: data.date,
+    const payload = {
       openTime: data.openTime || null,
       closeTime: data.closeTime || null,
       pickupOpenTime: data.pickupOpenTime || null,
       pickupCloseTime: data.pickupCloseTime || null,
       returnOpenTime: data.returnOpenTime || null,
       returnCloseTime: data.returnCloseTime || null,
-      isClosed: Boolean(data.isClosed),
+      isClosed:
+        data.isClosed === true ||
+        data.isClosed === 'true' ||
+        data.isClosed === 1 ||
+        data.isClosed === '1',
       reason: data.reason || null,
-    });
+    };
+
+    let firstRecord = null;
+    for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      const date = cursor.toISOString().slice(0, 10);
+      const existing = await OpeningException.findOne({
+        where: {
+          lendingLocationId: data.lendingLocationId,
+          date,
+        },
+      });
+      if (existing) {
+        await existing.update(payload);
+        if (!firstRecord) {
+          firstRecord = existing;
+        }
+      } else {
+        const created = await OpeningException.create({
+          lendingLocationId: data.lendingLocationId,
+          date,
+          ...payload,
+        });
+        if (!firstRecord) {
+          firstRecord = created;
+        }
+      }
+    }
+
+    return firstRecord;
   }
 
   async getAllExceptions(lendingLocationId, options = {}) {

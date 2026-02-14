@@ -38,12 +38,21 @@
       <label for="q" class="form-label">Suche</label>
       <input type="text" class="form-control" id="q" name="q" value="<%= query.q || '' %>" placeholder="Inventarnummer, Modell, Hersteller">
     </div>
-    <div class="col-12 col-md-4">
+    <div class="col-12 col-md-3">
       <label for="assetModelId" class="form-label">Modell</label>
       <select id="assetModelId" name="assetModelId" class="form-select">
         <option value="">Alle</option>
         <% (models || []).forEach(function(m) { %>
           <option value="<%= m.id %>" <%= query.assetModelId === m.id ? 'selected' : '' %>><%= m.name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label for="storageLocationId" class="form-label">Lagerort</label>
+      <select id="storageLocationId" name="storageLocationId" class="form-select">
+        <option value="">Alle</option>
+        <% (storageLocations || []).forEach(function(s) { %>
+          <option value="<%= s.id %>" <%= query.storageLocationId === s.id ? 'selected' : '' %>><%= s.name %></option>
         <% }) %>
       </select>
     </div>
@@ -55,7 +64,7 @@
         <option value="blocked" <%= query.status === 'blocked' ? 'selected' : '' %>>Nein</option>
       </select>
     </div>
-    <div class="col-12 col-md-2 d-flex gap-2">
+    <div class="col-12 d-flex gap-2">
       <button type="submit" class="btn btn-outline-primary w-100">
         <i class="bi bi-search me-1"></i> Suchen
       </button>
@@ -97,6 +106,7 @@
             <th scope="col"><a class="text-decoration-none" href="<%= sortLink('inventoryNumber') %>">Inventarnummer</a></th>
             <th scope="col">Modell</th>
             <th scope="col">Hersteller</th>
+            <th scope="col">Lagerort</th>
             <th scope="col"><a class="text-decoration-none" href="<%= sortLink('serialNumber') %>">Seriennummer</a></th>
             <th scope="col">Ausleihbar / Aktionen</th>
           </tr>
@@ -108,6 +118,7 @@
                 <td><%= a.inventoryNumber %></td>
                 <td><%= (a.model && a.model.name) ? a.model.name : '-' %></td>
                 <td><%= (a.model && a.model.manufacturer && a.model.manufacturer.name) ? a.model.manufacturer.name : '-' %></td>
+                <td><%= (a.storageLocation && a.storageLocation.name) ? a.storageLocation.name : '-' %></td>
                 <td><%= a.serialNumber || '-' %></td>
                 <td class="d-flex align-items-center gap-2">
                   <% if (a.deletedAt) { %>
@@ -136,7 +147,7 @@
             <% }) %>
           <% } else { %>
             <tr>
-              <td colspan="5" class="text-center text-muted py-4">Keine Assets vorhanden.</td>
+              <td colspan="6" class="text-center text-muted py-4">Keine Assets vorhanden.</td>
             </tr>
           <% } %>
         </tbody>

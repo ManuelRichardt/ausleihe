@@ -16,6 +16,10 @@
   };
   const manufacturerOptions = Array.isArray(manufacturers) ? manufacturers : [];
   const categoryOptions = Array.isArray(categories) ? categories : [];
+  const customFieldDefinitionsList = Array.isArray(customFieldDefinitions) ? customFieldDefinitions : [];
+  const modelCustomFieldValues = (values.customFields && typeof values.customFields === 'object')
+    ? values.customFields
+    : ((safeModel.specs && typeof safeModel.specs === 'object') ? safeModel.specs : {});
 %>
 
 <section class="admin models">
@@ -92,6 +96,11 @@
           <textarea id="technicalDescription" name="technicalDescription" class="form-control <%= errorFor('technicalDescription') ? 'is-invalid' : '' %>" rows="3"><%= values.technicalDescription || '' %></textarea>
           <% if (errorFor('technicalDescription')) { %><div class="invalid-feedback"><%= errorFor('technicalDescription') %></div><% } %>
         </div>
+        <%- include('../../partials/forms/asset-model-custom-fields', {
+          definitions: customFieldDefinitionsList,
+          fieldValues: modelCustomFieldValues,
+          errorFor: errorFor,
+        }) %>
         <div class="col-12">
           <label for="images" class="form-label">Weitere Bilder hochladen</label>
           <input type="file" id="images" name="images" class="form-control" accept="image/*" multiple>

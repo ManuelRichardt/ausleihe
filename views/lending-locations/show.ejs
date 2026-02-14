@@ -1,0 +1,83 @@
+<% pageTitle = (location && location.name) ? location.name : 'Ausleihe' %>
+<%
+  const safeLocation = location || {};
+  const safeOpenDays = Array.isArray(openDays) ? openDays : [];
+  const safeClosedDays = Array.isArray(closedDays) ? closedDays : [];
+  const safeExceptionRanges = Array.isArray(exceptionRanges) ? exceptionRanges : [];
+%>
+
+<section class="lending-location">
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= safeLocation.name || 'Ausleihe' %></h1>
+      <p class="text-muted mb-0"><%= safeLocation.description || '-' %></p>
+    </div>
+    <div>
+      <a href="/assets?lendingLocationId=<%= safeLocation.id %>" class="btn btn-primary">Assets dieser Ausleihe</a>
+    </div>
+  </div>
+
+  <% if (safeLocation.imageUrl) { %>
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <img src="<%= safeLocation.imageUrl %>" alt="<%= safeLocation.name || 'Ausleihe' %>" class="img-fluid rounded border">
+      </div>
+    </div>
+  <% } %>
+
+  <div class="card shadow-sm mt-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Öffnungszeiten</h2>
+      <% if (safeOpenDays.length) { %>
+        <ul class="list-group list-group-flush">
+          <% safeOpenDays.forEach(function(day) { %>
+            <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+              <span><%= day.dayLabel %></span>
+              <span class="badge text-bg-success"><%= day.timeLabel %></span>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %>
+        <p class="text-muted mb-0">Keine offenen Zeiten hinterlegt.</p>
+      <% } %>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mt-4">
+    <div class="card-body">
+      <h2 class="h5 mb-3">Ausnahmen</h2>
+      <% if (safeExceptionRanges.length) { %>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Status</th>
+                <th>Datum von</th>
+                <th>Datum bis</th>
+                <th>Begründung</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% safeExceptionRanges.forEach(function(item) { %>
+                <tr>
+                  <td>
+                    <% if (item.status === 'closed') { %>
+                      <span class="badge text-bg-danger">Geschlossen</span>
+                    <% } else { %>
+                      <span class="badge text-bg-success">Offen</span>
+                    <% } %>
+                  </td>
+                  <td><%= item.dateFrom %></td>
+                  <td><%= item.dateTo %></td>
+                  <td><%= item.reason %></td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } else { %>
+        <p class="text-muted mb-0">Keine Ausnahmen hinterlegt.</p>
+      <% } %>
+    </div>
+  </div>
+</section>

@@ -40,6 +40,13 @@
     <div class="card-body">
       <div class="row g-3">
         <div class="col-md-6">
+          <label for="isSpecial" class="form-label">Typ</label>
+          <select id="isSpecial" name="isSpecial" class="form-select">
+            <option value="false" <%= (values.isSpecial === true || values.isSpecial === 'true') ? '' : 'selected' %>>Regulär</option>
+            <option value="true" <%= (values.isSpecial === true || values.isSpecial === 'true') ? 'selected' : '' %>>Sonderzeit</option>
+          </select>
+        </div>
+        <div class="col-md-6">
           <label for="dayOfWeek" class="form-label">Wochentag</label>
           <select id="dayOfWeek" name="dayOfWeek" class="form-select <%= errorFor('dayOfWeek') ? 'is-invalid' : '' %>">
             <option value="">Bitte wählen</option>

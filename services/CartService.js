@@ -109,6 +109,7 @@ class CartService {
       const lendingLocationId = parsed.lendingLocationId;
       const reservedFrom = parsed.reservedFrom;
       const reservedUntil = parsed.reservedUntil;
+      await assertOpenForRange(this.models, lendingLocationId, reservedFrom, reservedUntil);
       const payloadItems = items.map((item) => ({
         assetModelId: item.assetModelId,
         quantity: item.quantity,

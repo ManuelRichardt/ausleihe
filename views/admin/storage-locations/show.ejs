@@ -1,0 +1,44 @@
+<% pageTitle = 'Lagerort' %>
+<% const item = (typeof storageLocation !== 'undefined' && storageLocation) ? storageLocation : {}; %>
+
+<section class="admin storage-locations">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= item.name || 'Lagerort' %></h1>
+      <p class="text-muted mb-0"><%= item.description || '-' %></p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/admin/storage-locations/<%= item.id %>/edit" class="btn btn-outline-primary">
+        <i class="bi bi-pencil-fill me-1"></i> Bearbeiten
+      </a>
+      <a href="/admin/storage-locations" class="btn btn-outline-secondary">Zur Übersicht</a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <dl class="row mb-0">
+        <dt class="col-sm-4">Name</dt>
+        <dd class="col-sm-8"><%= item.name || '-' %></dd>
+        <dt class="col-sm-4">Beschreibung</dt>
+        <dd class="col-sm-8"><%= item.description || '-' %></dd>
+        <dt class="col-sm-4">Ausleihe</dt>
+        <dd class="col-sm-8"><%= item.lendingLocation && item.lendingLocation.name ? item.lendingLocation.name : '-' %></dd>
+        <dt class="col-sm-4">Status</dt>
+        <dd class="col-sm-8">
+          <% if (item.isActive) { %>
+            <span class="badge text-bg-success">Aktiv</span>
+          <% } else { %>
+            <span class="badge text-bg-danger">Inaktiv</span>
+          <% } %>
+        </dd>
+      </dl>
+    </div>
+    <div class="card-footer d-flex justify-content-end">
+      <form method="post" action="/admin/storage-locations/<%= item.id %>/delete">
+        <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+        <button type="submit" class="btn btn-outline-danger">Löschen</button>
+      </form>
+    </div>
+  </div>
+</section>

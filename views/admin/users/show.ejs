@@ -6,6 +6,13 @@
   const permissionList = Array.isArray(permissions) ? permissions : [];
   const activeLoans = Array.isArray(loans) ? loans : [];
   const reservations = Array.isArray(reservationsList) ? reservationsList : (Array.isArray(reservations) ? reservations : []);
+  const fmt = function (value) {
+    if (!value) return '-';
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+    const p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ' - ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  };
 %>
 
 <% const canManageLoansForView = (typeof can !== 'undefined' && typeof can === 'function') ? can('loan.manage') : false; %>
@@ -37,6 +44,12 @@
             <dd class="col-sm-8"><%= user.lastName || '-' %></dd>
             <dt class="col-sm-4">E-Mail</dt>
             <dd class="col-sm-8"><%= user.email || '-' %></dd>
+            <dt class="col-sm-4">External Provider</dt>
+            <dd class="col-sm-8"><%= user.externalProvider || 'local' %></dd>
+            <dt class="col-sm-4">External ID</dt>
+            <dd class="col-sm-8"><%= user.externalId || '-' %></dd>
+            <dt class="col-sm-4">Last Login</dt>
+            <dd class="col-sm-8"><%= fmt(user.lastLoginAt) %></dd>
             <dt class="col-sm-4">Status</dt>
             <dd class="col-sm-8">
               <% if (user.isActive) { %>

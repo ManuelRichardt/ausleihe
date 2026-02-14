@@ -31,6 +31,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      specs: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: {},
+      },
       imageUrl: {
         type: DataTypes.STRING(500),
         allowNull: true,

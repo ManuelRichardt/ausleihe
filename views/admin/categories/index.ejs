@@ -85,6 +85,7 @@
       <table class="table table-hover align-middle">
         <thead>
           <tr>
+            <th scope="col">Bild</th>
             <th scope="col"><a class="text-decoration-none" href="<%= sortLink('name') %>">Name</a></th>
             <th scope="col">Beschreibung</th>
             <th scope="col">Status / Aktionen</th>
@@ -94,6 +95,13 @@
           <% if (Array.isArray(categories) && categories.length) { %>
           <% categories.forEach(function(cat) { %>
             <tr>
+              <td>
+                <% if (cat.imageUrl) { %>
+                  <img src="<%= cat.imageUrl %>" alt="<%= cat.name %>" width="64" height="48" class="rounded border object-fit-cover">
+                <% } else { %>
+                  <span class="text-muted small">-</span>
+                <% } %>
+              </td>
               <td><%= cat.name %></td>
               <td><%= cat.description || '-' %></td>
               <td class="d-flex align-items-center gap-2">
@@ -123,7 +131,7 @@
           <% }) %>
           <% } else { %>
             <tr>
-              <td colspan="3" class="text-center text-muted py-4">Keine Kategorien vorhanden.</td>
+              <td colspan="4" class="text-center text-muted py-4">Keine Kategorien vorhanden.</td>
             </tr>
           <% } %>
         </tbody>

@@ -2,11 +2,13 @@
 <%
   const query = (typeof filters !== 'undefined' && filters) ? filters : {};
   const currentPage = (pagination && pagination.page) ? pagination.page : 1;
-  const totalItems = (pagination && pagination.total) ? pagination.total : (Array.isArray(hours) ? hours.length : 0);
+  const totalItems = (pagination && pagination.total) ? pagination.total : 0;
   const sortBy = query.sortBy || '';
   const sortOrder = query.sortOrder || 'ASC';
   const includeDeleted = query.includeDeleted === '1' || query.includeDeleted === 'true' || query.includeDeleted === 'yes';
   const includeDeletedToggleLabel = includeDeleted ? 'Nur aktive anzeigen' : 'Gelöschte anzeigen';
+  const tab = (typeof activeTab !== 'undefined' && activeTab) ? activeTab : 'regular';
+  const scope = (typeof scopeFilter !== 'undefined' && scopeFilter) ? scopeFilter : 'regular';
   const dayLabels = {
     mon: 'Montag',
     tue: 'Dienstag',
@@ -29,9 +31,9 @@
   };
   const sortLink = function (field) {
     const nextOrder = (sortBy === field && sortOrder === 'ASC') ? 'DESC' : 'ASC';
-    return buildQuery({ sortBy: field, sortOrder: nextOrder, page: 1 });
+    return buildQuery({ sortBy: field, sortOrder: nextOrder, page: 1, tab: tab });
   };
-  const includeDeletedLink = buildQuery({ includeDeleted: includeDeleted ? '' : '1', page: 1 });
+  const includeDeletedLink = buildQuery({ includeDeleted: includeDeleted ? '' : '1', page: 1, tab: tab });
 %>
 
 <section class="admin opening-hours">
@@ -41,31 +43,76 @@
     </div>
   </div>
 
-  <form method="get" action="/admin/opening-hours" class="row g-2 align-items-end mb-4 panel">
-    <input type="hidden" name="includeDeleted" value="<%= includeDeleted ? '1' : '' %>">
-    <div class="col-12 col-md-4">
-      <label for="dayOfWeek" class="form-label">Wochentag</label>
-      <select id="dayOfWeek" name="dayOfWeek" class="form-select">
-        <option value="">Alle</option>
-        <% Object.keys(dayLabels).forEach(function(key) { %>
-          <option value="<%= key %>" <%= query.dayOfWeek === key ? 'selected' : '' %>><%= dayLabels[key] %></option>
-        <% }) %>
-      </select>
-    </div>
-    <div class="col-12 col-md-4">
-      <label for="status" class="form-label">Status</label>
-      <select id="status" name="status" class="form-select">
-        <option value="">Alle</option>
-        <option value="open" <%= query.status === 'open' ? 'selected' : '' %>>Offen</option>
-        <option value="closed" <%= query.status === 'closed' ? 'selected' : '' %>>Geschlossen</option>
-      </select>
-    </div>
-    <div class="col-12 col-md-4 d-flex gap-2">
-      <button type="submit" class="btn btn-outline-primary w-100">
-        <i class="bi bi-search me-1"></i> Filtern
-      </button>
-    </div>
-  </form>
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'regular' ? 'active' : '' %>" href="/admin/opening-hours?tab=regular">Regulär</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'special' ? 'active' : '' %>" href="/admin/opening-hours?tab=special">Sonderzeiten</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link <%= tab === 'exceptions' ? 'active' : '' %>" href="/admin/opening-hours?tab=exceptions">Ausnahmen</a>
+    </li>
+  </ul>
+
+  <% if (tab === 'exceptions') { %>
+    <form method="get" action="/admin/opening-hours" class="row g-2 align-items-end mb-4 panel">
+      <input type="hidden" name="tab" value="exceptions">
+      <input type="hidden" name="includeDeleted" value="<%= includeDeleted ? '1' : '' %>">
+      <div class="col-12 col-md-5">
+        <label for="q" class="form-label">Suche (Grund)</label>
+        <input type="text" class="form-control" id="q" name="q" value="<%= query.q || '' %>">
+      </div>
+      <div class="col-12 col-md-3">
+        <label for="status" class="form-label">Status</label>
+        <select id="status" name="status" class="form-select">
+          <option value="">Alle</option>
+          <option value="open" <%= query.status === 'open' ? 'selected' : '' %>>Offen</option>
+          <option value="closed" <%= query.status === 'closed' ? 'selected' : '' %>>Geschlossen</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-4 d-flex gap-2">
+        <button type="submit" class="btn btn-outline-primary w-100">
+          <i class="bi bi-search me-1"></i> Filtern
+        </button>
+      </div>
+    </form>
+  <% } else { %>
+    <form method="get" action="/admin/opening-hours" class="row g-2 align-items-end mb-4 panel">
+      <input type="hidden" name="tab" value="<%= tab %>">
+      <input type="hidden" name="includeDeleted" value="<%= includeDeleted ? '1' : '' %>">
+      <div class="col-12 col-md-3">
+        <label for="scope" class="form-label">Typ</label>
+        <select id="scope" name="scope" class="form-select">
+          <option value="regular" <%= scope === 'regular' ? 'selected' : '' %>>Regulär</option>
+          <option value="special" <%= scope === 'special' ? 'selected' : '' %>>Sonderzeit</option>
+          <option value="all" <%= scope === 'all' ? 'selected' : '' %>>Alle</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label for="dayOfWeek" class="form-label">Wochentag</label>
+        <select id="dayOfWeek" name="dayOfWeek" class="form-select">
+          <option value="">Alle</option>
+          <% Object.keys(dayLabels).forEach(function(key) { %>
+            <option value="<%= key %>" <%= query.dayOfWeek === key ? 'selected' : '' %>><%= dayLabels[key] %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-12 col-md-3">
+        <label for="status" class="form-label">Status</label>
+        <select id="status" name="status" class="form-select">
+          <option value="">Alle</option>
+          <option value="open" <%= query.status === 'open' ? 'selected' : '' %>>Offen</option>
+          <option value="closed" <%= query.status === 'closed' ? 'selected' : '' %>>Geschlossen</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-outline-primary w-100">
+          <i class="bi bi-search me-1"></i> Filtern
+        </button>
+      </div>
+    </form>
+  <% } %>
 
   <form class="mb-4 panel">
     <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
@@ -75,19 +122,25 @@
         <nav aria-label="Pagination">
           <ul class="pagination mb-0">
             <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
-              <a class="page-link" href="<%= buildQuery({ page: currentPage - 1 }) %>"><i class="bi bi-caret-left-fill"></i></a>
+              <a class="page-link" href="<%= buildQuery({ page: currentPage - 1, tab: tab }) %>"><i class="bi bi-caret-left-fill"></i></a>
             </li>
             <li class="page-item active">
               <span class="page-link"><%= currentPage %></span>
             </li>
             <li class="page-item <%= pagination && pagination.hasNext ? '' : 'disabled' %>">
-              <a class="page-link" href="<%= buildQuery({ page: currentPage + 1 }) %>"><i class="bi bi-caret-right-fill"></i></a>
+              <a class="page-link" href="<%= buildQuery({ page: currentPage + 1, tab: tab }) %>"><i class="bi bi-caret-right-fill"></i></a>
             </li>
           </ul>
         </nav>
-        <a href="/admin/opening-hours/new" class="btn btn-primary">
-          <i class="bi bi-plus-circle me-1"></i> Neue Öffnungszeit
-        </a>
+        <% if (tab === 'exceptions') { %>
+          <a href="/admin/opening-hours/exceptions/new" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Neue Ausnahme
+          </a>
+        <% } else { %>
+          <a href="/admin/opening-hours/new?isSpecial=<%= tab === 'special' ? '1' : '0' %>" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i> Neue Öffnungszeit
+          </a>
+        <% } %>
         <a href="<%= includeDeletedLink %>" class="btn btn-outline-secondary">
           <i class="bi bi-recycle me-1"></i> <%= includeDeletedToggleLabel %>
         </a>
@@ -96,87 +149,119 @@
     </div>
 
     <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead>
-          <tr>
-            <th scope="col"><a class="text-decoration-none" href="<%= sortLink('dayOfWeek') %>">Wochentag</a></th>
-            <th scope="col">Öffnet</th>
-            <th scope="col">Schließt</th>
-            <th scope="col">Abholung</th>
-            <th scope="col">Rückgabe</th>
-            <th scope="col">Gültig von</th>
-            <th scope="col">Gültig bis</th>
-            <th scope="col">Status / Aktionen</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% if (Array.isArray(hours) && hours.length) { %>
-            <% hours.forEach(function(h) { %>
-              <tr>
-                <td><%= dayLabels[h.dayOfWeek] || h.dayOfWeek %></td>
-                <td><%= h.openTime || '-' %></td>
-                <td><%= h.closeTime || '-' %></td>
-                <td><%= h.pickupOpenTime || h.openTime || '-' %> - <%= h.pickupCloseTime || h.closeTime || '-' %></td>
-                <td><%= h.returnOpenTime || h.openTime || '-' %> - <%= h.returnCloseTime || h.closeTime || '-' %></td>
-                <td><%= h.validFrom || '-' %></td>
-                <td><%= h.validTo || '-' %></td>
-                <td class="d-flex align-items-center gap-2">
-                  <% if (h.deletedAt) { %>
-                    <span class="badge text-bg-secondary">Gelöscht</span>
-                    <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/opening-hours/<%= h.id %>/restore" formmethod="post" aria-label="Wiederherstellen">
-                      <i class="bi bi-recycle"></i>
-                    </button>
-                  <% } else { %>
-                    <% if (h.isClosed) { %>
-                      <span class="badge text-bg-danger">Geschlossen</span>
-                    <% } else { %>
-                      <span class="badge text-bg-success">Offen</span>
-                    <% } %>
-                    <a href="/admin/opening-hours/<%= h.id %>" class="text-decoration-none" aria-label="Details">
-                      <i class="bi bi-info-circle-fill"></i>
-                    </a>
-                    <a href="/admin/opening-hours/<%= h.id %>/edit" class="text-decoration-none" aria-label="Bearbeiten">
-                      <i class="bi bi-pencil-fill"></i>
-                    </a>
-                    <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/opening-hours/<%= h.id %>/delete" formmethod="post" aria-label="Löschen">
-                      <i class="bi bi-trash3-fill"></i>
-                    </button>
-                  <% } %>
-                </td>
-              </tr>
-            <% }) %>
-          <% } else { %>
+      <% if (tab === 'exceptions') { %>
+        <table class="table table-hover align-middle">
+          <thead>
             <tr>
-              <td colspan="8" class="text-center text-muted py-4">Keine Öffnungszeiten vorhanden.</td>
+              <th scope="col"><a class="text-decoration-none" href="<%= sortLink('date') %>">Datum</a></th>
+              <th scope="col">Zeitraum</th>
+              <th scope="col">Öffnet</th>
+              <th scope="col">Schließt</th>
+              <th scope="col">Reason</th>
+              <th scope="col">Status / Aktionen</th>
             </tr>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mt-3">
-      <div class="d-flex align-items-center gap-2">
-        <nav aria-label="Pagination">
-          <ul class="pagination mb-0">
-            <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
-              <a class="page-link" href="<%= buildQuery({ page: currentPage - 1 }) %>"><i class="bi bi-caret-left-fill"></i></a>
-            </li>
-            <li class="page-item active">
-              <span class="page-link"><%= currentPage %></span>
-            </li>
-            <li class="page-item <%= pagination && pagination.hasNext ? '' : 'disabled' %>">
-              <a class="page-link" href="<%= buildQuery({ page: currentPage + 1 }) %>"><i class="bi bi-caret-right-fill"></i></a>
-            </li>
-          </ul>
-        </nav>
-        <a href="/admin/opening-hours/new" class="btn btn-primary">
-          <i class="bi bi-plus-circle me-1"></i> Neue Öffnungszeit
-        </a>
-        <a href="<%= includeDeletedLink %>" class="btn btn-outline-secondary">
-          <i class="bi bi-recycle me-1"></i> <%= includeDeletedToggleLabel %>
-        </a>
-      </div>
-      <div class="text-muted small">Gesamt: <%= totalItems %></div>
+          </thead>
+          <tbody>
+            <% if (Array.isArray(exceptions) && exceptions.length) { %>
+              <% exceptions.forEach(function(ex) { %>
+                <tr>
+                  <td><%= ex.date || '-' %></td>
+                  <td><%= ex.date || '-' %> - <%= ex.date || '-' %></td>
+                  <td><%= ex.openTime || '-' %></td>
+                  <td><%= ex.closeTime || '-' %></td>
+                  <td><%= ex.reason || '-' %></td>
+                  <td class="d-flex align-items-center gap-2">
+                    <% if (ex.deletedAt) { %>
+                      <span class="badge text-bg-secondary">Gelöscht</span>
+                      <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/opening-hours/exceptions/<%= ex.id %>/restore" formmethod="post" aria-label="Wiederherstellen">
+                        <i class="bi bi-recycle"></i>
+                      </button>
+                    <% } else { %>
+                      <% if (ex.isClosed) { %>
+                        <span class="badge text-bg-danger">Geschlossen</span>
+                      <% } else { %>
+                        <span class="badge text-bg-success">Offen</span>
+                      <% } %>
+                      <a href="/admin/opening-hours/exceptions/<%= ex.id %>" class="text-decoration-none" aria-label="Details">
+                        <i class="bi bi-info-circle-fill"></i>
+                      </a>
+                      <a href="/admin/opening-hours/exceptions/<%= ex.id %>/edit" class="text-decoration-none" aria-label="Bearbeiten">
+                        <i class="bi bi-pencil-fill"></i>
+                      </a>
+                      <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/opening-hours/exceptions/<%= ex.id %>/delete" formmethod="post" aria-label="Löschen">
+                        <i class="bi bi-trash3-fill"></i>
+                      </button>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">Keine Ausnahmen vorhanden.</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      <% } else { %>
+        <table class="table table-hover align-middle">
+          <thead>
+            <tr>
+              <th scope="col"><a class="text-decoration-none" href="<%= sortLink('dayOfWeek') %>">Wochentag</a></th>
+              <th scope="col">Öffnet</th>
+              <th scope="col">Schließt</th>
+              <th scope="col">Typ</th>
+              <th scope="col">Abholung</th>
+              <th scope="col">Rückgabe</th>
+              <th scope="col">Gültig von</th>
+              <th scope="col">Gültig bis</th>
+              <th scope="col">Status / Aktionen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (Array.isArray(hours) && hours.length) { %>
+              <% hours.forEach(function(h) { %>
+                <tr>
+                  <td><%= dayLabels[h.dayOfWeek] || h.dayOfWeek %></td>
+                  <td><%= h.openTime || '-' %></td>
+                  <td><%= h.closeTime || '-' %></td>
+                  <td><%= h.isSpecial ? 'Sonderzeit' : 'Regulär' %></td>
+                  <td><%= h.pickupOpenTime || h.openTime || '-' %> - <%= h.pickupCloseTime || h.closeTime || '-' %></td>
+                  <td><%= h.returnOpenTime || h.openTime || '-' %> - <%= h.returnCloseTime || h.closeTime || '-' %></td>
+                  <td><%= h.validFrom || '-' %></td>
+                  <td><%= h.validTo || '-' %></td>
+                  <td class="d-flex align-items-center gap-2">
+                    <% if (h.deletedAt) { %>
+                      <span class="badge text-bg-secondary">Gelöscht</span>
+                      <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/opening-hours/<%= h.id %>/restore" formmethod="post" aria-label="Wiederherstellen">
+                        <i class="bi bi-recycle"></i>
+                      </button>
+                    <% } else { %>
+                      <% if (h.isClosed) { %>
+                        <span class="badge text-bg-danger">Geschlossen</span>
+                      <% } else { %>
+                        <span class="badge text-bg-success">Offen</span>
+                      <% } %>
+                      <a href="/admin/opening-hours/<%= h.id %>" class="text-decoration-none" aria-label="Details">
+                        <i class="bi bi-info-circle-fill"></i>
+                      </a>
+                      <a href="/admin/opening-hours/<%= h.id %>/edit" class="text-decoration-none" aria-label="Bearbeiten">
+                        <i class="bi bi-pencil-fill"></i>
+                      </a>
+                      <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/opening-hours/<%= h.id %>/delete" formmethod="post" aria-label="Löschen">
+                        <i class="bi bi-trash3-fill"></i>
+                      </button>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            <% } else { %>
+              <tr>
+                <td colspan="9" class="text-center text-muted py-4">Keine Öffnungszeiten vorhanden.</td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      <% } %>
     </div>
   </form>
 </section>

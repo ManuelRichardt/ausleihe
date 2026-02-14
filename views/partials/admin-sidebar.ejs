@@ -28,6 +28,7 @@
       <a class="nav-link" href="/admin/manufacturers">Manufacturers</a>
       <a class="nav-link" href="/admin/asset-models">Asset Models</a>
       <a class="nav-link" href="/admin/assets">Assets</a>
+      <a class="nav-link" href="/admin/storage-locations">Storage Locations</a>
       <hr class="my-0">
       <a class="nav-link" href="/admin/assets/import">Import</a>
       <a class="nav-link" href="/admin/exports">Export</a>
@@ -45,11 +46,14 @@
     <% } %>
 
     <!-- Manage Users and Permissions -->
-    <% if (sidebarCanAny(['users.manage', 'roles.manage', 'permissions.manage'])) { %>
+    <% if (sidebarCanAny(['users.manage', 'roles.manage', 'permissions.manage', 'admin.access'])) { %>
       <div class="mb-3">
       <div class="text-uppercase small text-muted fw-semibold mt-4">Benutzerverwaltung</div>
       <% if (sidebarCan('users.manage')) { %>
         <a class="nav-link" href="/admin/users">Users</a>
+      <% } %>
+      <% if (sidebarCan('admin.access')) { %>
+        <a class="nav-link" href="/admin/lending-user-roles">Benutzerrollen (Ausleihe)</a>
       <% } %>
       <% if (sidebarCan('roles.manage')) { %>
         <a class="nav-link" href="/admin/roles">Roles</a>

@@ -6,6 +6,7 @@ const {
   parseIncludeDeleted,
   buildPagination,
 } = require('../_controllerUtils');
+const { toPublicUploadUrl, removePublicFileByUrl } = require('../../../helpers/uploadImage.helper');
 
 class CategoryAdminController {
   async index(req, res, next) {
@@ -94,6 +95,7 @@ class CategoryAdminController {
         lendingLocationId: req.lendingLocationId,
         name: req.body.name,
         description: req.body.description,
+        imageUrl: toPublicUploadUrl(req.file, 'categories'),
         isActive: req.body.isActive !== 'false',
       });
       if (typeof req.flash === 'function') {
@@ -139,11 +141,18 @@ class CategoryAdminController {
         err.status = 404;
         throw err;
       }
+      const removeImage = req.body.removeImage === '1' || req.body.removeImage === 'true';
+      const nextImageUrl = toPublicUploadUrl(req.file, 'categories');
+      const imageUrl = nextImageUrl || (removeImage ? null : category.imageUrl || null);
       await services.assetCategoryService.updateCategory(category.id, {
         name: req.body.name,
         description: req.body.description,
+        imageUrl,
         isActive: req.body.isActive !== 'false',
       });
+      if ((nextImageUrl || removeImage) && category.imageUrl && category.imageUrl !== imageUrl) {
+        removePublicFileByUrl(category.imageUrl);
+      }
       if (typeof req.flash === 'function') {
         req.flash('success', 'Kategorie gespeichert');
       }

@@ -1,0 +1,38 @@
+<% pageTitle = 'Labore' %>
+<% const items = Array.isArray(locations) ? locations : []; %>
+
+<section class="lending-locations">
+  <div class="mb-4">
+    <h1 class="h3 mb-1">Labore</h1>
+    <p class="text-muted mb-0">Wähle eine Ausleihe und sieh dir verfügbare Asset-Modelle an.</p>
+  </div>
+
+  <% if (items.length) { %>
+    <div class="row g-4">
+      <% items.forEach(function(loc) { %>
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="card h-100 shadow-sm">
+            <% if (loc.imageUrl) { %>
+              <a href="/lending-locations/<%= loc.id %>">
+                <img src="<%= loc.imageUrl %>" class="card-img-top" alt="<%= loc.name %>">
+              </a>
+            <% } else { %>
+              <a href="/lending-locations/<%= loc.id %>" class="text-decoration-none">
+                <div class="ratio ratio-4x3 bg-light d-flex align-items-center justify-content-center text-muted">Kein Bild</div>
+              </a>
+            <% } %>
+            <div class="card-body">
+              <h2 class="h5 mb-2"><%= loc.name %></h2>
+              <p class="text-muted mb-0"><%= loc.description || '-' %></p>
+            </div>
+            <div class="card-footer">
+              <a class="btn btn-outline-primary btn-sm" href="/lending-locations/<%= loc.id %>">Details</a>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="alert alert-light border">Keine aktiven Ausleihstellen verfügbar.</div>
+  <% } %>
+</section>

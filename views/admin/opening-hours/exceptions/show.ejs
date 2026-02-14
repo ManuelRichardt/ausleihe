@@ -1,0 +1,54 @@
+<% pageTitle = 'Ausnahme' %>
+<% const ex = (typeof exception !== 'undefined' && exception) ? exception : {}; %>
+
+<section class="admin opening-exceptions">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= ex.date || 'Ausnahme' %></h1>
+      <p class="text-muted mb-0"><%= ex.reason || '-' %></p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="/admin/opening-hours/exceptions/<%= ex.id %>/edit" class="btn btn-outline-primary">
+        <i class="bi bi-pencil-fill me-1"></i> Bearbeiten
+      </a>
+      <a href="/admin/opening-hours?tab=exceptions" class="btn btn-outline-secondary">Zur Übersicht</a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <dl class="row mb-0">
+        <dt class="col-sm-4">Datum</dt>
+        <dd class="col-sm-8"><%= ex.date || '-' %></dd>
+        <dt class="col-sm-4">Datum von</dt>
+        <dd class="col-sm-8"><%= ex.date || '-' %></dd>
+        <dt class="col-sm-4">Datum bis</dt>
+        <dd class="col-sm-8"><%= ex.date || '-' %></dd>
+        <dt class="col-sm-4">Öffnet</dt>
+        <dd class="col-sm-8"><%= ex.openTime || '-' %></dd>
+        <dt class="col-sm-4">Schließt</dt>
+        <dd class="col-sm-8"><%= ex.closeTime || '-' %></dd>
+        <dt class="col-sm-4">Abholung</dt>
+        <dd class="col-sm-8"><%= ex.pickupOpenTime || ex.openTime || '-' %> - <%= ex.pickupCloseTime || ex.closeTime || '-' %></dd>
+        <dt class="col-sm-4">Rückgabe</dt>
+        <dd class="col-sm-8"><%= ex.returnOpenTime || ex.openTime || '-' %> - <%= ex.returnCloseTime || ex.closeTime || '-' %></dd>
+        <dt class="col-sm-4">Reason</dt>
+        <dd class="col-sm-8"><%= ex.reason || '-' %></dd>
+        <dt class="col-sm-4">Status</dt>
+        <dd class="col-sm-8">
+          <% if (ex.isClosed) { %>
+            <span class="badge text-bg-danger">Geschlossen</span>
+          <% } else { %>
+            <span class="badge text-bg-success">Offen</span>
+          <% } %>
+        </dd>
+      </dl>
+    </div>
+    <div class="card-footer d-flex justify-content-end">
+      <form method="post" action="/admin/opening-hours/exceptions/<%= ex.id %>/delete">
+        <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+        <button type="submit" class="btn btn-outline-danger">Löschen</button>
+      </form>
+    </div>
+  </div>
+</section>

@@ -51,18 +51,22 @@ class LendingLocationService {
     return {
       name: data.name,
       description: data.description || null,
+      imageUrl: data.imageUrl || null,
       contactEmail: data.contactEmail || null,
       isActive: this.normalizeBoolean(data.isActive, true),
     };
   }
 
   pickLocationUpdates(updates) {
-    const picked = pickDefined(updates, ['name', 'description', 'contactEmail', 'isActive']);
+    const picked = pickDefined(updates, ['name', 'description', 'imageUrl', 'contactEmail', 'isActive']);
     if (picked.isActive !== undefined) {
       picked.isActive = this.normalizeBoolean(picked.isActive, true);
     }
     if (picked.description === '') {
       picked.description = null;
+    }
+    if (picked.imageUrl === '') {
+      picked.imageUrl = null;
     }
     if (picked.contactEmail === '') {
       picked.contactEmail = null;

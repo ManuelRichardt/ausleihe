@@ -1,0 +1,38 @@
+<% pageTitle = 'Kategorien' %>
+<% const items = Array.isArray(categories) ? categories : []; %>
+
+<section class="categories">
+  <div class="mb-4">
+    <h1 class="h3 mb-1">Kategorien</h1>
+    <p class="text-muted mb-0">Alle aktiven Kategorien über alle Ausleihstellen.</p>
+  </div>
+
+  <% if (items.length) { %>
+    <div class="row g-4">
+      <% items.forEach(function(cat) { %>
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="card h-100 shadow-sm">
+            <% if (cat.imageUrl) { %>
+              <a href="/assets?categoryId=<%= cat.id %>">
+                <img src="<%= cat.imageUrl %>" class="card-img-top" alt="<%= cat.name %>">
+              </a>
+            <% } else { %>
+              <a href="/assets?categoryId=<%= cat.id %>" class="text-decoration-none">
+                <div class="ratio ratio-4x3 bg-light d-flex align-items-center justify-content-center text-muted">Kein Bild</div>
+              </a>
+            <% } %>
+            <div class="card-body">
+              <h2 class="h5 mb-2"><%= cat.name %></h2>
+              <p class="text-muted mb-0"><%= cat.description || '-' %></p>
+            </div>
+            <div class="card-footer">
+              <a class="btn btn-outline-primary btn-sm" href="/assets?categoryId=<%= cat.id %>">Assets anzeigen</a>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } else { %>
+    <div class="alert alert-light border">Keine Kategorien verfügbar.</div>
+  <% } %>
+</section>

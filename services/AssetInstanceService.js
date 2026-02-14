@@ -39,6 +39,9 @@ class AssetInstanceService {
         if (!storage) {
           throw new Error('StorageLocation not found');
         }
+        if (storage.lendingLocationId !== data.lendingLocationId) {
+          throw new Error('StorageLocation does not belong to lending location');
+        }
       }
       const asset = await Asset.create(
         {
@@ -78,6 +81,13 @@ class AssetInstanceService {
         { model: this.models.StorageLocation, as: 'storageLocation' },
         { model: this.models.AssetAttachment, as: 'attachments' },
         {
+          model: this.models.AssetMaintenance,
+          as: 'maintenances',
+          required: false,
+          separate: true,
+          order: [['reportedAt', 'DESC'], ['createdAt', 'DESC']],
+        },
+        {
           model: this.models.CustomFieldValue,
           as: 'customFieldValues',
           include: [{ model: this.models.CustomFieldDefinition, as: 'definition' }],
@@ -99,6 +109,9 @@ class AssetInstanceService {
     if (filter.assetModelId) {
       where.assetModelId = filter.assetModelId;
     }
+    if (filter.storageLocationId) {
+      where.storageLocationId = filter.storageLocationId;
+    }
     const listOptions = buildListOptions(options);
     applyIncludeDeleted(listOptions, filter);
     return this.models.Asset.findAll({
@@ -110,6 +123,7 @@ class AssetInstanceService {
           include: [{ model: this.models.Manufacturer, as: 'manufacturer' }],
         },
         { model: this.models.LendingLocation, as: 'lendingLocation' },
+        { model: this.models.StorageLocation, as: 'storageLocation' },
       ],
       ...listOptions,
     });
@@ -123,6 +137,9 @@ class AssetInstanceService {
     }
     if (filter.assetModelId) {
       where.assetModelId = filter.assetModelId;
+    }
+    if (filter.storageLocationId) {
+      where.storageLocationId = filter.storageLocationId;
     }
     const countOptions = {};
     if (filter.includeDeleted) {
@@ -160,6 +177,9 @@ class AssetInstanceService {
     if (filter.assetModelId) {
       where.assetModelId = filter.assetModelId;
     }
+    if (filter.storageLocationId) {
+      where.storageLocationId = filter.storageLocationId;
+    }
     applyIsActiveFilter(where, filter);
 
     const include = [
@@ -169,6 +189,7 @@ class AssetInstanceService {
         include: [{ model: Manufacturer, as: 'manufacturer' }, { model: this.models.AssetCategory, as: 'category' }],
       },
       { model: this.models.LendingLocation, as: 'lendingLocation' },
+      { model: this.models.StorageLocation, as: 'storageLocation' },
     ];
 
     if (filter.categoryId) {
@@ -264,6 +285,27 @@ class AssetInstanceService {
       }
       if (allowed.serialNumber === '') {
         allowed.serialNumber = null;
+      }
+      if (Object.prototype.hasOwnProperty.call(allowed, 'storageLocationId') && allowed.storageLocationId === '') {
+        allowed.storageLocationId = null;
+      }
+      if (allowed.assetModelId) {
+        const nextModel = await this.models.AssetModel.findByPk(allowed.assetModelId, { transaction });
+        if (!nextModel) {
+          throw new Error('AssetModel not found');
+        }
+        if (nextModel.lendingLocationId !== asset.lendingLocationId) {
+          throw new Error('AssetModel does not belong to lending location');
+        }
+      }
+      if (Object.prototype.hasOwnProperty.call(allowed, 'storageLocationId') && allowed.storageLocationId) {
+        const storage = await this.models.StorageLocation.findByPk(allowed.storageLocationId, { transaction });
+        if (!storage) {
+          throw new Error('StorageLocation not found');
+        }
+        if (storage.lendingLocationId !== asset.lendingLocationId) {
+          throw new Error('StorageLocation does not belong to lending location');
+        }
       }
       await asset.update(allowed, { transaction });
       if (Array.isArray(updates.customFieldValues)) {

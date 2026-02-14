@@ -73,6 +73,9 @@ class AssetModelAdminController {
         err.status = 404;
         throw err;
       }
+      const customFieldDefinitions = await services.assetModelService.getGlobalCustomFieldDefinitions({
+        onlyActive: false,
+      });
       return renderPage(res, 'admin/models/show', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -80,6 +83,7 @@ class AssetModelAdminController {
           { label: model.name, href: `/admin/asset-models/${model.id}` },
         ],
         model,
+        customFieldDefinitions,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -94,6 +98,9 @@ class AssetModelAdminController {
       const categories = res.locals.viewData && res.locals.viewData.categories
         ? res.locals.viewData.categories
         : await services.assetCategoryService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const customFieldDefinitions = res.locals.viewData && res.locals.viewData.customFieldDefinitions
+        ? res.locals.viewData.customFieldDefinitions
+        : await services.assetModelService.getGlobalCustomFieldDefinitions({ onlyActive: true });
       return renderPage(res, 'admin/models/new', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -102,6 +109,7 @@ class AssetModelAdminController {
         ],
         manufacturers,
         categories,
+        customFieldDefinitions,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -110,6 +118,7 @@ class AssetModelAdminController {
 
   async create(req, res, next) {
     try {
+      const customFieldData = await services.assetModelService.resolveCustomFieldData(req.body.customFields || {});
       const model = await services.assetModelService.createAssetModel({
         lendingLocationId: req.lendingLocationId,
         manufacturerId: req.body.manufacturerId,
@@ -117,6 +126,7 @@ class AssetModelAdminController {
         name: req.body.name,
         description: req.body.description,
         technicalDescription: req.body.technicalDescription,
+        specs: customFieldData,
         isActive: req.body.isActive !== 'false',
       });
       await this.attachFiles(model, req.files);
@@ -145,6 +155,9 @@ class AssetModelAdminController {
       const categories = res.locals.viewData && res.locals.viewData.categories
         ? res.locals.viewData.categories
         : await services.assetCategoryService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const customFieldDefinitions = res.locals.viewData && res.locals.viewData.customFieldDefinitions
+        ? res.locals.viewData.customFieldDefinitions
+        : await services.assetModelService.getGlobalCustomFieldDefinitions({ onlyActive: true });
       return renderPage(res, 'admin/models/edit', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -155,6 +168,7 @@ class AssetModelAdminController {
         model,
         manufacturers,
         categories,
+        customFieldDefinitions,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -171,12 +185,14 @@ class AssetModelAdminController {
         err.status = 404;
         throw err;
       }
+      const customFieldData = await services.assetModelService.resolveCustomFieldData(req.body.customFields || {});
       await services.assetModelService.updateAssetModel(model.id, {
         manufacturerId: req.body.manufacturerId,
         categoryId: req.body.categoryId,
         name: req.body.name,
         description: req.body.description,
         technicalDescription: req.body.technicalDescription,
+        specs: customFieldData,
         isActive: req.body.isActive !== 'false',
       });
       await this.attachFiles(model, req.files);

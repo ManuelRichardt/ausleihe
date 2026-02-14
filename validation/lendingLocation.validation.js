@@ -13,6 +13,10 @@ const lendingLocationValidation = [
   body('description')
     .optional({ nullable: true, checkFalsy: true })
     .isString(),
+  body('removeImage')
+    .optional({ nullable: true })
+    .isIn(['0', '1', 'true', 'false'])
+    .withMessage('Bild-Option ist ungültig'),
   body('adminUserId')
     .isUUID()
     .withMessage('Administrator ist erforderlich'),

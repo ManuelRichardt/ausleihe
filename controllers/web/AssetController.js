@@ -11,12 +11,14 @@ class AssetController {
         q: req.query.q ? String(req.query.q) : '',
         categoryId: req.query.categoryId || '',
         manufacturerId: req.query.manufacturerId || '',
+        lendingLocationId: req.query.lendingLocationId || '',
       };
 
       const listQuery = {
         query: filters.q || undefined,
         categoryId: filters.categoryId || undefined,
         manufacturerId: filters.manufacturerId || undefined,
+        lendingLocationId: filters.lendingLocationId || undefined,
       };
       const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 6), 48);
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -26,8 +28,14 @@ class AssetController {
       const total = await services.assetModelService.countAssetModels(listQuery);
       const assetModels = await services.assetModelService.getAll(listQuery, { limit, offset, order });
 
-      const manufacturers = await services.manufacturerService.getAll({ isActive: true });
-      const categories = await services.assetCategoryService.getAll({ isActive: true });
+      const manufacturers = await services.manufacturerService.getAll({
+        isActive: true,
+        lendingLocationId: filters.lendingLocationId || undefined,
+      });
+      const categories = await services.assetCategoryService.getAll({
+        isActive: true,
+        lendingLocationId: filters.lendingLocationId || undefined,
+      });
 
       return renderPage(res, 'assets/index', req, {
         breadcrumbs: [{ label: 'Assets', href: '/assets' }],
@@ -53,12 +61,9 @@ class AssetController {
   async show(req, res, next) {
     try {
       const assetModel = await services.assetModelService.getById(req.params.id);
-      const definitions = await services.customFieldDefinitionService.getAll({ isActive: true });
-      const customFieldDefinitions = (definitions || []).filter((definition) => {
-        const value = definition && definition.defaultValue !== undefined && definition.defaultValue !== null
-          ? String(definition.defaultValue).trim()
-          : '';
-        return value.length > 0;
+      const customFieldDefinitions = await services.customFieldDefinitionService.getAll({
+        scope: 'global',
+        isActive: true,
       });
 
       return renderPage(res, 'assets/show', req, {

@@ -12,6 +12,24 @@
   const galleryImages = attachmentImages.length ? attachmentImages : fallbackImage;
   const primaryImage = galleryImages.find(function (att) { return att.isPrimary; }) || galleryImages[0] || null;
   const imageUrl = primaryImage ? primaryImage.url : null;
+  const customFieldData = (model.specs && typeof model.specs === 'object') ? model.specs : {};
+  const customRows = (Array.isArray(customFieldDefinitions) ? customFieldDefinitions : [])
+    .map(function (definition) {
+      let value = Object.prototype.hasOwnProperty.call(customFieldData, definition.id)
+        ? customFieldData[definition.id]
+        : undefined;
+      if (value === undefined || value === null || value === '') {
+        value = definition.defaultValue;
+      }
+      if (value === undefined || value === null || value === '') {
+        return null;
+      }
+      if (definition.type === 'boolean') {
+        value = (value === true || String(value).toLowerCase() === 'true' || String(value) === '1') ? 'Ja' : 'Nein';
+      }
+      return { label: definition.label || definition.key, value: value };
+    })
+    .filter(Boolean);
 %>
 
 <section class="assets-detail">
@@ -90,7 +108,7 @@
         </div>
       <% } %>
 
-      <% if (Array.isArray(customFieldDefinitions) && customFieldDefinitions.length) { %>
+      <% if (customRows.length) { %>
         <div class="card shadow-sm">
           <div class="card-header bg-white">
             <h2 class="h6 mb-0">Custom Fields</h2>
@@ -101,14 +119,14 @@
                 <thead class="table-light">
                   <tr>
                     <th>Feld</th>
-                    <th>Standardwert</th>
+                    <th>Wert</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <% customFieldDefinitions.forEach(function(def) { %>
+                  <% customRows.forEach(function(row) { %>
                     <tr>
-                      <td><%= def.label %></td>
-                      <td><%= def.defaultValue %></td>
+                      <td><%= row.label %></td>
+                      <td><%= row.value %></td>
                     </tr>
                   <% }) %>
                 </tbody>

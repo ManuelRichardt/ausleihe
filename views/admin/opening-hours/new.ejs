@@ -21,13 +21,15 @@
     sat: 'Samstag',
     sun: 'Sonntag',
   };
+  const selectedSpecial = (values.isSpecial === true || values.isSpecial === 'true')
+    || (!(safeFormData && Object.keys(safeFormData).length) && typeof isSpecial !== 'undefined' && isSpecial);
 %>
 
 <section class="admin opening-hours">
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
       <h1 class="h3 mb-1">Öffnungszeit anlegen</h1>
-      <p class="text-muted mb-0">Standard-Öffnungszeit für die aktuelle Ausleihe.</p>
+      <p class="text-muted mb-0">Öffnungszeit für die aktuelle Ausleihe.</p>
     </div>
     <div class="d-flex gap-2">
       <a href="/admin/opening-hours" class="btn btn-outline-secondary">Zur Übersicht</a>
@@ -38,6 +40,13 @@
     <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
     <div class="card-body">
       <div class="row g-3">
+        <div class="col-md-6">
+          <label for="isSpecial" class="form-label">Typ</label>
+          <select id="isSpecial" name="isSpecial" class="form-select">
+            <option value="false" <%= selectedSpecial ? '' : 'selected' %>>Regulär</option>
+            <option value="true" <%= selectedSpecial ? 'selected' : '' %>>Sonderzeit</option>
+          </select>
+        </div>
         <div class="col-md-6">
           <label for="dayOfWeek" class="form-label">Wochentag</label>
           <select id="dayOfWeek" name="dayOfWeek" class="form-select <%= errorFor('dayOfWeek') ? 'is-invalid' : '' %>">

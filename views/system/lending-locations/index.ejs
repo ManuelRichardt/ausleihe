@@ -80,6 +80,7 @@
     <table class="table table-hover align-middle">
       <thead>
         <tr>
+          <th>Bild</th>
           <th><a class="text-decoration-none" href="<%= sortLink('name') %>">Name</a></th>
           <th><a class="text-decoration-none" href="<%= sortLink('contactEmail') %>">Kontakt</a></th>
           <th>Status</th>
@@ -90,6 +91,13 @@
           <% if (Array.isArray(locations) && locations.length) { %>
             <% locations.forEach(function(loc) { %>
               <tr>
+                <td>
+                  <% if (loc.imageUrl) { %>
+                    <img src="<%= loc.imageUrl %>" alt="<%= loc.name %>" width="64" height="48" class="rounded border object-fit-cover">
+                  <% } else { %>
+                    <span class="text-muted small">-</span>
+                  <% } %>
+                </td>
                 <td><%= loc.name %></td>
                 <td><%= loc.contactEmail || '-' %></td>
                 <td>
@@ -129,7 +137,7 @@
             <% }) %>
         <% } else { %>
           <tr>
-            <td colspan="4" class="text-center text-muted py-4">Keine Ausleihstellen vorhanden.</td>
+            <td colspan="5" class="text-center text-muted py-4">Keine Ausleihstellen vorhanden.</td>
           </tr>
         <% } %>
       </tbody>

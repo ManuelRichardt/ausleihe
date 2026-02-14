@@ -1,4 +1,12 @@
-const { pickDefined, applyIsActiveFilter, buildListOptions, findByPkOrThrow } = require('./_serviceUtils');
+const { Op } = require('sequelize');
+const {
+  pickDefined,
+  applyIsActiveFilter,
+  applyLendingLocationFilter,
+  buildListOptions,
+  findByPkOrThrow,
+  applyIncludeDeleted,
+} = require('./_serviceUtils');
 
 class StorageLocationService {
   constructor(models) {
@@ -30,17 +38,56 @@ class StorageLocationService {
     });
   }
 
-  async getById(id) {
-    return findByPkOrThrow(this.models.StorageLocation, id, 'StorageLocation not found');
+  async getById(id, options = {}) {
+    const findOptions = {
+      include: [{ model: this.models.LendingLocation, as: 'lendingLocation' }],
+    };
+    if (options.includeDeleted) {
+      findOptions.paranoid = false;
+    }
+    return findByPkOrThrow(this.models.StorageLocation, id, 'StorageLocation not found', findOptions);
   }
 
   async getAll(filter = {}, options = {}) {
     const where = {};
-    if (filter.lendingLocationId) {
-      where.lendingLocationId = filter.lendingLocationId;
-    }
+    applyLendingLocationFilter(where, filter);
     applyIsActiveFilter(where, filter);
-    return this.models.StorageLocation.findAll({ where, ...buildListOptions(options) });
+    if (filter.query) {
+      where[Op.and] = where[Op.and] || [];
+      where[Op.and].push(
+        this.models.sequelize.where(
+          this.models.sequelize.fn('LOWER', this.models.sequelize.col('name')),
+          { [Op.like]: `%${String(filter.query).toLowerCase()}%` }
+        )
+      );
+    }
+    const listOptions = buildListOptions(options);
+    applyIncludeDeleted(listOptions, filter);
+    return this.models.StorageLocation.findAll({
+      where,
+      include: [{ model: this.models.LendingLocation, as: 'lendingLocation' }],
+      ...listOptions,
+    });
+  }
+
+  async countStorageLocations(filter = {}) {
+    const where = {};
+    applyLendingLocationFilter(where, filter);
+    applyIsActiveFilter(where, filter);
+    if (filter.query) {
+      where[Op.and] = where[Op.and] || [];
+      where[Op.and].push(
+        this.models.sequelize.where(
+          this.models.sequelize.fn('LOWER', this.models.sequelize.col('name')),
+          { [Op.like]: `%${String(filter.query).toLowerCase()}%` }
+        )
+      );
+    }
+    const countOptions = {};
+    if (filter.includeDeleted) {
+      countOptions.paranoid = false;
+    }
+    return this.models.StorageLocation.count({ where, ...countOptions });
   }
 
   async updateStorageLocation(id, updates) {
@@ -63,6 +110,14 @@ class StorageLocationService {
     const storage = await this.getById(id);
     await storage.destroy();
     return true;
+  }
+
+  async restoreStorageLocation(id) {
+    const restored = await this.models.StorageLocation.restore({ where: { id } });
+    if (!restored) {
+      throw new Error('StorageLocation not found');
+    }
+    return this.getById(id);
   }
 }
 

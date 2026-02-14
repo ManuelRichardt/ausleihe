@@ -9,6 +9,10 @@ const categoryValidation = [
   body('description')
     .optional({ nullable: true, checkFalsy: true })
     .isString(),
+  body('removeImage')
+    .optional({ nullable: true })
+    .isIn(['0', '1', 'true', 'false'])
+    .withMessage('Bild-Option ist ungültig'),
   body('isActive')
     .optional({ nullable: true })
     .isIn(['true', 'false'])

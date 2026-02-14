@@ -18,12 +18,17 @@ class AssetCategoryService {
       lendingLocationId: data.lendingLocationId,
       name: data.name,
       description: data.description || null,
+      imageUrl: data.imageUrl || null,
       isActive: data.isActive !== undefined ? data.isActive : true,
     };
   }
 
   pickCategoryUpdates(updates) {
-    return pickDefined(updates, ['name', 'description', 'isActive', 'lendingLocationId']);
+    const picked = pickDefined(updates, ['name', 'description', 'imageUrl', 'isActive', 'lendingLocationId']);
+    if (picked.imageUrl === '') {
+      picked.imageUrl = null;
+    }
+    return picked;
   }
 
   async createCategory(data) {

@@ -17,11 +17,24 @@
 
   <div class="card shadow-sm">
     <div class="card-body">
+      <% if (cat.imageUrl) { %>
+        <div class="mb-3">
+          <img src="<%= cat.imageUrl %>" alt="<%= cat.name || 'Kategorie' %>" width="220" height="150" class="rounded border object-fit-cover">
+        </div>
+      <% } %>
       <dl class="row mb-0">
         <dt class="col-sm-4">Name</dt>
         <dd class="col-sm-8"><%= cat.name || '-' %></dd>
         <dt class="col-sm-4">Beschreibung</dt>
         <dd class="col-sm-8"><%= cat.description || '-' %></dd>
+        <dt class="col-sm-4">Bild</dt>
+        <dd class="col-sm-8">
+          <% if (cat.imageUrl) { %>
+            <a href="<%= cat.imageUrl %>" target="_blank" rel="noreferrer">Bild öffnen</a>
+          <% } else { %>
+            -
+          <% } %>
+        </dd>
         <dt class="col-sm-4">Status</dt>
         <dd class="col-sm-8">
           <% if (cat.isActive) { %>

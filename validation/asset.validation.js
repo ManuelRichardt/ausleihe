@@ -73,6 +73,10 @@ const assetValidation = [
   body('lendingLocationId')
     .isUUID()
     .withMessage('Ausleihe ist erforderlich'),
+  body('storageLocationId')
+    .optional({ nullable: true, checkFalsy: true })
+    .isUUID()
+    .withMessage('Lagerort ist ungültig'),
   body('inventoryNumber')
     .optional({ nullable: true, checkFalsy: true })
     .isString()

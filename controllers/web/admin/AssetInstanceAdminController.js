@@ -29,11 +29,18 @@ class AssetInstanceAdminController {
       if (req.query.assetModelId) {
         filter.assetModelId = req.query.assetModelId;
       }
+      if (req.query.storageLocationId) {
+        filter.storageLocationId = req.query.storageLocationId;
+      }
       if (includeDeleted) {
         filter.includeDeleted = true;
       }
 
       const models = await services.assetModelService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const storageLocations = await services.storageLocationService.getAll({
+        lendingLocationId: req.lendingLocationId,
+        isActive: true,
+      });
       let assets = [];
       let total = 0;
       if (filter.query) {
@@ -51,10 +58,12 @@ class AssetInstanceAdminController {
         ],
         assets,
         models,
+        storageLocations,
         filters: {
           q: req.query.q || '',
           status: req.query.status || '',
           assetModelId: req.query.assetModelId || '',
+          storageLocationId: req.query.storageLocationId || '',
           includeDeleted: includeDeleted ? '1' : '',
           sortBy,
           sortOrder,
@@ -92,6 +101,9 @@ class AssetInstanceAdminController {
       const models = res.locals.viewData && res.locals.viewData.models
         ? res.locals.viewData.models
         : await services.assetModelService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const storageLocations = res.locals.viewData && res.locals.viewData.storageLocations
+        ? res.locals.viewData.storageLocations
+        : await services.storageLocationService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
       return renderPage(res, 'admin/assets/new', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -99,6 +111,7 @@ class AssetInstanceAdminController {
           { label: 'New', href: '/admin/assets/new' },
         ],
         models,
+        storageLocations,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -110,6 +123,7 @@ class AssetInstanceAdminController {
       const asset = await services.assetInstanceService.createAsset({
         lendingLocationId: req.lendingLocationId,
         assetModelId: req.body.assetModelId,
+        storageLocationId: req.body.storageLocationId || null,
         inventoryNumber: req.body.inventoryNumber,
         serialNumber: req.body.serialNumber,
         condition: req.body.condition,
@@ -137,6 +151,9 @@ class AssetInstanceAdminController {
       const models = res.locals.viewData && res.locals.viewData.models
         ? res.locals.viewData.models
         : await services.assetModelService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const storageLocations = res.locals.viewData && res.locals.viewData.storageLocations
+        ? res.locals.viewData.storageLocations
+        : await services.storageLocationService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
       return renderPage(res, 'admin/assets/edit', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -146,6 +163,7 @@ class AssetInstanceAdminController {
         ],
         asset,
         models,
+        storageLocations,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -164,6 +182,7 @@ class AssetInstanceAdminController {
       }
       await services.assetInstanceService.updateAsset(asset.id, {
         assetModelId: req.body.assetModelId,
+        storageLocationId: req.body.storageLocationId || null,
         inventoryNumber: req.body.inventoryNumber,
         serialNumber: req.body.serialNumber,
         condition: req.body.condition,
@@ -210,6 +229,83 @@ class AssetInstanceAdminController {
         req.flash('success', 'Asset wiederhergestellt');
       }
       return res.redirect(includeDeleted ? '/admin/assets?includeDeleted=1' : '/admin/assets');
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async reportMaintenance(req, res, next) {
+    try {
+      const asset = await services.assetInstanceService.getById(req.params.id);
+      if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('Asset not found');
+        err.status = 404;
+        throw err;
+      }
+      await services.assetMaintenanceService.reportMaintenance({
+        assetId: asset.id,
+        notes: req.body.notes || null,
+      });
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Wartung wurde gemeldet.');
+      }
+      return res.redirect(`/admin/assets/${asset.id}`);
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async startMaintenance(req, res, next) {
+    try {
+      const asset = await services.assetInstanceService.getById(req.params.id);
+      if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('Asset not found');
+        err.status = 404;
+        throw err;
+      }
+      const maintenance = await services.assetMaintenanceService.getById(req.params.maintenanceId);
+      if (maintenance.assetId !== asset.id) {
+        const err = new Error('AssetMaintenance not found');
+        err.status = 404;
+        throw err;
+      }
+      await services.assetMaintenanceService.transitionMaintenance(
+        req.params.maintenanceId,
+        'in_progress',
+        req.body.notes || null
+      );
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Wartung wurde gestartet.');
+      }
+      return res.redirect(`/admin/assets/${asset.id}`);
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async completeMaintenance(req, res, next) {
+    try {
+      const asset = await services.assetInstanceService.getById(req.params.id);
+      if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('Asset not found');
+        err.status = 404;
+        throw err;
+      }
+      const maintenance = await services.assetMaintenanceService.getById(req.params.maintenanceId);
+      if (maintenance.assetId !== asset.id) {
+        const err = new Error('AssetMaintenance not found');
+        err.status = 404;
+        throw err;
+      }
+      await services.assetMaintenanceService.transitionMaintenance(
+        req.params.maintenanceId,
+        'completed',
+        req.body.notes || null
+      );
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Wartung wurde abgeschlossen.');
+      }
+      return res.redirect(`/admin/assets/${asset.id}`);
     } catch (err) {
       return handleError(res, next, req, err);
     }

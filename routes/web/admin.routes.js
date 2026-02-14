@@ -5,6 +5,7 @@ const lendingLocationContext = require('../../middlewares/web/lendingLocationCon
 const resolveLoanScope = require('../../middleware/loanScope');
 const validate = require('../../middleware/validate');
 const uploadAssetModelImages = require('../../middleware/assetModelImagesUpload');
+const uploadCategoryImage = require('../../middleware/categoryImageUpload');
 const {
   userCreateValidation,
   userUpdateValidation,
@@ -17,6 +18,8 @@ const {
   assetModelValidation,
   assetValidation,
   openingHoursValidation,
+  openingExceptionValidation,
+  storageLocationValidation,
 } = require('../../validation');
 const setLendingLocation = require('../../middleware/setLendingLocation');
 const { createServices } = require('../../services');
@@ -30,8 +33,10 @@ const ManufacturerAdminController = require('../../controllers/web/admin/Manufac
 const AssetModelAdminController = require('../../controllers/web/admin/AssetModelAdminController');
 const AssetInstanceAdminController = require('../../controllers/web/admin/AssetInstanceAdminController');
 const OpeningHourAdminController = require('../../controllers/web/admin/OpeningHourAdminController');
+const StorageLocationAdminController = require('../../controllers/web/admin/StorageLocationAdminController');
 const ReservationAdminController = require('../../controllers/web/admin/ReservationAdminController');
 const LoanAdminController = require('../../controllers/web/admin/LoanAdminController');
+const LendingUserRoleAdminController = require('../../controllers/web/admin/LendingUserRoleAdminController');
 const AdminAssetImportController = require('../../controllers/AdminAssetImportController');
 const ExportAdminController = require('../../controllers/web/admin/ExportAdminController');
 
@@ -47,11 +52,14 @@ const manufacturerAdminController = new ManufacturerAdminController();
 const assetModelAdminController = new AssetModelAdminController();
 const assetInstanceAdminController = new AssetInstanceAdminController();
 const openingHourAdminController = new OpeningHourAdminController();
+const storageLocationAdminController = new StorageLocationAdminController();
 const reservationController = new ReservationAdminController();
 const loanController = new LoanAdminController();
+const lendingUserRoleAdminController = new LendingUserRoleAdminController();
 const assetImportController = new AdminAssetImportController();
 const exportAdminController = new ExportAdminController();
 const services = createServices();
+const OPENING_HOUR_ID_PARAM = ':id([0-9a-fA-F-]{36})';
 
 const loanScope = async (req) => {
   if (req.loanScopeLendingLocationId) {
@@ -172,6 +180,9 @@ async function loadAssetModelFormData(req, res, next) {
       lendingLocationId: req.lendingLocationId,
       isActive: true,
     });
+    res.locals.viewData.customFieldDefinitions = await services.assetModelService.getGlobalCustomFieldDefinitions({
+      onlyActive: true,
+    });
     if (req.params.id) {
       const model = await services.assetModelService.getById(req.params.id);
       if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
@@ -194,6 +205,10 @@ async function loadAssetFormData(req, res, next) {
       lendingLocationId: req.lendingLocationId,
       isActive: true,
     });
+    res.locals.viewData.storageLocations = await services.storageLocationService.getAll({
+      lendingLocationId: req.lendingLocationId,
+      isActive: true,
+    });
     if (req.params.id) {
       const asset = await services.assetInstanceService.getById(req.params.id);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
@@ -203,6 +218,22 @@ async function loadAssetFormData(req, res, next) {
       }
       res.locals.viewData.asset = asset;
     }
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function loadStorageLocationEditData(req, res, next) {
+  try {
+    res.locals.viewData = res.locals.viewData || {};
+    const storageLocation = await services.storageLocationService.getById(req.params.id);
+    if (req.lendingLocationId && storageLocation.lendingLocationId !== req.lendingLocationId) {
+      const err = new Error('StorageLocation not found');
+      err.status = 404;
+      throw err;
+    }
+    res.locals.viewData.storageLocation = storageLocation;
     return next();
   } catch (err) {
     return next(err);
@@ -219,6 +250,22 @@ async function loadOpeningHourEditData(req, res, next) {
       throw err;
     }
     res.locals.viewData.hour = hour;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function loadOpeningExceptionEditData(req, res, next) {
+  try {
+    res.locals.viewData = res.locals.viewData || {};
+    const exception = await services.openingExceptionService.getById(req.params.id);
+    if (req.lendingLocationId && exception.lendingLocationId !== req.lendingLocationId) {
+      const err = new Error('OpeningException not found');
+      err.status = 404;
+      throw err;
+    }
+    res.locals.viewData.exception = exception;
     return next();
   } catch (err) {
     return next(err);
@@ -244,6 +291,7 @@ router.post(
   requireLogin,
   lendingLocationContext,
   requirePermission('inventory.manage', locationScope),
+  uploadCategoryImage,
   categoryValidation,
   validate('admin/categories/new'),
   categoryAdminController.create.bind(categoryAdminController)
@@ -269,6 +317,7 @@ router.post(
   lendingLocationContext,
   requirePermission('inventory.manage', locationScope),
   loadCategoryEditData,
+  uploadCategoryImage,
   categoryValidation,
   validate('admin/categories/edit'),
   categoryAdminController.update.bind(categoryAdminController)
@@ -523,6 +572,90 @@ router.post(
   requirePermission('inventory.manage', locationScope),
   assetInstanceAdminController.restore.bind(assetInstanceAdminController)
 );
+router.post(
+  '/admin/assets/:id/maintenance/report',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  assetInstanceAdminController.reportMaintenance.bind(assetInstanceAdminController)
+);
+router.post(
+  '/admin/assets/:id/maintenance/:maintenanceId/start',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  assetInstanceAdminController.startMaintenance.bind(assetInstanceAdminController)
+);
+router.post(
+  '/admin/assets/:id/maintenance/:maintenanceId/complete',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  assetInstanceAdminController.completeMaintenance.bind(assetInstanceAdminController)
+);
+
+router.get(
+  '/admin/storage-locations',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  storageLocationAdminController.index.bind(storageLocationAdminController)
+);
+router.get(
+  '/admin/storage-locations/new',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  storageLocationAdminController.new.bind(storageLocationAdminController)
+);
+router.post(
+  '/admin/storage-locations',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  storageLocationValidation,
+  validate('admin/storage-locations/new'),
+  storageLocationAdminController.create.bind(storageLocationAdminController)
+);
+router.get(
+  '/admin/storage-locations/:id',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  storageLocationAdminController.show.bind(storageLocationAdminController)
+);
+router.get(
+  '/admin/storage-locations/:id/edit',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  loadStorageLocationEditData,
+  storageLocationAdminController.edit.bind(storageLocationAdminController)
+);
+router.post(
+  '/admin/storage-locations/:id',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  loadStorageLocationEditData,
+  storageLocationValidation,
+  validate('admin/storage-locations/edit'),
+  storageLocationAdminController.update.bind(storageLocationAdminController)
+);
+router.post(
+  '/admin/storage-locations/:id/delete',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  storageLocationAdminController.remove.bind(storageLocationAdminController)
+);
+router.post(
+  '/admin/storage-locations/:id/restore',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('inventory.manage', locationScope),
+  storageLocationAdminController.restore.bind(storageLocationAdminController)
+);
 router.get(
   '/admin/custom-fields',
   requireLogin,
@@ -703,14 +836,14 @@ router.post(
   openingHourAdminController.create.bind(openingHourAdminController)
 );
 router.get(
-  '/admin/opening-hours/:id',
+  `/admin/opening-hours/${OPENING_HOUR_ID_PARAM}`,
   requireLogin,
   lendingLocationContext,
   requirePermission('openinghours.manage', locationScope),
   openingHourAdminController.show.bind(openingHourAdminController)
 );
 router.get(
-  '/admin/opening-hours/:id/edit',
+  `/admin/opening-hours/${OPENING_HOUR_ID_PARAM}/edit`,
   requireLogin,
   lendingLocationContext,
   requirePermission('openinghours.manage', locationScope),
@@ -718,7 +851,7 @@ router.get(
   openingHourAdminController.edit.bind(openingHourAdminController)
 );
 router.post(
-  '/admin/opening-hours/:id',
+  `/admin/opening-hours/${OPENING_HOUR_ID_PARAM}`,
   requireLogin,
   lendingLocationContext,
   requirePermission('openinghours.manage', locationScope),
@@ -728,18 +861,94 @@ router.post(
   openingHourAdminController.update.bind(openingHourAdminController)
 );
 router.post(
-  '/admin/opening-hours/:id/delete',
+  `/admin/opening-hours/${OPENING_HOUR_ID_PARAM}/delete`,
   requireLogin,
   lendingLocationContext,
   requirePermission('openinghours.manage', locationScope),
   openingHourAdminController.remove.bind(openingHourAdminController)
 );
 router.post(
-  '/admin/opening-hours/:id/restore',
+  `/admin/opening-hours/${OPENING_HOUR_ID_PARAM}/restore`,
   requireLogin,
   lendingLocationContext,
   requirePermission('openinghours.manage', locationScope),
   openingHourAdminController.restore.bind(openingHourAdminController)
+);
+router.get(
+  '/admin/opening-hours/exceptions/new',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('openinghours.manage', locationScope),
+  openingHourAdminController.newException.bind(openingHourAdminController)
+);
+router.post(
+  '/admin/opening-hours/exceptions',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('openinghours.manage', locationScope),
+  openingExceptionValidation,
+  validate('admin/opening-hours/exceptions/new'),
+  openingHourAdminController.createException.bind(openingHourAdminController)
+);
+router.get(
+  '/admin/opening-hours/exceptions/:id',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('openinghours.manage', locationScope),
+  openingHourAdminController.showException.bind(openingHourAdminController)
+);
+router.get(
+  '/admin/opening-hours/exceptions/:id/edit',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('openinghours.manage', locationScope),
+  loadOpeningExceptionEditData,
+  openingHourAdminController.editException.bind(openingHourAdminController)
+);
+router.post(
+  '/admin/opening-hours/exceptions/:id',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('openinghours.manage', locationScope),
+  loadOpeningExceptionEditData,
+  openingExceptionValidation,
+  validate('admin/opening-hours/exceptions/edit'),
+  openingHourAdminController.updateException.bind(openingHourAdminController)
+);
+router.post(
+  '/admin/opening-hours/exceptions/:id/delete',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('openinghours.manage', locationScope),
+  openingHourAdminController.removeException.bind(openingHourAdminController)
+);
+router.post(
+  '/admin/opening-hours/exceptions/:id/restore',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('openinghours.manage', locationScope),
+  openingHourAdminController.restoreException.bind(openingHourAdminController)
+);
+router.get(
+  '/admin/lending-user-roles',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('admin.access', locationScope),
+  lendingUserRoleAdminController.index.bind(lendingUserRoleAdminController)
+);
+router.post(
+  '/admin/lending-user-roles/:id/roles/assign',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('admin.access', locationScope),
+  lendingUserRoleAdminController.assign.bind(lendingUserRoleAdminController)
+);
+router.post(
+  '/admin/lending-user-roles/:id/roles/:roleId/revoke',
+  requireLogin,
+  lendingLocationContext,
+  requirePermission('admin.access', locationScope),
+  lendingUserRoleAdminController.revoke.bind(lendingUserRoleAdminController)
 );
 router.get(
   '/admin/users',

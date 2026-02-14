@@ -146,7 +146,10 @@ class LoanPortalService {
 
   async updatePeriod(loanId, lendingLocationId, payload) {
     await this.getForAdmin(loanId, lendingLocationId);
-    return this.loanService.updateLoanPeriod(loanId, payload);
+    return this.loanService.updateLoanPeriod(loanId, {
+      ...payload,
+      skipOpeningHours: true,
+    });
   }
 
   async updateItemModel(loanId, lendingLocationId, loanItemId, assetModelId) {

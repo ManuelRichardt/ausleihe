@@ -1,6 +1,9 @@
 <% pageTitle = 'Ausleihdetails' %>
 <% const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : ''; %>
 <% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
+<% const safeCan = (typeof can === 'function') ? can : function () { return false; }; %>
+<% const canViewSignatureMeta = safeCan('audit.view') || safeCan('system.admin'); %>
+<% const canEditPeriod = ['reserved', 'handed_over', 'overdue'].includes(loan.status); %>
 <section class="admin-loan-detail">
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
@@ -25,6 +28,18 @@
           <div class="small text-muted">Ausleihe</div>
           <div class="fw-semibold"><%= loan.lendingLocation ? loan.lendingLocation.name : '-' %></div>
         </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Übergabe</div>
+          <div class="fw-semibold"><%= safeFormatDateTime(loan.handedOverAt) %></div>
+        </div>
+        <div class="col-md-4">
+          <div class="small text-muted">Rückgabe</div>
+          <div class="fw-semibold"><%= safeFormatDateTime(loan.returnedAt) %></div>
+        </div>
+        <div class="col-12">
+          <div class="small text-muted">Notizen</div>
+          <div class="fw-semibold"><%= loan.notes || '-' %></div>
+        </div>
       </div>
     </div>
   </div>
@@ -38,18 +53,20 @@
         <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
         <div class="col-md-5">
           <label class="form-label" for="reservedFrom">Von</label>
-          <input id="reservedFrom" name="reservedFrom" type="datetime-local" class="form-control" value="<%= loan.reservedFrom ? new Date(loan.reservedFrom).toISOString().slice(0,16) : '' %>" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
+          <input id="reservedFrom" name="reservedFrom" type="datetime-local" class="form-control" value="<%= loan.reservedFrom ? new Date(loan.reservedFrom).toISOString().slice(0,16) : '' %>" <%= canEditPeriod ? '' : 'disabled' %>>
         </div>
         <div class="col-md-5">
           <label class="form-label" for="reservedUntil">Bis</label>
-          <input id="reservedUntil" name="reservedUntil" type="datetime-local" class="form-control" value="<%= loan.reservedUntil ? new Date(loan.reservedUntil).toISOString().slice(0,16) : '' %>" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
+          <input id="reservedUntil" name="reservedUntil" type="datetime-local" class="form-control" value="<%= loan.reservedUntil ? new Date(loan.reservedUntil).toISOString().slice(0,16) : '' %>" <%= canEditPeriod ? '' : 'disabled' %>>
         </div>
         <div class="col-md-2 d-grid">
-          <button type="submit" class="btn btn-outline-primary" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>Speichern</button>
+          <button type="submit" class="btn btn-outline-primary" <%= canEditPeriod ? '' : 'disabled' %>>Speichern</button>
         </div>
       </form>
-      <% if (loan.status !== 'reserved') { %>
-        <div class="small text-muted mt-2">Zeitraum kann nur im Status „reserved“ geändert werden.</div>
+      <% if (!canEditPeriod) { %>
+        <div class="small text-muted mt-2">Zeitraum kann in diesem Status nicht geändert werden.</div>
+      <% } else { %>
+        <div class="small text-muted mt-2">Admin-Änderung ist unabhängig von Öffnungszeiten.</div>
       <% } %>
     </div>
   </div>
@@ -155,6 +172,10 @@
         </tbody>
       </table>
     </div>
+    <div class="card-body border-top">
+      <label for="handoverNote" class="form-label">Notiz zur Übergabe</label>
+      <textarea id="handoverNote" name="note" rows="2" class="form-control" placeholder="Optional"><%= loan.notes || '' %></textarea>
+    </div>
   </form>
 
   <div class="d-flex flex-wrap gap-2 justify-content-end mt-2">
@@ -165,6 +186,102 @@
       <a class="btn btn-outline-secondary" href="/admin/loans/<%= loan.id %>/return"><i class="bi bi-arrow-return-left me-1"></i>Rücknahme</a>
     <% } %>
     <button type="submit" form="handoverForm" class="btn btn-success" <%= loan.status !== 'reserved' ? 'disabled' : '' %>><i class="bi bi-check2-circle me-1"></i>Übergabe bestätigen</button>
+  </div>
+
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-xl-7">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <h2 class="h6 mb-0">Event-Timeline</h2>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Zeitpunkt</th>
+                  <th>Typ</th>
+                  <th>Benutzer</th>
+                  <th>Notiz</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% if (Array.isArray(loan.events) && loan.events.length) { %>
+                  <% loan.events.forEach(function (event) { %>
+                    <tr>
+                      <td><%= safeFormatDateTime(event.occurredAt || event.createdAt) %></td>
+                      <td><span class="badge text-bg-light"><%= event.type || '-' %></span></td>
+                      <td>
+                        <% if (event.user) { %>
+                          <%= [event.user.firstName, event.user.lastName].filter(Boolean).join(' ') || event.user.username || event.user.email || '-' %>
+                        <% } else { %>
+                          -
+                        <% } %>
+                      </td>
+                      <td><%= event.note || '-' %></td>
+                    </tr>
+                  <% }) %>
+                <% } else { %>
+                  <tr>
+                    <td colspan="4" class="text-center text-muted py-3">Keine Events vorhanden.</td>
+                  </tr>
+                <% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-xl-5">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white">
+          <h2 class="h6 mb-0">Signaturen</h2>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Typ</th>
+                  <th>Name</th>
+                  <th>Datum</th>
+                  <% if (canViewSignatureMeta) { %>
+                    <th>Metadaten</th>
+                  <% } %>
+                </tr>
+              </thead>
+              <tbody>
+                <% if (Array.isArray(loan.loanSignatures) && loan.loanSignatures.length) { %>
+                  <% loan.loanSignatures.forEach(function (signature) { %>
+                    <tr>
+                      <td><%= signature.signatureType || '-' %></td>
+                      <td><%= signature.signedByName || '-' %></td>
+                      <td><%= safeFormatDateTime(signature.signedAt || signature.createdAt) %></td>
+                      <% if (canViewSignatureMeta) { %>
+                        <td>
+                          <details>
+                            <summary class="small text-muted">Details</summary>
+                            <div class="small mt-1">
+                              <div>IP: <%= signature.ipAddress || '-' %></div>
+                              <div>UA: <%= signature.userAgent || '-' %></div>
+                              <pre class="mb-0 mt-1"><%= signature.metadata ? JSON.stringify(signature.metadata, null, 2) : '-' %></pre>
+                            </div>
+                          </details>
+                        </td>
+                      <% } %>
+                    </tr>
+                  <% }) %>
+                <% } else { %>
+                  <tr>
+                    <td colspan="<%= canViewSignatureMeta ? 4 : 3 %>" class="text-center text-muted py-3">Keine Signaturen vorhanden.</td>
+                  </tr>
+                <% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 <script src="/js/loan-model-search.js"></script>
