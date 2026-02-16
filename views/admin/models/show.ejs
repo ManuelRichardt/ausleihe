@@ -35,6 +35,9 @@
       };
     })
     .filter(Boolean);
+  const safeStock = (typeof stock !== 'undefined' && stock) ? stock : null;
+  const safeBundleDefinition = (typeof bundleDefinition !== 'undefined' && bundleDefinition) ? bundleDefinition : null;
+  const bundleItems = safeBundleDefinition && Array.isArray(safeBundleDefinition.items) ? safeBundleDefinition.items : [];
 %>
 
 <section class="admin models">
@@ -65,6 +68,10 @@
           <% } else { %>
             <span class="badge text-bg-danger">Inaktiv</span>
           <% } %>
+        </dd>
+        <dt class="col-sm-3">Tracking-Typ</dt>
+        <dd class="col-sm-9">
+          <span class="badge text-bg-secondary"><%= safeModel.trackingType || 'serialized' %></span>
         </dd>
         <dt class="col-sm-3">Beschreibung</dt>
         <dd class="col-sm-9"><%= safeModel.description || '-' %></dd>
@@ -210,4 +217,80 @@
       </form>
     </div>
   </div>
+
+  <% if ((safeModel.trackingType || 'serialized') === 'bulk') { %>
+    <div class="card shadow-sm mt-4">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h5 mb-0">Bulk-Bestand</h2>
+        </div>
+        <form method="post" action="/admin/asset-models/<%= safeModel.id %>/stock" class="row g-3">
+          <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+          <div class="col-md-3">
+            <label for="quantityTotal" class="form-label">Gesamtmenge</label>
+            <input id="quantityTotal" name="quantityTotal" type="number" min="0" step="1" class="form-control" value="<%= safeStock ? safeStock.quantityTotal : 0 %>">
+          </div>
+          <div class="col-md-3">
+            <label for="quantityAvailable" class="form-label">Verfügbar</label>
+            <input id="quantityAvailable" name="quantityAvailable" type="number" min="0" step="1" class="form-control" value="<%= safeStock ? safeStock.quantityAvailable : 0 %>">
+          </div>
+          <div class="col-md-3">
+            <label for="minThreshold" class="form-label">Min. Bestand</label>
+            <input id="minThreshold" name="minThreshold" type="number" min="0" step="1" class="form-control" value="<%= safeStock && safeStock.minThreshold !== null ? safeStock.minThreshold : '' %>">
+          </div>
+          <div class="col-md-3">
+            <label for="reorderThreshold" class="form-label">Meldebestand</label>
+            <input id="reorderThreshold" name="reorderThreshold" type="number" min="0" step="1" class="form-control" value="<%= safeStock && safeStock.reorderThreshold !== null ? safeStock.reorderThreshold : '' %>">
+          </div>
+          <div class="col-12 d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">Bestand speichern</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  <% } %>
+
+  <% if ((safeModel.trackingType || 'serialized') === 'bundle') { %>
+    <div class="card shadow-sm mt-4">
+      <div class="card-body">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
+          <h2 class="h5 mb-0">Bundle-Komponenten</h2>
+          <a href="/admin/asset-models/<%= safeModel.id %>/edit" class="btn btn-outline-primary btn-sm">In Bearbeiten verwalten</a>
+        </div>
+        <% if (safeBundleDefinition) { %>
+          <div class="small text-muted mb-3">
+            Name: <span class="fw-semibold"><%= safeBundleDefinition.name || safeModel.name %></span>
+          </div>
+          <% if (bundleItems.length) { %>
+            <div class="table-responsive">
+              <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                  <tr>
+                    <th>Komponente</th>
+                    <th>Typ</th>
+                    <th>Menge</th>
+                    <th>Pflicht</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <% bundleItems.forEach(function(item) { %>
+                    <tr>
+                      <td><%= item.componentModel ? item.componentModel.name : '-' %></td>
+                      <td><%= item.componentModel ? (item.componentModel.trackingType || 'serialized') : '-' %></td>
+                      <td><%= item.quantity || 1 %></td>
+                      <td><%= item.isOptional ? 'Optional' : 'Pflicht' %></td>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+          <% } else { %>
+            <p class="text-muted mb-0">Noch keine Komponenten hinterlegt.</p>
+          <% } %>
+        <% } else { %>
+          <p class="text-muted mb-0">Noch keine Bundle-Definition vorhanden.</p>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
 </section>

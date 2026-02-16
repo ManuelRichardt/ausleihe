@@ -16,9 +16,54 @@
   const manufacturerOptions = Array.isArray(manufacturers) ? manufacturers : [];
   const categoryOptions = Array.isArray(categories) ? categories : [];
   const customFieldDefinitionsList = Array.isArray(customFieldDefinitions) ? customFieldDefinitions : [];
+  const componentModelOptions = Array.isArray(componentModels) ? componentModels : [];
+  const safeBundleDefinition = (typeof bundleDefinition !== 'undefined' && bundleDefinition) ? bundleDefinition : null;
+  const toArray = function (value) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    if (value && typeof value === 'object') {
+      return Object.values(value);
+    }
+    if (value === undefined || value === null || value === '') {
+      return [];
+    }
+    return [value];
+  };
+  const initialBundleItems = safeBundleDefinition && Array.isArray(safeBundleDefinition.items) ? safeBundleDefinition.items : [];
+  const submittedComponentIds = toArray(
+    values.componentAssetModelId !== undefined ? values.componentAssetModelId : values['componentAssetModelId[]']
+  );
+  const submittedQuantities = toArray(
+    values.componentQuantity !== undefined ? values.componentQuantity : values['componentQuantity[]']
+  );
+  const submittedOptional = toArray(
+    values.componentIsOptional !== undefined ? values.componentIsOptional : values['componentIsOptional[]']
+  );
+  let bundleItems = initialBundleItems;
+  if (submittedComponentIds.length) {
+    bundleItems = submittedComponentIds.map(function (componentAssetModelId, index) {
+      const quantityValue = submittedQuantities[index] !== undefined ? submittedQuantities[index] : '1';
+      const optionalValue = submittedOptional[index] !== undefined ? submittedOptional[index] : '0';
+      const parsedQuantity = parseInt(quantityValue, 10);
+      const normalizedOptional = String(optionalValue).toLowerCase();
+      return {
+        componentAssetModelId: String(componentAssetModelId || ''),
+        quantity: Number.isNaN(parsedQuantity) || parsedQuantity < 1 ? 1 : parsedQuantity,
+        isOptional: ['1', 'true', 'yes', 'ja', 'on'].includes(normalizedOptional),
+      };
+    }).filter(function (item) {
+      return item.componentAssetModelId;
+    });
+  }
   const modelCustomFieldValues = (values.customFields && typeof values.customFields === 'object')
     ? values.customFields
     : {};
+  const safeStock = (typeof stock !== 'undefined' && stock) ? stock : {};
+  const quantityTotalValue = (values.quantityTotal !== undefined && values.quantityTotal !== null && values.quantityTotal !== '') ? values.quantityTotal : (safeStock.quantityTotal || 0);
+  const quantityAvailableValue = (values.quantityAvailable !== undefined && values.quantityAvailable !== null && values.quantityAvailable !== '') ? values.quantityAvailable : (safeStock.quantityAvailable || 0);
+  const minThresholdValue = (values.minThreshold !== undefined && values.minThreshold !== null) ? values.minThreshold : (safeStock.minThreshold || '');
+  const reorderThresholdValue = (values.reorderThreshold !== undefined && values.reorderThreshold !== null) ? values.reorderThreshold : (safeStock.reorderThreshold || '');
 %>
 
 <section class="admin models">
@@ -85,6 +130,15 @@
             <option value="false" <%= (values.isActive === false || values.isActive === 'false') ? 'selected' : '' %>>Inaktiv</option>
           </select>
         </div>
+        <div class="col-md-6">
+          <label for="trackingType" class="form-label">Tracking-Typ</label>
+          <select id="trackingType" name="trackingType" class="form-select <%= errorFor('trackingType') ? 'is-invalid' : '' %>">
+            <option value="serialized" <%= (values.trackingType || 'serialized') === 'serialized' ? 'selected' : '' %>>Serialized</option>
+            <option value="bulk" <%= values.trackingType === 'bulk' ? 'selected' : '' %>>Bulk</option>
+            <option value="bundle" <%= values.trackingType === 'bundle' ? 'selected' : '' %>>Bundle</option>
+          </select>
+          <% if (errorFor('trackingType')) { %><div class="invalid-feedback"><%= errorFor('trackingType') %></div><% } %>
+        </div>
         <div class="col-12">
           <label for="description" class="form-label">Beschreibung</label>
           <textarea id="description" name="description" class="form-control <%= errorFor('description') ? 'is-invalid' : '' %>" rows="3"><%= values.description || '' %></textarea>
@@ -94,6 +148,133 @@
           <label for="technicalDescription" class="form-label">Technische Beschreibung</label>
           <textarea id="technicalDescription" name="technicalDescription" class="form-control <%= errorFor('technicalDescription') ? 'is-invalid' : '' %>" rows="3"><%= values.technicalDescription || '' %></textarea>
           <% if (errorFor('technicalDescription')) { %><div class="invalid-feedback"><%= errorFor('technicalDescription') %></div><% } %>
+        </div>
+        <div class="col-12" data-tracking-panel="bulk">
+          <div class="card border-0 bg-light">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h2 class="h6 mb-0">Bulk-Bestand</h2>
+                <span class="text-muted small">Wird nur für Tracking-Typ „Bulk“ verwendet.</span>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-3">
+                  <label for="quantityTotal" class="form-label">Gesamtmenge</label>
+                  <input type="number" min="0" step="1" id="quantityTotal" name="quantityTotal" class="form-control <%= errorFor('quantityTotal') ? 'is-invalid' : '' %>" value="<%= quantityTotalValue %>">
+                  <% if (errorFor('quantityTotal')) { %><div class="invalid-feedback"><%= errorFor('quantityTotal') %></div><% } %>
+                </div>
+                <div class="col-md-3">
+                  <label for="quantityAvailable" class="form-label">Verfügbar</label>
+                  <input type="number" min="0" step="1" id="quantityAvailable" name="quantityAvailable" class="form-control <%= errorFor('quantityAvailable') ? 'is-invalid' : '' %>" value="<%= quantityAvailableValue %>">
+                  <% if (errorFor('quantityAvailable')) { %><div class="invalid-feedback"><%= errorFor('quantityAvailable') %></div><% } %>
+                </div>
+                <div class="col-md-3">
+                  <label for="minThreshold" class="form-label">Min. Bestand</label>
+                  <input type="number" min="0" step="1" id="minThreshold" name="minThreshold" class="form-control <%= errorFor('minThreshold') ? 'is-invalid' : '' %>" value="<%= minThresholdValue %>">
+                  <% if (errorFor('minThreshold')) { %><div class="invalid-feedback"><%= errorFor('minThreshold') %></div><% } %>
+                </div>
+                <div class="col-md-3">
+                  <label for="reorderThreshold" class="form-label">Meldebestand</label>
+                  <input type="number" min="0" step="1" id="reorderThreshold" name="reorderThreshold" class="form-control <%= errorFor('reorderThreshold') ? 'is-invalid' : '' %>" value="<%= reorderThresholdValue %>">
+                  <% if (errorFor('reorderThreshold')) { %><div class="invalid-feedback"><%= errorFor('reorderThreshold') %></div><% } %>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-12" data-tracking-panel="bundle">
+          <div class="card border-0 bg-light">
+            <div class="card-body">
+              <h2 class="h6 mb-3">Bundle-Konfiguration</h2>
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label for="bundleName" class="form-label">Bundle Name</label>
+                  <input type="text" id="bundleName" name="bundleName" class="form-control" value="<%= values.bundleName || values.name || '' %>">
+                </div>
+                <div class="col-md-6">
+                  <label for="bundleDescription" class="form-label">Bundle Beschreibung</label>
+                  <input type="text" id="bundleDescription" name="bundleDescription" class="form-control" value="<%= values.bundleDescription || values.description || '' %>">
+                </div>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-2">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Komponente</th>
+                      <th style="width: 110px;">Menge</th>
+                      <th style="width: 160px;">Pflicht</th>
+                      <th style="width: 60px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody data-bundle-components>
+                    <% if (bundleItems.length) { %>
+                      <% bundleItems.forEach(function(item) { %>
+                        <tr data-bundle-component-row>
+                          <td>
+                            <select name="componentAssetModelId[]" class="form-select form-select-sm">
+                              <option value="">Bitte wählen</option>
+                              <% componentModelOptions.forEach(function(cm) { %>
+                                <option value="<%= cm.id %>" <%= item.componentAssetModelId === cm.id ? 'selected' : '' %>><%= cm.name %> (<%= cm.trackingType || 'serialized' %>)</option>
+                              <% }) %>
+                            </select>
+                          </td>
+                          <td><input type="number" min="1" step="1" name="componentQuantity[]" class="form-control form-control-sm" value="<%= item.quantity || 1 %>"></td>
+                          <td>
+                            <select name="componentIsOptional[]" class="form-select form-select-sm">
+                              <option value="0" <%= item.isOptional ? '' : 'selected' %>>Pflicht</option>
+                              <option value="1" <%= item.isOptional ? 'selected' : '' %>>Optional</option>
+                            </select>
+                          </td>
+                          <td><button type="button" class="btn btn-outline-danger btn-sm" data-bundle-remove-row><i class="bi bi-trash3-fill"></i></button></td>
+                        </tr>
+                      <% }) %>
+                    <% } else { %>
+                      <tr data-bundle-component-row>
+                        <td>
+                          <select name="componentAssetModelId[]" class="form-select form-select-sm">
+                            <option value="">Bitte wählen</option>
+                            <% componentModelOptions.forEach(function(cm) { %>
+                              <option value="<%= cm.id %>"><%= cm.name %> (<%= cm.trackingType || 'serialized' %>)</option>
+                            <% }) %>
+                          </select>
+                        </td>
+                        <td><input type="number" min="1" step="1" name="componentQuantity[]" class="form-control form-control-sm" value="1"></td>
+                        <td>
+                          <select name="componentIsOptional[]" class="form-select form-select-sm">
+                            <option value="0" selected>Pflicht</option>
+                            <option value="1">Optional</option>
+                          </select>
+                        </td>
+                        <td><button type="button" class="btn btn-outline-danger btn-sm" data-bundle-remove-row><i class="bi bi-trash3-fill"></i></button></td>
+                      </tr>
+                    <% } %>
+                  </tbody>
+                </table>
+              </div>
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bundle-add-row>
+                <i class="bi bi-plus-lg me-1"></i>Komponente hinzufügen
+              </button>
+              <template data-bundle-row-template>
+                <tr data-bundle-component-row>
+                  <td>
+                    <select name="componentAssetModelId[]" class="form-select form-select-sm">
+                      <option value="">Bitte wählen</option>
+                      <% componentModelOptions.forEach(function(cm) { %>
+                        <option value="<%= cm.id %>"><%= cm.name %> (<%= cm.trackingType || 'serialized' %>)</option>
+                      <% }) %>
+                    </select>
+                  </td>
+                  <td><input type="number" min="1" step="1" name="componentQuantity[]" class="form-control form-control-sm" value="1"></td>
+                  <td>
+                    <select name="componentIsOptional[]" class="form-select form-select-sm">
+                      <option value="0" selected>Pflicht</option>
+                      <option value="1">Optional</option>
+                    </select>
+                  </td>
+                  <td><button type="button" class="btn btn-outline-danger btn-sm" data-bundle-remove-row><i class="bi bi-trash3-fill"></i></button></td>
+                </tr>
+              </template>
+            </div>
+          </div>
         </div>
         <%- include('../../partials/forms/asset-model-custom-fields', {
           definitions: customFieldDefinitionsList,
@@ -124,3 +305,4 @@
     </div>
   </form>
 </section>
+<script src="/js/asset-model-form.js"></script>

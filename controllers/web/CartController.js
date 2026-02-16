@@ -1,4 +1,5 @@
 const { services, renderPage, handleError } = require('./_controllerUtils');
+const { formatDateTime } = require('../../utils/dateFormat');
 
 class CartController {
   async show(req, res, next) {
@@ -30,7 +31,10 @@ class CartController {
   async addItem(req, res, next) {
     try {
       await services.cartService.addItem(req.session, {
+        kind: req.body.kind,
         assetModelId: req.body.assetModelId,
+        bundleDefinitionId: req.body.bundleDefinitionId,
+        lendingLocationId: req.body.lendingLocationId,
         quantity: req.body.quantity,
         reservedFrom: req.body.reservedFrom,
         reservedUntil: req.body.reservedUntil,
@@ -81,6 +85,33 @@ class CartController {
   async checkout(req, res, next) {
     try {
       const loans = await services.cartService.checkout(req.session, req.user.id, services.loanService);
+      if (req.user && req.user.email && Array.isArray(loans) && loans.length) {
+        for (const loan of loans) {
+          try {
+            const location = await services.lendingLocationService.getById(loan.lendingLocationId);
+            await services.mailService.sendTemplate('reservation_confirmation', {
+              userId: req.user.id,
+              email: req.user.email,
+              locale: req.locale || 'de',
+              variables: {
+                firstName: req.user.firstName || req.user.username || '',
+                loanId: loan.id,
+                lendingLocation: location ? location.name : '-',
+                reservedFrom: formatDateTime(loan.reservedFrom),
+                reservedUntil: formatDateTime(loan.reservedUntil),
+              },
+              metadata: {
+                loanId: loan.id,
+                type: 'reservation_confirmation',
+              },
+            });
+          } catch (mailErr) {
+            if (typeof req.flash === 'function') {
+              req.flash('error', 'Reservierung gespeichert, Benachrichtigung konnte nicht versendet werden.');
+            }
+          }
+        }
+      }
       if (typeof req.flash === 'function') {
         req.flash('success', 'Reservierung gesendet');
       }

@@ -1,0 +1,75 @@
+<% pageTitle = 'Profil' %>
+<%
+  const user = (typeof profileUser !== 'undefined' && profileUser) ? profileUser : {};
+  const roles = Array.isArray(userRoles) ? userRoles : [];
+  const fmt = function (value) {
+    if (!value) return '-';
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+    const p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ' - ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  };
+%>
+
+<section class="profile">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Mein Profil</h1>
+      <p class="text-muted mb-0">Benutzerinformationen</p>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Persönliche Daten</h2>
+          <dl class="row mb-0">
+            <dt class="col-sm-4">Benutzername</dt>
+            <dd class="col-sm-8"><%= user.username || '-' %></dd>
+            <dt class="col-sm-4">Vorname</dt>
+            <dd class="col-sm-8"><%= user.firstName || '-' %></dd>
+            <dt class="col-sm-4">Nachname</dt>
+            <dd class="col-sm-8"><%= user.lastName || '-' %></dd>
+            <dt class="col-sm-4">E-Mail</dt>
+            <dd class="col-sm-8"><%= user.email || '-' %></dd>
+            <dt class="col-sm-4">Login-Typ</dt>
+            <dd class="col-sm-8"><%= user.externalProvider || 'local' %></dd>
+            <dt class="col-sm-4">Letzter Login</dt>
+            <dd class="col-sm-8"><%= fmt(user.lastLoginAt) %></dd>
+            <dt class="col-sm-4">Status</dt>
+            <dd class="col-sm-8">
+              <% if (user.isActive) { %>
+                <span class="badge text-bg-success">Aktiv</span>
+              <% } else { %>
+                <span class="badge text-bg-danger">Gesperrt</span>
+              <% } %>
+            </dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Rollen</h2>
+          <% if (roles.length) { %>
+            <div class="d-flex flex-wrap gap-2">
+              <% roles.forEach(function(entry) { %>
+                <span class="badge text-bg-secondary">
+                  <%= entry.role ? entry.role.name : '-' %>
+                  <% if (entry.lendingLocation && entry.lendingLocation.name) { %>
+                    · <%= entry.lendingLocation.name %>
+                  <% } %>
+                </span>
+              <% }) %>
+            </div>
+          <% } else { %>
+            <p class="text-muted mb-0">Keine Rollen vorhanden.</p>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

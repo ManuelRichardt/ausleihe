@@ -1,4 +1,14 @@
 <% pageTitle = 'Öffnungszeiten' %>
+<%
+  const toHm = (typeof formatTimeHHMM === 'function')
+    ? formatTimeHHMM
+    : function (value) {
+        if (!value) return '';
+        const match = String(value).match(/^(\d{1,2}):(\d{2})/);
+        if (!match) return String(value);
+        return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
+      };
+%>
 <section class="admin config">
   <h1>Öffnungszeiten</h1>
   <h2>Regulär</h2>
@@ -18,10 +28,10 @@
         <% hours.forEach(function(h) { %>
           <tr>
             <td><%= h.dayOfWeek %></td>
-            <td><%= h.openTime || '-' %></td>
-            <td><%= h.closeTime || '-' %></td>
-            <td><%= h.pickupOpenTime || h.openTime || '-' %> - <%= h.pickupCloseTime || h.closeTime || '-' %></td>
-            <td><%= h.returnOpenTime || h.openTime || '-' %> - <%= h.returnCloseTime || h.closeTime || '-' %></td>
+            <td><%= toHm(h.openTime || '-') %></td>
+            <td><%= toHm(h.closeTime || '-') %></td>
+            <td><%= toHm(h.pickupOpenTime || h.openTime || '-') %> - <%= toHm(h.pickupCloseTime || h.closeTime || '-') %></td>
+            <td><%= toHm(h.returnOpenTime || h.openTime || '-') %> - <%= toHm(h.returnCloseTime || h.closeTime || '-') %></td>
             <td><%= h.isClosed ? 'Ja' : 'Nein' %></td>
           </tr>
         <% }) %>
@@ -48,10 +58,10 @@
         <% exceptions.forEach(function(e) { %>
           <tr>
             <td><%= e.date %></td>
-            <td><%= e.openTime || '-' %></td>
-            <td><%= e.closeTime || '-' %></td>
-            <td><%= e.pickupOpenTime || e.openTime || '-' %> - <%= e.pickupCloseTime || e.closeTime || '-' %></td>
-            <td><%= e.returnOpenTime || e.openTime || '-' %> - <%= e.returnCloseTime || e.closeTime || '-' %></td>
+            <td><%= toHm(e.openTime || '-') %></td>
+            <td><%= toHm(e.closeTime || '-') %></td>
+            <td><%= toHm(e.pickupOpenTime || e.openTime || '-') %> - <%= toHm(e.pickupCloseTime || e.closeTime || '-') %></td>
+            <td><%= toHm(e.returnOpenTime || e.openTime || '-') %> - <%= toHm(e.returnCloseTime || e.closeTime || '-') %></td>
             <td><%= e.isClosed ? 'Ja' : 'Nein' %></td>
           </tr>
         <% }) %>

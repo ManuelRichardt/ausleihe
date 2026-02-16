@@ -3,7 +3,7 @@ const { assertOpenForRange, assertOpenAt } = require('../utils/openingHours');
 const { Op } = require('sequelize');
 
 class LoanService {
-  constructor(models, availabilityService) {
+  constructor(models, availabilityService, inventoryStockService, bundleService) {
     this.models = models;
     if (availabilityService) {
       this.availabilityService = availabilityService;
@@ -11,10 +11,32 @@ class LoanService {
       const AvailabilityService = require('./AvailabilityService');
       this.availabilityService = new AvailabilityService(models);
     }
+    if (inventoryStockService) {
+      this.inventoryStockService = inventoryStockService;
+    } else {
+      const InventoryStockService = require('./InventoryStockService');
+      this.inventoryStockService = new InventoryStockService(models);
+    }
+    if (bundleService) {
+      this.bundleService = bundleService;
+    } else {
+      const BundleService = require('./BundleService');
+      this.bundleService = new BundleService(models, this.availabilityService, this.inventoryStockService);
+    }
   }
 
   async createReservation(data) {
-    const { Loan, LoanItem, LoanEvent, User, LendingLocation, Asset, AssetModel, sequelize } = this.models;
+    const {
+      Loan,
+      LoanItem,
+      LoanEvent,
+      User,
+      LendingLocation,
+      Asset,
+      AssetModel,
+      BundleDefinition,
+      sequelize,
+    } = this.models;
     return sequelize.transaction(async (transaction) => {
       const user = await User.findByPk(data.userId, { transaction });
       if (!user) {
@@ -30,12 +52,46 @@ class LoanService {
 
       await assertOpenForRange(this.models, data.lendingLocationId, data.reservedFrom, data.reservedUntil);
 
-      const requestedByModel = new Map();
-      const normalizedItems = [];
+      const loan = await Loan.create(
+        {
+          userId: data.userId,
+          lendingLocationId: data.lendingLocationId,
+          status: 'reserved',
+          reservedFrom: data.reservedFrom,
+          reservedUntil: data.reservedUntil,
+          notes: data.notes || null,
+        },
+        { transaction }
+      );
+
       for (const item of data.items) {
+        const kind = String(item.kind || '').trim().toLowerCase();
+        if (kind === 'bundle' || item.bundleDefinitionId) {
+          const bundleDefinition = await BundleDefinition.findByPk(item.bundleDefinitionId, { transaction });
+          if (!bundleDefinition) {
+            throw new Error('BundleDefinition not found');
+          }
+          const bundleLocationId = bundleDefinition.lendingLocationId || data.lendingLocationId;
+          if (bundleLocationId !== data.lendingLocationId) {
+            throw new Error('BundleDefinition does not belong to lending location');
+          }
+          await this.bundleService.reserveBundleComponents(
+            {
+              loanId: loan.id,
+              bundleDefinitionId: bundleDefinition.id,
+              lendingLocationId: data.lendingLocationId,
+              reservedFrom: data.reservedFrom,
+              reservedUntil: data.reservedUntil,
+              status: 'reserved',
+            },
+            { transaction }
+          );
+          continue;
+        }
+
         let assetId = item.assetId || null;
         let assetModelId = item.assetModelId || null;
-        const quantity = Math.max(parseInt(item.quantity || '1', 10), 1);
+        let quantity = Math.max(parseInt(item.quantity || '1', 10), 1);
 
         if (assetId) {
           const asset = await Asset.findByPk(assetId, { transaction });
@@ -60,38 +116,37 @@ class LoanService {
           throw new Error('AssetModel does not belong to lending location');
         }
 
-        requestedByModel.set(assetModelId, (requestedByModel.get(assetModelId) || 0) + quantity);
-        normalizedItems.push({
-          assetId,
-          assetModelId,
-          quantity,
-          conditionOnHandover: item.conditionOnHandover || null,
-        });
-      }
-
-      for (const [assetModelId, quantity] of requestedByModel.entries()) {
-        await this.availabilityService.assertAvailability(assetModelId, data.reservedFrom, data.reservedUntil, quantity);
-      }
-
-      const loan = await Loan.create(
-        {
-          userId: data.userId,
-          lendingLocationId: data.lendingLocationId,
-          status: 'reserved',
-          reservedFrom: data.reservedFrom,
-          reservedUntil: data.reservedUntil,
-          notes: data.notes || null,
-        },
-        { transaction }
-      );
-
-      for (const item of normalizedItems) {
-        for (let i = 0; i < item.quantity; i += 1) {
+        const trackingType = model.trackingType || 'serialized';
+        if (trackingType === 'bulk' || kind === 'bulk') {
+          await this.availabilityService.assertAvailability(model.id, data.reservedFrom, data.reservedUntil, quantity);
+          await this.inventoryStockService.decreaseAvailable(model.id, data.lendingLocationId, quantity, { transaction });
           await LoanItem.create(
             {
               loanId: loan.id,
-              assetId: item.assetId,
-              assetModelId: item.assetModelId,
+              assetId: null,
+              assetModelId: model.id,
+              quantity,
+              itemType: 'bulk',
+              status: 'reserved',
+              conditionOnHandover: item.conditionOnHandover || null,
+            },
+            { transaction }
+          );
+          continue;
+        }
+
+        await this.availabilityService.assertAvailability(model.id, data.reservedFrom, data.reservedUntil, quantity);
+        if (assetId) {
+          quantity = 1;
+        }
+        for (let i = 0; i < quantity; i += 1) {
+          await LoanItem.create(
+            {
+              loanId: loan.id,
+              assetId: assetId || null,
+              assetModelId: model.id,
+              quantity: 1,
+              itemType: 'serialized',
               status: 'reserved',
               conditionOnHandover: item.conditionOnHandover || null,
             },
@@ -182,7 +237,7 @@ class LoanService {
   }
 
   async cancelLoan(loanId, userId, note) {
-    const { Loan, LoanEvent, sequelize } = this.models;
+    const { Loan, LoanItem, LoanEvent, sequelize } = this.models;
     return sequelize.transaction(async (transaction) => {
       const loan = await Loan.findByPk(loanId, { transaction });
       if (!loan) {
@@ -191,6 +246,8 @@ class LoanService {
       if (loan.status !== 'reserved') {
         throw new Error('Loan cannot be cancelled');
       }
+      const items = await LoanItem.findAll({ where: { loanId }, transaction });
+      await this.#releaseBulkItems(items, loan.lendingLocationId, transaction);
       await loan.update({ status: 'cancelled' }, { transaction });
       await LoanEvent.create(
         {
@@ -213,6 +270,7 @@ class LoanService {
       CustomFieldDefinition,
       CustomFieldValue,
       Asset,
+      AssetModel,
       sequelize,
     } = this.models;
     return sequelize.transaction(async (transaction) => {
@@ -233,19 +291,28 @@ class LoanService {
         const input = Array.isArray(data.items)
           ? data.items.find((i) => i.loanItemId === item.id)
           : null;
-        const assetId = input && input.assetId ? input.assetId : item.assetId;
-        if (!assetId) {
-          throw new Error('Asset is required for handover');
-        }
-        const asset = await Asset.findByPk(assetId, { transaction });
-        if (!asset) {
-          throw new Error('Asset not found');
-        }
-        if (asset.lendingLocationId !== loan.lendingLocationId) {
-          throw new Error('Asset does not belong to lending location');
-        }
-        if (asset.assetModelId !== item.assetModelId) {
-          throw new Error('Asset does not match reserved model');
+        const model = item.assetModelId ? await AssetModel.findByPk(item.assetModelId, { transaction }) : null;
+        const trackingType = model ? (model.trackingType || 'serialized') : 'serialized';
+        const requiresAsset =
+          item.itemType === 'serialized' ||
+          (item.itemType === 'bundle_component' && trackingType === 'serialized');
+        let assetId = input && input.assetId ? input.assetId : item.assetId;
+        if (requiresAsset) {
+          if (!assetId) {
+            throw new Error('Asset is required for handover');
+          }
+          const asset = await Asset.findByPk(assetId, { transaction });
+          if (!asset) {
+            throw new Error('Asset not found');
+          }
+          if (asset.lendingLocationId !== loan.lendingLocationId) {
+            throw new Error('Asset does not belong to lending location');
+          }
+          if (asset.assetModelId !== item.assetModelId) {
+            throw new Error('Asset does not match reserved model');
+          }
+        } else {
+          assetId = null;
         }
         await item.update(
           {
@@ -258,7 +325,8 @@ class LoanService {
         );
       }
 
-      await this.#assertRequiredCustomFields(items, {
+      const itemsWithAssets = items.filter((item) => Boolean(item.assetId));
+      await this.#assertRequiredCustomFields(itemsWithAssets, {
         Asset,
         CustomFieldDefinition,
         CustomFieldValue,
@@ -319,6 +387,8 @@ class LoanService {
         );
       }
 
+      await this.#releaseBulkItems(items, loan.lendingLocationId, transaction);
+
       await loan.update(
         {
           status: 'returned',
@@ -366,23 +436,35 @@ class LoanService {
         throw new Error('AssetModel does not belong to lending location');
       }
 
-      await this.availabilityService.assertAvailability(
-        assetModelId,
-        loan.reservedFrom,
-        loan.reservedUntil,
-        quantity
-      );
-
-      for (let i = 0; i < quantity; i += 1) {
+      const trackingType = model.trackingType || 'serialized';
+      await this.availabilityService.assertAvailability(assetModelId, loan.reservedFrom, loan.reservedUntil, quantity);
+      if (trackingType === 'bulk') {
+        await this.inventoryStockService.decreaseAvailable(assetModelId, loan.lendingLocationId, quantity, { transaction });
         await LoanItem.create(
           {
             loanId: loan.id,
             assetId: null,
             assetModelId,
+            quantity,
+            itemType: 'bulk',
             status: 'reserved',
           },
           { transaction }
         );
+      } else {
+        for (let i = 0; i < quantity; i += 1) {
+          await LoanItem.create(
+            {
+              loanId: loan.id,
+              assetId: null,
+              assetModelId,
+              quantity: 1,
+              itemType: 'serialized',
+              status: 'reserved',
+            },
+            { transaction }
+          );
+        }
       }
       return loan;
     });
@@ -442,10 +524,15 @@ class LoanService {
 
       await this.availabilityService.assertAvailability(assetModelId, loan.reservedFrom, loan.reservedUntil, 1);
 
+      const trackingType = model.trackingType || 'serialized';
       await item.update(
         {
           assetModelId,
           assetId: null,
+          quantity: trackingType === 'bulk' ? Math.max(parseInt(item.quantity || '1', 10), 1) : 1,
+          itemType: trackingType === 'bulk' ? 'bulk' : 'serialized',
+          bundleDefinitionId: null,
+          parentLoanItemId: null,
           status: 'reserved',
           conditionOnHandover: null,
         },
@@ -507,6 +594,8 @@ class LoanService {
         }
       }
 
+      await this.#releaseBulkItems(items, loan.lendingLocationId, transaction);
+
       const remaining = await LoanItem.count({
         where: {
           loanId,
@@ -552,6 +641,9 @@ class LoanService {
       if (!item) {
         throw new Error('LoanItem not found');
       }
+      if (item.status === 'reserved') {
+        await this.#releaseBulkItems([item], loan.lendingLocationId, transaction);
+      }
       await item.destroy({ transaction });
       return loan;
     });
@@ -583,7 +675,13 @@ class LoanService {
 
   async #assertRequiredCustomFields(items, ctx) {
     const { Asset, CustomFieldDefinition, CustomFieldValue, transaction } = ctx;
-    const assetIds = items.map((item) => item.assetId);
+    if (!Array.isArray(items) || items.length === 0) {
+      return;
+    }
+    const assetIds = items.map((item) => item.assetId).filter(Boolean);
+    if (!assetIds.length) {
+      return;
+    }
     const assets = await Asset.findAll({ where: { id: assetIds }, transaction });
     const definitions = await CustomFieldDefinition.findAll({
       where: { isActive: true },
@@ -617,6 +715,25 @@ class LoanService {
           throw new Error('Required custom field is missing');
         }
       }
+    }
+  }
+
+  async #releaseBulkItems(items, lendingLocationId, transaction) {
+    if (!Array.isArray(items) || !items.length) {
+      return;
+    }
+    for (const item of items) {
+      const isBulk =
+        item.itemType === 'bulk' ||
+        (item.itemType === 'bundle_component' && !item.assetId && item.assetModelId);
+      if (!isBulk) {
+        continue;
+      }
+      const qty = Math.max(parseInt(item.quantity || '1', 10), 1);
+      if (!item.assetModelId) {
+        continue;
+      }
+      await this.inventoryStockService.increaseAvailable(item.assetModelId, lendingLocationId, qty, { transaction });
     }
   }
 }

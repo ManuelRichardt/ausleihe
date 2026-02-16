@@ -99,6 +99,26 @@ const assetModelValidation = [
   body('imageUrl')
     .optional({ nullable: true, checkFalsy: true })
     .isString(),
+  body('trackingType')
+    .optional({ nullable: true, checkFalsy: true })
+    .isIn(['serialized', 'bulk', 'bundle'])
+    .withMessage('Tracking-Typ ist ungültig'),
+  body('quantityTotal')
+    .optional({ nullable: true, checkFalsy: true })
+    .isInt({ min: 0 })
+    .withMessage('Gesamtmenge muss 0 oder größer sein'),
+  body('quantityAvailable')
+    .optional({ nullable: true, checkFalsy: true })
+    .isInt({ min: 0 })
+    .withMessage('Verfügbar muss 0 oder größer sein'),
+  body('minThreshold')
+    .optional({ nullable: true, checkFalsy: true })
+    .isInt({ min: 0 })
+    .withMessage('Min. Bestand muss 0 oder größer sein'),
+  body('reorderThreshold')
+    .optional({ nullable: true, checkFalsy: true })
+    .isInt({ min: 0 })
+    .withMessage('Meldebestand muss 0 oder größer sein'),
   body('specs')
     .optional({ nullable: true, checkFalsy: true })
     .custom((value) => {

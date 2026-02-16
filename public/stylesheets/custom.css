@@ -102,6 +102,34 @@
   background-color: #f8f9fa;
   border-radius: 0.25rem;
 }
+
+.table td.d-flex {
+  display: table-cell !important;
+}
+
+.table td.d-flex > * + * {
+  margin-left: 0.5rem;
+}
+
+.table th.actions-col,
+.table td.actions-cell,
+.table td.text-nowrap {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.table th.image-col,
+.table td.image-cell {
+  width: 84px;
+}
+
+.table-thumb {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  display: block;
+}
+
 @media (max-width:992px) {
   .navbar-height {
     height: auto;

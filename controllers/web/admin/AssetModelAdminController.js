@@ -76,6 +76,8 @@ class AssetModelAdminController {
       const customFieldDefinitions = await services.assetModelService.getGlobalCustomFieldDefinitions({
         onlyActive: false,
       });
+      const stock = await services.inventoryStockService.getStock(model.id, model.lendingLocationId);
+      const bundleDefinition = await services.bundleService.getByAssetModel(model.id, model.lendingLocationId);
       return renderPage(res, 'admin/models/show', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -84,6 +86,8 @@ class AssetModelAdminController {
         ],
         model,
         customFieldDefinitions,
+        stock,
+        bundleDefinition,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -101,6 +105,12 @@ class AssetModelAdminController {
       const customFieldDefinitions = res.locals.viewData && res.locals.viewData.customFieldDefinitions
         ? res.locals.viewData.customFieldDefinitions
         : await services.assetModelService.getGlobalCustomFieldDefinitions({ onlyActive: true });
+      const componentModels = res.locals.viewData && res.locals.viewData.componentModels
+        ? res.locals.viewData.componentModels
+        : (await services.assetModelService.getAll({
+          lendingLocationId: req.lendingLocationId,
+          isActive: true,
+        }, { order: [['name', 'ASC']] })).filter((entry) => (entry.trackingType || 'serialized') !== 'bundle');
       return renderPage(res, 'admin/models/new', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -110,6 +120,9 @@ class AssetModelAdminController {
         manufacturers,
         categories,
         customFieldDefinitions,
+        componentModels,
+        stock: null,
+        bundleDefinition: null,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -119,6 +132,7 @@ class AssetModelAdminController {
   async create(req, res, next) {
     try {
       const customFieldData = await services.assetModelService.resolveCustomFieldData(req.body.customFields || {});
+      const trackingType = req.body.trackingType || 'serialized';
       const model = await services.assetModelService.createAssetModel({
         lendingLocationId: req.lendingLocationId,
         manufacturerId: req.body.manufacturerId,
@@ -127,8 +141,18 @@ class AssetModelAdminController {
         description: req.body.description,
         technicalDescription: req.body.technicalDescription,
         specs: customFieldData,
+        trackingType,
         isActive: req.body.isActive !== 'false',
       });
+      if (trackingType === 'bulk') {
+        await services.inventoryStockService.updateStock(model.id, model.lendingLocationId, {
+          quantityTotal: req.body.quantityTotal,
+          quantityAvailable: req.body.quantityAvailable,
+          minThreshold: req.body.minThreshold,
+          reorderThreshold: req.body.reorderThreshold,
+        });
+      }
+      await this.syncBundleDefinition(model, req.body);
       await this.attachFiles(model, req.files);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Asset Model angelegt');
@@ -158,6 +182,16 @@ class AssetModelAdminController {
       const customFieldDefinitions = res.locals.viewData && res.locals.viewData.customFieldDefinitions
         ? res.locals.viewData.customFieldDefinitions
         : await services.assetModelService.getGlobalCustomFieldDefinitions({ onlyActive: true });
+      const stock = await services.inventoryStockService.getStock(model.id, model.lendingLocationId);
+      const componentModels = res.locals.viewData && res.locals.viewData.componentModels
+        ? res.locals.viewData.componentModels
+        : (await services.assetModelService.getAll({
+          lendingLocationId: req.lendingLocationId,
+          isActive: true,
+        }, { order: [['name', 'ASC']] })).filter((entry) => (entry.trackingType || 'serialized') !== 'bundle');
+      const bundleDefinition = res.locals.viewData && res.locals.viewData.bundleDefinition
+        ? res.locals.viewData.bundleDefinition
+        : await services.bundleService.getByAssetModel(model.id, model.lendingLocationId);
       return renderPage(res, 'admin/models/edit', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -169,6 +203,9 @@ class AssetModelAdminController {
         manufacturers,
         categories,
         customFieldDefinitions,
+        stock,
+        componentModels,
+        bundleDefinition,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -186,20 +223,31 @@ class AssetModelAdminController {
         throw err;
       }
       const customFieldData = await services.assetModelService.resolveCustomFieldData(req.body.customFields || {});
-      await services.assetModelService.updateAssetModel(model.id, {
+      const trackingType = req.body.trackingType || 'serialized';
+      const updatedModel = await services.assetModelService.updateAssetModel(model.id, {
         manufacturerId: req.body.manufacturerId,
         categoryId: req.body.categoryId,
         name: req.body.name,
         description: req.body.description,
         technicalDescription: req.body.technicalDescription,
         specs: customFieldData,
+        trackingType,
         isActive: req.body.isActive !== 'false',
       });
-      await this.attachFiles(model, req.files);
+      if (trackingType === 'bulk') {
+        await services.inventoryStockService.updateStock(updatedModel.id, updatedModel.lendingLocationId, {
+          quantityTotal: req.body.quantityTotal,
+          quantityAvailable: req.body.quantityAvailable,
+          minThreshold: req.body.minThreshold,
+          reorderThreshold: req.body.reorderThreshold,
+        });
+      }
+      await this.syncBundleDefinition(updatedModel, req.body);
+      await this.attachFiles(updatedModel, req.files);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Asset Model gespeichert');
       }
-      return res.redirect(`/admin/asset-models/${model.id}`);
+      return res.redirect(`/admin/asset-models/${updatedModel.id}`);
     } catch (err) {
       return handleError(res, next, req, err);
     }
@@ -398,6 +446,114 @@ class AssetModelAdminController {
     }
     if (model.imageUrl !== primary.url) {
       await services.assetModelService.updateAssetModel(modelId, { imageUrl: primary.url });
+    }
+  }
+
+  parseBundleComponents(body) {
+    const toArray = (value) => {
+      if (Array.isArray(value)) {
+        return value;
+      }
+      if (value && typeof value === 'object') {
+        return Object.values(value);
+      }
+      if (value === undefined || value === null || value === '') {
+        return [];
+      }
+      if (typeof value === 'string' && value.includes(',')) {
+        return value.split(',').map((item) => item.trim()).filter(Boolean);
+      }
+      return [value];
+    };
+    const componentIds = toArray(
+      body.componentAssetModelId !== undefined
+        ? body.componentAssetModelId
+        : body['componentAssetModelId[]']
+    );
+    const quantities = toArray(
+      body.componentQuantity !== undefined
+        ? body.componentQuantity
+        : body['componentQuantity[]']
+    );
+    const optionalFlags = toArray(
+      body.componentIsOptional !== undefined
+        ? body.componentIsOptional
+        : body['componentIsOptional[]']
+    );
+    const items = [];
+    for (let i = 0; i < componentIds.length; i += 1) {
+      const componentAssetModelId = String(componentIds[i] || '').trim();
+      if (!componentAssetModelId) {
+        continue;
+      }
+      const quantity = Math.max(parseInt(quantities[i] || '1', 10), 1);
+      const isOptionalRaw = String(optionalFlags[i] || '0').trim().toLowerCase();
+      const isOptional = ['1', 'true', 'yes', 'ja', 'on'].includes(isOptionalRaw);
+      items.push({
+        componentAssetModelId,
+        quantity,
+        isOptional,
+      });
+    }
+    return items;
+  }
+
+  async syncBundleDefinition(model, body) {
+    const trackingType = model.trackingType || 'serialized';
+    const existing = await services.bundleService.getByAssetModel(model.id, model.lendingLocationId);
+    if (trackingType !== 'bundle') {
+      if (existing) {
+        await services.bundleService.deleteBundleDefinition(existing.id);
+      }
+      return null;
+    }
+
+    const bundleName = body.bundleName || model.name;
+    const bundleDescription = body.bundleDescription || model.description || null;
+    let bundle = existing;
+    if (!bundle) {
+      bundle = await services.bundleService.createBundleDefinition({
+        assetModelId: model.id,
+        lendingLocationId: model.lendingLocationId,
+        name: bundleName,
+        description: bundleDescription,
+      });
+    } else {
+      await services.bundleService.updateBundleDefinition(bundle.id, {
+        name: bundleName,
+        description: bundleDescription,
+      });
+    }
+
+    const items = this.parseBundleComponents(body);
+    await services.bundleService.replaceBundleItems(bundle.id, items);
+    return bundle;
+  }
+
+  async updateStock(req, res, next) {
+    try {
+      const model = await services.assetModelService.getById(req.params.id);
+      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
+      await services.inventoryStockService.updateStock(
+        model.id,
+        model.lendingLocationId,
+        {
+          quantityTotal: req.body.quantityTotal,
+          quantityAvailable: req.body.quantityAvailable,
+          minThreshold: req.body.minThreshold,
+          reorderThreshold: req.body.reorderThreshold,
+        }
+      );
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Bulk-Bestand gespeichert');
+      }
+      return res.redirect(`/admin/asset-models/${model.id}`);
+    } catch (err) {
+      return handleError(res, next, req, err);
     }
   }
 }

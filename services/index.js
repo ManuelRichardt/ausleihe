@@ -12,6 +12,8 @@ const AssetModelService = require('./AssetModelService');
 const AssetInstanceService = require('./AssetInstanceService');
 const StorageLocationService = require('./StorageLocationService');
 const AssetCategoryService = require('./AssetCategoryService');
+const InventoryStockService = require('./InventoryStockService');
+const BundleService = require('./BundleService');
 const AssetAttachmentService = require('./AssetAttachmentService');
 const AssetMaintenanceService = require('./AssetMaintenanceService');
 const LoanEventService = require('./LoanEventService');
@@ -33,12 +35,23 @@ const AvailabilityService = require('./AvailabilityService');
 const CartService = require('./CartService');
 const ReservationPortalService = require('./ReservationPortalService');
 const LoanPortalService = require('./LoanPortalService');
+const ReportService = require('./ReportService');
+const UiTextService = require('./UiTextService');
+const MailConfigService = require('./MailConfigService');
+const MailTemplateService = require('./MailTemplateService');
+const NotificationService = require('./NotificationService');
+const MailService = require('./MailService');
 
 function createServices(customModels = models) {
   const availabilityService = new AvailabilityService(customModels);
   const loanService = new LoanService(customModels, availabilityService);
   const assetModelService = new AssetModelService(customModels);
   const assetInstanceService = new AssetInstanceService(customModels);
+  const inventoryStockService = new InventoryStockService(customModels);
+  const bundleService = new BundleService(customModels, availabilityService, inventoryStockService);
+  const mailConfigService = new MailConfigService(customModels);
+  const mailTemplateService = new MailTemplateService(customModels);
+  const notificationService = new NotificationService(customModels);
   return {
     authService: new AuthService(customModels),
     userService: new UserService(customModels),
@@ -52,6 +65,8 @@ function createServices(customModels = models) {
     assetInstanceService,
     storageLocationService: new StorageLocationService(customModels),
     assetCategoryService: new AssetCategoryService(customModels),
+    inventoryStockService,
+    bundleService,
     assetAttachmentService: new AssetAttachmentService(customModels),
     assetMaintenanceService: new AssetMaintenanceService(customModels),
     loanEventService: new LoanEventService(customModels),
@@ -70,7 +85,7 @@ function createServices(customModels = models) {
     samlProvisioningService: new SamlProvisioningService(customModels),
     ldapProvisioningService: new LdapProvisioningService(customModels),
     availabilityService,
-    cartService: new CartService(customModels, availabilityService),
+    cartService: new CartService(customModels, availabilityService, bundleService, inventoryStockService),
     reservationPortalService: new ReservationPortalService(customModels, loanService),
     loanPortalService: new LoanPortalService(
       customModels,
@@ -78,6 +93,12 @@ function createServices(customModels = models) {
       assetModelService,
       assetInstanceService
     ),
+    reportService: new ReportService(customModels),
+    uiTextService: new UiTextService(customModels),
+    mailConfigService,
+    mailTemplateService,
+    notificationService,
+    mailService: new MailService(customModels, mailConfigService, mailTemplateService, notificationService),
   };
 }
 
@@ -94,6 +115,8 @@ module.exports = {
   AssetInstanceService,
   StorageLocationService,
   AssetCategoryService,
+  InventoryStockService,
+  BundleService,
   AssetAttachmentService,
   AssetMaintenanceService,
   LoanEventService,
@@ -116,4 +139,10 @@ module.exports = {
   CartService,
   ReservationPortalService,
   LoanPortalService,
+  ReportService,
+  UiTextService,
+  MailConfigService,
+  MailTemplateService,
+  NotificationService,
+  MailService,
 };

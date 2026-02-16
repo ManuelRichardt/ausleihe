@@ -10,6 +10,14 @@
     sat: 'Samstag',
     sun: 'Sonntag',
   };
+  const toHm = (typeof formatTimeHHMM === 'function')
+    ? formatTimeHHMM
+    : function (value) {
+        if (!value) return '';
+        const match = String(value).match(/^(\d{1,2}):(\d{2})/);
+        if (!match) return String(value);
+        return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
+      };
 %>
 
 <section class="admin opening-hours">
@@ -32,13 +40,13 @@
         <dt class="col-sm-3">Typ</dt>
         <dd class="col-sm-9"><%= safeHour.isSpecial ? 'Sonderzeit' : 'Regulär' %></dd>
         <dt class="col-sm-3">Öffnet</dt>
-        <dd class="col-sm-9"><%= safeHour.openTime || '-' %></dd>
+        <dd class="col-sm-9"><%= toHm(safeHour.openTime || '-') %></dd>
         <dt class="col-sm-3">Schließt</dt>
-        <dd class="col-sm-9"><%= safeHour.closeTime || '-' %></dd>
+        <dd class="col-sm-9"><%= toHm(safeHour.closeTime || '-') %></dd>
         <dt class="col-sm-3">Abholung</dt>
-        <dd class="col-sm-9"><%= safeHour.pickupOpenTime || safeHour.openTime || '-' %> - <%= safeHour.pickupCloseTime || safeHour.closeTime || '-' %></dd>
+        <dd class="col-sm-9"><%= toHm(safeHour.pickupOpenTime || safeHour.openTime || '-') %> - <%= toHm(safeHour.pickupCloseTime || safeHour.closeTime || '-') %></dd>
         <dt class="col-sm-3">Rückgabe</dt>
-        <dd class="col-sm-9"><%= safeHour.returnOpenTime || safeHour.openTime || '-' %> - <%= safeHour.returnCloseTime || safeHour.closeTime || '-' %></dd>
+        <dd class="col-sm-9"><%= toHm(safeHour.returnOpenTime || safeHour.openTime || '-') %> - <%= toHm(safeHour.returnCloseTime || safeHour.closeTime || '-') %></dd>
         <dt class="col-sm-3">Gültig von</dt>
         <dd class="col-sm-9"><%= safeHour.validFrom || '-' %></dd>
         <dt class="col-sm-3">Gültig bis</dt>

@@ -1,8 +1,22 @@
 <% pageTitle = 'Asset' %>
 <%
   const model = assetModel || {};
+  const trackingType = model.trackingType || 'serialized';
   const manufacturer = model.manufacturer || null;
   const category = model.category || null;
+  const safeBundleDefinition = (typeof bundleDefinition !== 'undefined' && bundleDefinition) ? bundleDefinition : null;
+  const bundleItems = safeBundleDefinition && Array.isArray(safeBundleDefinition.items) ? safeBundleDefinition.items : [];
+  const safeBundleAvailability = (typeof bundleAvailability !== 'undefined' && bundleAvailability) ? bundleAvailability : null;
+  const bundleComponentsAvailability = safeBundleAvailability && Array.isArray(safeBundleAvailability.components)
+    ? safeBundleAvailability.components
+    : [];
+  const bundleAvailabilityMap = bundleComponentsAvailability.reduce(function (acc, entry) {
+    if (entry && entry.componentAssetModelId) {
+      acc[entry.componentAssetModelId] = entry;
+    }
+    return acc;
+  }, {});
+  const safeStock = (typeof stock !== 'undefined' && stock) ? stock : null;
   const attachments = Array.isArray(model.attachments) ? model.attachments : [];
   const attachmentImages = attachments.filter(function (att) { return att && att.kind === 'image' && att.url; });
   const manuals = attachments.filter(function (att) { return att && att.kind === 'manual' && att.url; });
@@ -83,6 +97,22 @@
             <dd class="col-7"><%= category ? category.name : '-' %></dd>
             <dt class="col-5 text-muted">Standort</dt>
             <dd class="col-7"><%= model.lendingLocation ? model.lendingLocation.name : '-' %></dd>
+            <dt class="col-5 text-muted">Typ</dt>
+            <dd class="col-7"><span class="badge text-bg-secondary"><%= trackingType %></span></dd>
+            <% if (trackingType === 'bulk') { %>
+              <dt class="col-5 text-muted">Verfügbarkeit</dt>
+              <dd class="col-7"><%= safeStock ? safeStock.quantityAvailable : 0 %>/<%= safeStock ? safeStock.quantityTotal : 0 %></dd>
+            <% } %>
+            <% if (trackingType === 'bundle') { %>
+              <dt class="col-5 text-muted">Bundle verfügbar</dt>
+              <dd class="col-7">
+                <% if (safeBundleAvailability && safeBundleAvailability.available) { %>
+                  <span class="badge text-bg-success">Ja</span>
+                <% } else { %>
+                  <span class="badge text-bg-danger">Nein</span>
+                <% } %>
+              </dd>
+            <% } %>
           </dl>
         </div>
       </div>
@@ -132,6 +162,57 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (trackingType === 'bundle') { %>
+        <div class="card shadow-sm mt-4">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Bundle-Komponenten</h2>
+          </div>
+          <div class="card-body p-0">
+            <% if (bundleItems.length) { %>
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Komponente</th>
+                      <th>Typ</th>
+                      <th>Menge</th>
+                      <th>Pflicht</th>
+                      <th>Verfügbarkeit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% bundleItems.forEach(function(item) { %>
+                      <% const component = item.componentModel || null; %>
+                      <% const avail = component ? bundleAvailabilityMap[component.id] : null; %>
+                      <tr>
+                        <td><%= component ? component.name : '-' %></td>
+                        <td><%= component ? (component.trackingType || 'serialized') : '-' %></td>
+                        <td><%= item.quantity || 1 %></td>
+                        <td><%= item.isOptional ? 'Optional' : 'Pflicht' %></td>
+                        <td>
+                          <% if (avail) { %>
+                            <%= avail.availableQuantity %>/<%= avail.requiredQuantity %>
+                            <% if (avail.available) { %>
+                              <span class="badge text-bg-success ms-1">ok</span>
+                            <% } else { %>
+                              <span class="badge text-bg-danger ms-1">nicht verfügbar</span>
+                            <% } %>
+                          <% } else { %>
+                            -
+                          <% } %>
+                        </td>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              </div>
+            <% } else { %>
+              <div class="p-3 text-muted">Keine Bundle-Komponenten hinterlegt.</div>
+            <% } %>
           </div>
         </div>
       <% } %>
@@ -197,8 +278,10 @@
       <% } %>
 
       <div class="d-flex flex-wrap gap-2 mt-4">
-        <% if (can('loan.create')) { %>
+        <% if (can('loan.create') && !(trackingType === 'bundle' && !safeBundleDefinition)) { %>
           <a class="btn btn-primary" href="/assets/<%= model.id %>/reserve">Reservieren</a>
+        <% } else if (trackingType === 'bundle' && !safeBundleDefinition) { %>
+          <button class="btn btn-secondary" type="button" disabled>Bundle nicht konfiguriert</button>
         <% } %>
         <a class="btn btn-outline-secondary" href="/assets">Zurueck zur Liste</a>
       </div>

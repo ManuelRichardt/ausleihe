@@ -18,6 +18,14 @@
     sat: 'Samstag',
     sun: 'Sonntag',
   };
+  const toHm = (typeof formatTimeHHMM === 'function')
+    ? formatTimeHHMM
+    : function (value) {
+        if (!value) return '';
+        const match = String(value).match(/^(\d{1,2}):(\d{2})/);
+        if (!match) return String(value);
+        return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
+      };
   const buildQuery = function (overrides) {
     const params = Object.assign({}, query, overrides || {});
     const parts = [];
@@ -167,8 +175,8 @@
                 <tr>
                   <td><%= ex.date || '-' %></td>
                   <td><%= ex.date || '-' %> - <%= ex.date || '-' %></td>
-                  <td><%= ex.openTime || '-' %></td>
-                  <td><%= ex.closeTime || '-' %></td>
+                  <td><%= toHm(ex.openTime || '-') %></td>
+                  <td><%= toHm(ex.closeTime || '-') %></td>
                   <td><%= ex.reason || '-' %></td>
                   <td class="d-flex align-items-center gap-2">
                     <% if (ex.deletedAt) { %>
@@ -222,11 +230,11 @@
               <% hours.forEach(function(h) { %>
                 <tr>
                   <td><%= dayLabels[h.dayOfWeek] || h.dayOfWeek %></td>
-                  <td><%= h.openTime || '-' %></td>
-                  <td><%= h.closeTime || '-' %></td>
+                  <td><%= toHm(h.openTime || '-') %></td>
+                  <td><%= toHm(h.closeTime || '-') %></td>
                   <td><%= h.isSpecial ? 'Sonderzeit' : 'Regulär' %></td>
-                  <td><%= h.pickupOpenTime || h.openTime || '-' %> - <%= h.pickupCloseTime || h.closeTime || '-' %></td>
-                  <td><%= h.returnOpenTime || h.openTime || '-' %> - <%= h.returnCloseTime || h.closeTime || '-' %></td>
+                  <td><%= toHm(h.pickupOpenTime || h.openTime || '-') %> - <%= toHm(h.pickupCloseTime || h.closeTime || '-') %></td>
+                  <td><%= toHm(h.returnOpenTime || h.openTime || '-') %> - <%= toHm(h.returnCloseTime || h.closeTime || '-') %></td>
                   <td><%= h.validFrom || '-' %></td>
                   <td><%= h.validTo || '-' %></td>
                   <td class="d-flex align-items-center gap-2">

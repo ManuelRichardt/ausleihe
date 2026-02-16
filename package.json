@@ -1,6 +1,6 @@
 {
   "name": "new-project",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "private": true,
   "scripts": {
     "start": "node ./bin/www",
@@ -13,7 +13,10 @@
     "sync-default-roles": "node ./scripts/sync-default-roles.js",
     "migrate-drop-auth-provider-secret-refs": "node ./scripts/migrate-drop-auth-provider-secret-refs.js",
     "migrate-add-asset-model-specs": "node ./scripts/migrate-add-asset-model-specs.js",
-    "migrate-add-location-category-images": "node ./scripts/migrate-add-location-category-images.js"
+    "migrate-add-location-category-images": "node ./scripts/migrate-add-location-category-images.js",
+    "migrate-add-ui-texts": "node ./scripts/migrate-add-ui-texts.js",
+    "migrate-add-mail-system": "node ./scripts/migrate-add-mail-system.js",
+    "sync-ui-texts": "node ./scripts/sync-ui-texts.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

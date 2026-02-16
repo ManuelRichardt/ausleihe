@@ -11,25 +11,54 @@ class OpeningHourService {
     this.models = models;
   }
 
+  normalizeNullableField(value) {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (value === null) {
+      return null;
+    }
+    const text = String(value).trim();
+    if (!text) {
+      return null;
+    }
+    return text;
+  }
+
+  normalizeTimeField(value) {
+    const normalized = this.normalizeNullableField(value);
+    if (normalized === undefined || normalized === null) {
+      return normalized;
+    }
+    const match = String(normalized).match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (!match) {
+      return normalized;
+    }
+    const hh = String(Number(match[1])).padStart(2, '0');
+    const mm = match[2];
+    const ss = match[3] || '00';
+    return `${hh}:${mm}:${ss}`;
+  }
+
   buildCreatePayload(data) {
     return {
       lendingLocationId: data.lendingLocationId,
       dayOfWeek: data.dayOfWeek,
-      openTime: data.openTime || null,
-      closeTime: data.closeTime || null,
-      pickupOpenTime: data.pickupOpenTime || null,
-      pickupCloseTime: data.pickupCloseTime || null,
-      returnOpenTime: data.returnOpenTime || null,
-      returnCloseTime: data.returnCloseTime || null,
+      openTime: this.normalizeTimeField(data.openTime) || null,
+      closeTime: this.normalizeTimeField(data.closeTime) || null,
+      pickupOpenTime: this.normalizeTimeField(data.pickupOpenTime) || null,
+      pickupCloseTime: this.normalizeTimeField(data.pickupCloseTime) || null,
+      returnOpenTime: this.normalizeTimeField(data.returnOpenTime) || null,
+      returnCloseTime: this.normalizeTimeField(data.returnCloseTime) || null,
       isClosed: Boolean(data.isClosed),
-      validFrom: data.validFrom || null,
-      validTo: data.validTo || null,
+      validFrom: this.normalizeNullableField(data.validFrom) || null,
+      validTo: this.normalizeNullableField(data.validTo) || null,
       isSpecial: Boolean(data.isSpecial),
     };
   }
 
   pickUpdates(updates) {
-    return pickDefined(updates, [
+    const picked = pickDefined(updates, [
       'dayOfWeek',
       'openTime',
       'closeTime',
@@ -42,6 +71,31 @@ class OpeningHourService {
       'validTo',
       'isSpecial',
     ]);
+    if (Object.prototype.hasOwnProperty.call(picked, 'openTime')) {
+      picked.openTime = this.normalizeTimeField(picked.openTime);
+    }
+    if (Object.prototype.hasOwnProperty.call(picked, 'closeTime')) {
+      picked.closeTime = this.normalizeTimeField(picked.closeTime);
+    }
+    if (Object.prototype.hasOwnProperty.call(picked, 'pickupOpenTime')) {
+      picked.pickupOpenTime = this.normalizeTimeField(picked.pickupOpenTime);
+    }
+    if (Object.prototype.hasOwnProperty.call(picked, 'pickupCloseTime')) {
+      picked.pickupCloseTime = this.normalizeTimeField(picked.pickupCloseTime);
+    }
+    if (Object.prototype.hasOwnProperty.call(picked, 'returnOpenTime')) {
+      picked.returnOpenTime = this.normalizeTimeField(picked.returnOpenTime);
+    }
+    if (Object.prototype.hasOwnProperty.call(picked, 'returnCloseTime')) {
+      picked.returnCloseTime = this.normalizeTimeField(picked.returnCloseTime);
+    }
+    if (Object.prototype.hasOwnProperty.call(picked, 'validFrom')) {
+      picked.validFrom = this.normalizeNullableField(picked.validFrom);
+    }
+    if (Object.prototype.hasOwnProperty.call(picked, 'validTo')) {
+      picked.validTo = this.normalizeNullableField(picked.validTo);
+    }
+    return picked;
   }
 
   async createOpeningHour(data) {
@@ -129,15 +183,15 @@ class OpeningHourService {
 
     if (existing) {
       await existing.update({
-        openTime: data.openTime || null,
-        closeTime: data.closeTime || null,
-        pickupOpenTime: data.pickupOpenTime || null,
-        pickupCloseTime: data.pickupCloseTime || null,
-        returnOpenTime: data.returnOpenTime || null,
-        returnCloseTime: data.returnCloseTime || null,
+        openTime: this.normalizeTimeField(data.openTime) || null,
+        closeTime: this.normalizeTimeField(data.closeTime) || null,
+        pickupOpenTime: this.normalizeTimeField(data.pickupOpenTime) || null,
+        pickupCloseTime: this.normalizeTimeField(data.pickupCloseTime) || null,
+        returnOpenTime: this.normalizeTimeField(data.returnOpenTime) || null,
+        returnCloseTime: this.normalizeTimeField(data.returnCloseTime) || null,
         isClosed: Boolean(data.isClosed),
-        validFrom: data.validFrom || null,
-        validTo: data.validTo || null,
+        validFrom: this.normalizeNullableField(data.validFrom) || null,
+        validTo: this.normalizeNullableField(data.validTo) || null,
       });
       return existing;
     }
@@ -145,15 +199,15 @@ class OpeningHourService {
     return OpeningHour.create({
       lendingLocationId: data.lendingLocationId,
       dayOfWeek: data.dayOfWeek,
-      openTime: data.openTime || null,
-      closeTime: data.closeTime || null,
-      pickupOpenTime: data.pickupOpenTime || null,
-      pickupCloseTime: data.pickupCloseTime || null,
-      returnOpenTime: data.returnOpenTime || null,
-      returnCloseTime: data.returnCloseTime || null,
+      openTime: this.normalizeTimeField(data.openTime) || null,
+      closeTime: this.normalizeTimeField(data.closeTime) || null,
+      pickupOpenTime: this.normalizeTimeField(data.pickupOpenTime) || null,
+      pickupCloseTime: this.normalizeTimeField(data.pickupCloseTime) || null,
+      returnOpenTime: this.normalizeTimeField(data.returnOpenTime) || null,
+      returnCloseTime: this.normalizeTimeField(data.returnCloseTime) || null,
       isClosed: Boolean(data.isClosed),
-      validFrom: data.validFrom || null,
-      validTo: data.validTo || null,
+      validFrom: this.normalizeNullableField(data.validFrom) || null,
+      validTo: this.normalizeNullableField(data.validTo) || null,
       isSpecial: false,
     });
   }

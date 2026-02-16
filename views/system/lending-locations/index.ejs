@@ -80,20 +80,20 @@
     <table class="table table-hover align-middle">
       <thead>
         <tr>
-          <th>Bild</th>
+          <th class="image-col">Bild</th>
           <th><a class="text-decoration-none" href="<%= sortLink('name') %>">Name</a></th>
           <th><a class="text-decoration-none" href="<%= sortLink('contactEmail') %>">Kontakt</a></th>
           <th>Status</th>
-          <th>Aktionen</th>
+          <th class="actions-col">Aktionen</th>
         </tr>
       </thead>
       <tbody>
           <% if (Array.isArray(locations) && locations.length) { %>
             <% locations.forEach(function(loc) { %>
               <tr>
-                <td>
+                <td class="image-cell">
                   <% if (loc.imageUrl) { %>
-                    <img src="<%= loc.imageUrl %>" alt="<%= loc.name %>" width="64" height="48" class="rounded border object-fit-cover">
+                    <img src="<%= loc.imageUrl %>" alt="<%= loc.name %>" class="rounded border table-thumb">
                   <% } else { %>
                     <span class="text-muted small">-</span>
                   <% } %>
@@ -109,9 +109,9 @@
                   <span class="badge text-bg-danger">Inaktiv</span>
                 <% } %>
                 </td>
-                <td class="d-flex gap-2">
+                <td class="actions-cell">
                 <% if (loc.deletedAt) { %>
-                  <form method="post" action="/system/lending-locations/<%= loc.id %>/restore">
+                  <form method="post" action="/system/lending-locations/<%= loc.id %>/restore" class="d-inline-block">
                     <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
                     <input type="hidden" name="includeDeleted" value="<%= includeDeleted ? '1' : '' %>">
                     <button type="submit" class="btn btn-link p-0 text-decoration-none" aria-label="Wiederherstellen">
@@ -119,13 +119,13 @@
                     </button>
                   </form>
                 <% } else { %>
-                  <a href="/system/lending-locations/<%= loc.id %>" class="text-decoration-none" aria-label="Details">
+                  <a href="/system/lending-locations/<%= loc.id %>" class="text-decoration-none me-2" aria-label="Details">
                     <i class="bi bi-info-circle-fill"></i>
                   </a>
-                  <a href="/system/lending-locations/<%= loc.id %>/edit" class="text-decoration-none" aria-label="Bearbeiten">
+                  <a href="/system/lending-locations/<%= loc.id %>/edit" class="text-decoration-none me-2" aria-label="Bearbeiten">
                     <i class="bi bi-pencil-fill"></i>
                   </a>
-                  <form method="post" action="/system/lending-locations/<%= loc.id %>/delete">
+                  <form method="post" action="/system/lending-locations/<%= loc.id %>/delete" class="d-inline-block">
                     <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
                     <button type="submit" class="btn btn-link p-0 text-decoration-none" aria-label="Löschen">
                       <i class="bi bi-trash3-fill"></i>

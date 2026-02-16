@@ -52,8 +52,7 @@
             <thead class="table-light">
               <tr>
                 <th>Status</th>
-                <th>Datum von</th>
-                <th>Datum bis</th>
+                <th>Datum von-bis</th>
                 <th>Begründung</th>
               </tr>
             </thead>
@@ -67,8 +66,13 @@
                       <span class="badge text-bg-success">Offen</span>
                     <% } %>
                   </td>
-                  <td><%= item.dateFrom %></td>
-                  <td><%= item.dateTo %></td>
+                  <td>
+                    <% if (item.dateFrom === item.dateTo) { %>
+                      <%= item.dateFrom %>
+                    <% } else { %>
+                      <%= item.dateFrom %> - <%= item.dateTo %>
+                    <% } %>
+                  </td>
                   <td><%= item.reason %></td>
                 </tr>
               <% }) %>

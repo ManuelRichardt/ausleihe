@@ -1,6 +1,12 @@
 <% pageTitle = 'Asset reservieren' %>
 <%
   const model = assetModel || {};
+  const trackingTypeValue = (typeof trackingType !== 'undefined' && trackingType) ? trackingType : (model.trackingType || 'serialized');
+  const isBundle = trackingTypeValue === 'bundle';
+  const isBulk = trackingTypeValue === 'bulk';
+  const safeBundleDefinition = (typeof bundleDefinition !== 'undefined' && bundleDefinition) ? bundleDefinition : null;
+  const bundleItems = safeBundleDefinition && Array.isArray(safeBundleDefinition.items) ? safeBundleDefinition.items : [];
+  const safeStock = (typeof stock !== 'undefined' && stock) ? stock : null;
   const manufacturer = model.manufacturer || null;
   const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : '';
   const availability = Array.isArray(dailyAvailability) ? dailyAvailability : [];
@@ -18,11 +24,22 @@
     <div class="col-12 col-lg-8">
       <form method="post" action="/cart/items" class="card shadow-sm">
         <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+        <input type="hidden" name="kind" value="<%= trackingTypeValue %>">
         <input type="hidden" name="assetModelId" value="<%= model.id %>">
+        <% if (isBundle && safeBundleDefinition) { %>
+          <input type="hidden" name="bundleDefinitionId" value="<%= safeBundleDefinition.id %>">
+          <input type="hidden" name="lendingLocationId" value="<%= model.lendingLocation ? model.lendingLocation.id : '' %>">
+        <% } %>
+        <% if (isBulk) { %>
+          <input type="hidden" name="lendingLocationId" value="<%= model.lendingLocation ? model.lendingLocation.id : '' %>">
+        <% } %>
         <input type="hidden" id="reservedFrom" name="reservedFrom" value="<%= formData && formData.reservedFrom ? formData.reservedFrom : '' %>">
         <input type="hidden" id="reservedUntil" name="reservedUntil" value="<%= formData && formData.reservedUntil ? formData.reservedUntil : '' %>">
 
         <div class="card-body">
+          <% if (isBundle && !safeBundleDefinition) { %>
+            <div class="alert alert-warning">Für dieses Bundle sind noch keine Komponenten konfiguriert.</div>
+          <% } %>
           <% if (errors && Object.keys(errors).length) { %>
             <div class="alert alert-danger mb-3">
               <%= Object.values(errors)[0] %>
@@ -31,7 +48,22 @@
           <div class="row g-3 align-items-end">
             <div class="col-md-4">
               <label for="quantity" class="form-label">Menge</label>
-              <input type="number" id="quantity" name="quantity" class="form-control" min="1" value="<%= (formData && formData.quantity) ? formData.quantity : '1' %>">
+              <input
+                type="number"
+                id="quantity"
+                name="quantity"
+                class="form-control"
+                min="1"
+                value="<%= (formData && formData.quantity) ? formData.quantity : '1' %>"
+                <%= isBundle ? 'readonly' : '' %>
+                <%= isBulk && safeStock ? `max=\"${safeStock.quantityAvailable}\"` : '' %>
+              >
+              <% if (isBundle) { %>
+                <div class="form-text">Bundles werden aktuell mit Menge 1 reserviert.</div>
+              <% } %>
+              <% if (isBulk) { %>
+                <div class="form-text">Verfügbar: <%= safeStock ? safeStock.quantityAvailable : 0 %>/<%= safeStock ? safeStock.quantityTotal : 0 %></div>
+              <% } %>
             </div>
             <div class="col-md-4">
               <label class="form-label">Von</label>
@@ -75,10 +107,42 @@
               <label class="form-check-label" for="toggleAvailability">Verfuegbare Menge anzeigen</label>
             </div>
           </div>
+
+          <% if (isBundle) { %>
+            <div class="mt-4">
+              <h2 class="h6 mb-2">Bundle-Komponenten</h2>
+              <% if (bundleItems.length) { %>
+                <div class="table-responsive">
+                  <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th>Komponente</th>
+                        <th>Typ</th>
+                        <th>Menge</th>
+                        <th>Pflicht</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% bundleItems.forEach(function(item) { %>
+                        <tr>
+                          <td><%= item.componentModel ? item.componentModel.name : '-' %></td>
+                          <td><%= item.componentModel ? (item.componentModel.trackingType || 'serialized') : '-' %></td>
+                          <td><%= item.quantity || 1 %></td>
+                          <td><%= item.isOptional ? 'Optional' : 'Pflicht' %></td>
+                        </tr>
+                      <% }) %>
+                    </tbody>
+                  </table>
+                </div>
+              <% } else { %>
+                <p class="text-muted mb-0">Keine Komponenten hinterlegt.</p>
+              <% } %>
+            </div>
+          <% } %>
         </div>
 
         <div class="card-footer d-flex flex-wrap gap-2 justify-content-end">
-          <button type="submit" class="btn btn-primary">In den Warenkorb</button>
+          <button type="submit" class="btn btn-primary" <%= (isBundle && !safeBundleDefinition) ? 'disabled' : '' %>>In den Warenkorb</button>
           <a class="btn btn-outline-secondary" href="/assets/<%= model.id %>">Abbrechen</a>
         </div>
       </form>

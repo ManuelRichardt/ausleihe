@@ -10,7 +10,7 @@
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
       <h1 class="h3 mb-1">Import</h1>
-      <p class="text-muted mb-0">CSV oder Excel in die aktuelle Ausleihe importieren.</p>
+      <p class="text-muted mb-0">CSV oder Excel (serialized, bulk, bundle) in die aktuelle Ausleihe importieren.</p>
     </div>
   </div>
 
@@ -47,6 +47,12 @@
   <div class="card shadow-sm">
     <div class="card-body">
       <h2 class="h5 mb-3">Datei auswählen</h2>
+      <p class="text-muted small mb-3">
+        Pflichtspalten: Manufacturer, Model, Category.
+        Optional für Bulk: TrackingType=bulk, QuantityTotal, QuantityAvailable.
+        Optional für Bundle: TrackingType=bundle, BundleName, BundleDescription, BundleComponents
+        (Format: ComponentModel|Menge|required/optional; ...).
+      </p>
       <form method="post" action="/admin/assets/import<%= safeCsrf ? `?csrfToken=${safeCsrf}` : '' %>" enctype="multipart/form-data">
         <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
         <% if (safeLendingLocationId) { %>

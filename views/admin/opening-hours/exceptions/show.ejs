@@ -1,5 +1,15 @@
 <% pageTitle = 'Ausnahme' %>
 <% const ex = (typeof exception !== 'undefined' && exception) ? exception : {}; %>
+<%
+  const toHm = (typeof formatTimeHHMM === 'function')
+    ? formatTimeHHMM
+    : function (value) {
+        if (!value) return '';
+        const match = String(value).match(/^(\d{1,2}):(\d{2})/);
+        if (!match) return String(value);
+        return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
+      };
+%>
 
 <section class="admin opening-exceptions">
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
@@ -25,13 +35,13 @@
         <dt class="col-sm-4">Datum bis</dt>
         <dd class="col-sm-8"><%= ex.date || '-' %></dd>
         <dt class="col-sm-4">Öffnet</dt>
-        <dd class="col-sm-8"><%= ex.openTime || '-' %></dd>
+        <dd class="col-sm-8"><%= toHm(ex.openTime || '-') %></dd>
         <dt class="col-sm-4">Schließt</dt>
-        <dd class="col-sm-8"><%= ex.closeTime || '-' %></dd>
+        <dd class="col-sm-8"><%= toHm(ex.closeTime || '-') %></dd>
         <dt class="col-sm-4">Abholung</dt>
-        <dd class="col-sm-8"><%= ex.pickupOpenTime || ex.openTime || '-' %> - <%= ex.pickupCloseTime || ex.closeTime || '-' %></dd>
+        <dd class="col-sm-8"><%= toHm(ex.pickupOpenTime || ex.openTime || '-') %> - <%= toHm(ex.pickupCloseTime || ex.closeTime || '-') %></dd>
         <dt class="col-sm-4">Rückgabe</dt>
-        <dd class="col-sm-8"><%= ex.returnOpenTime || ex.openTime || '-' %> - <%= ex.returnCloseTime || ex.closeTime || '-' %></dd>
+        <dd class="col-sm-8"><%= toHm(ex.returnOpenTime || ex.openTime || '-') %> - <%= toHm(ex.returnCloseTime || ex.closeTime || '-') %></dd>
         <dt class="col-sm-4">Reason</dt>
         <dd class="col-sm-8"><%= ex.reason || '-' %></dd>
         <dt class="col-sm-4">Status</dt>

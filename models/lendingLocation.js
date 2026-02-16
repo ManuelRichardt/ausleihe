@@ -48,6 +48,8 @@ module.exports = (sequelize, DataTypes) => {
     LendingLocation.hasMany(models.UserRole, { foreignKey: 'lendingLocationId', as: 'userRoles' });
     LendingLocation.hasMany(models.StorageLocation, { foreignKey: 'lendingLocationId', as: 'storageLocations' });
     LendingLocation.hasMany(models.CustomFieldDefinition, { foreignKey: 'lendingLocationId', as: 'customFieldDefinitions' });
+    LendingLocation.hasMany(models.InventoryStock, { foreignKey: 'lendingLocationId', as: 'inventoryStocks' });
+    LendingLocation.hasMany(models.BundleDefinition, { foreignKey: 'lendingLocationId', as: 'bundleDefinitions' });
   };
 
   return LendingLocation;

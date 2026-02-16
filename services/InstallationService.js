@@ -17,6 +17,69 @@ const permissionsSeed = [
   { key: 'openinghours.manage', description: 'Oeffnungszeiten verwalten', scope: 'ausleihe' },
 ];
 
+const uiTextSeed = [
+  { key: 'nav.home', de: 'Startseite', en: 'Home' },
+  { key: 'nav.toggle', de: 'Navigation umschalten', en: 'Toggle navigation' },
+  { key: 'nav.lending_locations', de: 'Labore', en: 'Labs' },
+  { key: 'nav.categories', de: 'Kategorien', en: 'Categories' },
+  { key: 'nav.assets', de: 'Assets', en: 'Assets' },
+  { key: 'nav.guest', de: 'Gast', en: 'Guest' },
+  { key: 'nav.profile', de: 'Profil', en: 'Profile' },
+  { key: 'nav.cart', de: 'Warenkorb', en: 'Cart' },
+  { key: 'nav.my_reservations', de: 'Meine Reservierungen', en: 'My reservations' },
+  { key: 'nav.my_loans', de: 'Meine Ausleihen', en: 'My loans' },
+  { key: 'nav.logout', de: 'Logout', en: 'Logout' },
+  { key: 'nav.lending_location', de: 'Ausleihe', en: 'Lending location' },
+  { key: 'nav.select_lending_location', de: 'Ausleihe wählen', en: 'Choose lending location' },
+  { key: 'common.select', de: 'Bitte wählen', en: 'Please select' },
+  { key: 'common.apply', de: 'Setzen', en: 'Apply' },
+  { key: 'admin.sidebar.title', de: 'Admin-Panel', en: 'Admin panel' },
+  { key: 'admin.sidebar.close', de: 'Admin-Panel schließen', en: 'Close admin panel' },
+  { key: 'admin.sidebar.inventory_management', de: 'Inventar Verwaltung', en: 'Inventory management' },
+  { key: 'admin.sidebar.print_pdf', de: 'Druck & PDF', en: 'Print & PDF' },
+  { key: 'admin.sidebar.loans', de: 'Ausleihe', en: 'Loans' },
+  { key: 'admin.sidebar.system', de: 'System', en: 'System' },
+  { key: 'admin.sidebar.mail', de: 'Mail-System', en: 'Mail system' },
+];
+
+const mailTemplateSeed = [
+  {
+    key: 'reservation_confirmation',
+    subjectDe: 'Reservierungsbestätigung {{loanId}}',
+    subjectEn: 'Reservation confirmation {{loanId}}',
+    bodyDe: 'Hallo {{firstName}},\n\nIhre Reservierung {{loanId}} wurde erfasst.\nAusleihe: {{lendingLocation}}\nVon: {{reservedFrom}}\nBis: {{reservedUntil}}\n\nViele Grüße',
+    bodyEn: 'Hello {{firstName}},\n\nyour reservation {{loanId}} has been created.\nLending location: {{lendingLocation}}\nFrom: {{reservedFrom}}\nUntil: {{reservedUntil}}\n\nBest regards',
+  },
+  {
+    key: 'pickup_reminder',
+    subjectDe: 'Abhol-Erinnerung {{loanId}}',
+    subjectEn: 'Pickup reminder {{loanId}}',
+    bodyDe: 'Hallo {{firstName}},\n\ndiese Nachricht erinnert an die Abholung für Reservierung {{loanId}}.',
+    bodyEn: 'Hello {{firstName}},\n\nthis is a pickup reminder for reservation {{loanId}}.',
+  },
+  {
+    key: 'return_reminder',
+    subjectDe: 'Rückgabe-Erinnerung {{loanId}}',
+    subjectEn: 'Return reminder {{loanId}}',
+    bodyDe: 'Hallo {{firstName}},\n\ndiese Nachricht erinnert an die Rückgabe für Ausleihe {{loanId}} bis {{reservedUntil}}.',
+    bodyEn: 'Hello {{firstName}},\n\nthis is a return reminder for loan {{loanId}} until {{reservedUntil}}.',
+  },
+  {
+    key: 'overdue_notice',
+    subjectDe: 'Überfällige Rückgabe {{loanId}}',
+    subjectEn: 'Overdue return {{loanId}}',
+    bodyDe: 'Hallo {{firstName}},\n\nAusleihe {{loanId}} ist überfällig. Bitte geben Sie die Gegenstände zurück.',
+    bodyEn: 'Hello {{firstName}},\n\nloan {{loanId}} is overdue. Please return the items.',
+  },
+  {
+    key: 'reservation_cancelled',
+    subjectDe: 'Storno-Info {{loanId}}',
+    subjectEn: 'Cancellation info {{loanId}}',
+    bodyDe: 'Hallo {{firstName}},\n\nReservierung {{loanId}} wurde storniert.',
+    bodyEn: 'Hello {{firstName}},\n\nreservation {{loanId}} has been cancelled.',
+  },
+];
+
 class InstallationService {
   constructor(models) {
     this.models = models;
@@ -230,6 +293,63 @@ class InstallationService {
         transaction,
       });
 
+      for (const text of uiTextSeed) {
+        const [entry] = await models.UiText.findOrCreate({
+          where: { key: text.key },
+          defaults: {
+            key: text.key,
+            de: text.de || '',
+            en: text.en || '',
+            isActive: true,
+          },
+          transaction,
+        });
+        await entry.update(
+          {
+            de: entry.de || text.de || '',
+            en: entry.en || text.en || '',
+          },
+          { transaction }
+        );
+      }
+
+      await models.MailConfig.findOrCreate({
+        where: { transport: 'sendmail' },
+        defaults: {
+          isEnabled: false,
+          transport: 'sendmail',
+          fromEmail: '',
+          fromName: '',
+          replyTo: '',
+          sendmailPath: '/usr/sbin/sendmail',
+        },
+        transaction,
+      });
+
+      for (const template of mailTemplateSeed) {
+        const [entry] = await models.MailTemplate.findOrCreate({
+          where: { key: template.key },
+          defaults: {
+            key: template.key,
+            subjectDe: template.subjectDe,
+            subjectEn: template.subjectEn,
+            bodyDe: template.bodyDe,
+            bodyEn: template.bodyEn,
+            isActive: true,
+          },
+          transaction,
+        });
+        await entry.update(
+          {
+            subjectDe: entry.subjectDe || template.subjectDe,
+            subjectEn: entry.subjectEn || template.subjectEn,
+            bodyDe: entry.bodyDe || template.bodyDe,
+            bodyEn: entry.bodyEn || template.bodyEn,
+          },
+          { transaction }
+        );
+      }
+
       const existingUser = await models.User.findOne({
         where: { username: adminUsername },
         transaction,
@@ -291,5 +411,7 @@ class InstallationService {
 module.exports = {
   InstallationService,
   permissionsSeed,
+  uiTextSeed,
+  mailTemplateSeed,
   INSTALLATION_KEY,
 };

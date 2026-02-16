@@ -1,0 +1,45 @@
+<% pageTitle = 'UI Text bearbeiten' %>
+<%
+  const item = (typeof entry !== 'undefined' && entry) ? entry : {};
+%>
+
+<section class="system ui-texts-edit">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-2">UI Text bearbeiten</h1>
+      <p class="text-muted mb-0"><code><%= item.key || '-' %></code></p>
+    </div>
+    <a href="/system/ui-texts" class="btn btn-outline-secondary">Zurück</a>
+  </div>
+
+  <form method="post" action="/system/ui-texts/<%= item.id %>" class="card shadow-sm">
+    <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label" for="key">Key</label>
+          <input type="text" class="form-control" id="key" name="key" value="<%= item.key || '' %>" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="de">Deutsch</label>
+          <textarea class="form-control" id="de" name="de" rows="4"><%= item.de || '' %></textarea>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" for="en">English</label>
+          <textarea class="form-control" id="en" name="en" rows="4"><%= item.en || '' %></textarea>
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="isActive">Status</label>
+          <select class="form-select" id="isActive" name="isActive">
+            <option value="true" <%= item.isActive ? 'selected' : '' %>>Aktiv</option>
+            <option value="false" <%= item.isActive ? '' : 'selected' %>>Inaktiv</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-2">
+      <button type="submit" class="btn btn-primary">Speichern</button>
+      <a href="/system/ui-texts" class="btn btn-outline-secondary">Abbrechen</a>
+    </div>
+  </form>
+</section>

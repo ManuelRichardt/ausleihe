@@ -163,6 +163,7 @@ class AssetModelService {
           ? data.specs
           : {},
       imageUrl: data.imageUrl || null,
+      trackingType: data.trackingType || 'serialized',
       isActive: data.isActive !== undefined ? data.isActive : true,
     };
   }
@@ -177,6 +178,7 @@ class AssetModelService {
       'technicalDescription',
       'specs',
       'imageUrl',
+      'trackingType',
       'isActive',
     ]);
   }
@@ -233,6 +235,9 @@ class AssetModelService {
     if (filter.categoryId) {
       where.categoryId = filter.categoryId;
     }
+    if (filter.trackingType) {
+      where.trackingType = filter.trackingType;
+    }
     if (filter.query) {
       const likeValue = `%${String(filter.query).toLowerCase()}%`;
       where[Op.and] = where[Op.and] || [];
@@ -283,6 +288,9 @@ class AssetModelService {
     }
     if (filter.categoryId) {
       where.categoryId = filter.categoryId;
+    }
+    if (filter.trackingType) {
+      where.trackingType = filter.trackingType;
     }
     if (filter.query) {
       const likeValue = `%${String(filter.query).toLowerCase()}%`;

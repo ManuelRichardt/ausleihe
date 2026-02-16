@@ -173,16 +173,200 @@ class CsvExportService {
     }));
   }
 
+  parseActiveFilter(statusValue) {
+    const normalized = String(statusValue || '').trim().toLowerCase();
+    if (['active', 'true', '1', 'yes', 'ja'].includes(normalized)) {
+      return true;
+    }
+    if (['inactive', 'blocked', 'false', '0', 'no', 'nein'].includes(normalized)) {
+      return false;
+    }
+    return undefined;
+  }
+
+  buildCombinedHeaders() {
+    return [
+      { key: 'manufacturer', header: 'Manufacturer' },
+      { key: 'model', header: 'Model' },
+      { key: 'category', header: 'Category' },
+      { key: 'description', header: 'Description' },
+      { key: 'technicalDescription', header: 'TechnicalDescription' },
+      { key: 'imageUrl', header: 'ImageURL' },
+      { key: 'trackingType', header: 'TrackingType' },
+      { key: 'isActive', header: 'IsActive' },
+      { key: 'inventoryNumber', header: 'InventoryNumber' },
+      { key: 'serialNumber', header: 'SerialNumber' },
+      { key: 'status', header: 'Status' },
+      { key: 'condition', header: 'Condition' },
+      { key: 'lendingLocation', header: 'LendingLocation' },
+      { key: 'quantityTotal', header: 'QuantityTotal' },
+      { key: 'quantityAvailable', header: 'QuantityAvailable' },
+      { key: 'bundleName', header: 'BundleName' },
+      { key: 'bundleDescription', header: 'BundleDescription' },
+      { key: 'bundleComponents', header: 'BundleComponents' },
+    ];
+  }
+
+  serializeBundleItems(bundleDefinition) {
+    if (!bundleDefinition || !Array.isArray(bundleDefinition.items) || !bundleDefinition.items.length) {
+      return '';
+    }
+    return bundleDefinition.items
+      .map((item) => {
+        const componentName = item.componentModel ? item.componentModel.name : '';
+        const quantity = Math.max(parseInt(item.quantity || '1', 10), 1);
+        const optionalFlag = item.isOptional ? 'optional' : 'required';
+        return `${componentName}|${quantity}|${optionalFlag}`;
+      })
+      .join('; ');
+  }
+
+  buildCombinedBaseRecord(model) {
+    return {
+      manufacturer: model && model.manufacturer ? model.manufacturer.name : '',
+      model: model ? model.name : '',
+      category: model && model.category ? model.category.name : '',
+      description: model && model.description ? model.description : '',
+      technicalDescription: model && model.technicalDescription ? model.technicalDescription : '',
+      imageUrl: model && model.imageUrl ? model.imageUrl : '',
+      trackingType: model && model.trackingType ? model.trackingType : 'serialized',
+      isActive: model && model.isActive ? 'true' : 'false',
+      inventoryNumber: '',
+      serialNumber: '',
+      status: model && model.isActive ? 'active' : 'inactive',
+      condition: '',
+      lendingLocation: model && model.lendingLocation ? model.lendingLocation.name : '',
+      quantityTotal: '',
+      quantityAvailable: '',
+      bundleName: '',
+      bundleDescription: '',
+      bundleComponents: '',
+    };
+  }
+
+  async buildCombinedRecords(filters = {}) {
+    const modelWhere = {};
+    if (filters.lendingLocationId) {
+      modelWhere.lendingLocationId = filters.lendingLocationId;
+    }
+    if (filters.categoryId) {
+      modelWhere.categoryId = filters.categoryId;
+    }
+    const modelActiveFilter = this.parseActiveFilter(filters.modelStatus);
+    if (modelActiveFilter !== undefined) {
+      modelWhere.isActive = modelActiveFilter;
+    }
+
+    const models = await this.models.AssetModel.findAll({
+      where: modelWhere,
+      include: [
+        { model: this.models.Manufacturer, as: 'manufacturer' },
+        { model: this.models.AssetCategory, as: 'category' },
+        { model: this.models.LendingLocation, as: 'lendingLocation' },
+        {
+          model: this.models.Asset,
+          as: 'assets',
+          required: false,
+        },
+      ],
+      order: [['name', 'ASC']],
+    });
+
+    const modelIds = models.map((entry) => entry.id);
+    const stockRows = modelIds.length
+      ? await this.models.InventoryStock.findAll({
+        where: { assetModelId: modelIds },
+      })
+      : [];
+    const bundleRows = modelIds.length
+      ? await this.models.BundleDefinition.findAll({
+        where: { assetModelId: modelIds },
+        include: [
+          {
+            model: this.models.BundleItem,
+            as: 'items',
+            include: [{ model: this.models.AssetModel, as: 'componentModel' }],
+          },
+        ],
+      })
+      : [];
+
+    const stockByKey = new Map();
+    stockRows.forEach((stock) => {
+      stockByKey.set(`${stock.assetModelId}:${stock.lendingLocationId}`, stock);
+    });
+
+    const bundleByKey = new Map();
+    bundleRows.forEach((bundle) => {
+      const locationKey = bundle.lendingLocationId || 'global';
+      bundleByKey.set(`${bundle.assetModelId}:${locationKey}`, bundle);
+    });
+
+    const assetActiveFilter = this.parseActiveFilter(filters.status);
+    const records = [];
+    models.forEach((model) => {
+      const trackingType = model.trackingType || 'serialized';
+      const base = this.buildCombinedBaseRecord(model);
+
+      if (trackingType === 'bulk') {
+        const stock = stockByKey.get(`${model.id}:${model.lendingLocationId}`) || null;
+        records.push({
+          ...base,
+          status: base.isActive === 'true' ? 'active' : 'inactive',
+          quantityTotal: stock ? String(stock.quantityTotal) : '0',
+          quantityAvailable: stock ? String(stock.quantityAvailable) : '0',
+        });
+        return;
+      }
+
+      if (trackingType === 'bundle') {
+        const bundle =
+          bundleByKey.get(`${model.id}:${model.lendingLocationId}`) ||
+          bundleByKey.get(`${model.id}:global`) ||
+          null;
+        records.push({
+          ...base,
+          status: base.isActive === 'true' ? 'active' : 'inactive',
+          bundleName: bundle && bundle.name ? bundle.name : model.name,
+          bundleDescription: bundle && bundle.description ? bundle.description : (model.description || ''),
+          bundleComponents: this.serializeBundleItems(bundle),
+        });
+        return;
+      }
+
+      const assets = Array.isArray(model.assets) ? model.assets : [];
+      const filteredAssets = assetActiveFilter === undefined
+        ? assets
+        : assets.filter((asset) => Boolean(asset.isActive) === assetActiveFilter);
+
+      if (!filteredAssets.length) {
+        if (assetActiveFilter !== undefined) {
+          return;
+        }
+        records.push(base);
+        return;
+      }
+
+      filteredAssets.forEach((asset) => {
+        records.push({
+          ...base,
+          isActive: asset.isActive ? 'true' : 'false',
+          inventoryNumber: asset.inventoryNumber || '',
+          serialNumber: asset.serialNumber || '',
+          status: asset.isActive ? 'active' : 'inactive',
+          condition: asset.condition || '',
+        });
+      });
+    });
+
+    return records;
+  }
+
   async exportAssets(filters = {}, format = 'csv') {
-    const query = this.buildAssetExportQuery(filters);
-    const instances = await this.models.Asset.findAll(query);
-    const customFields = await this.flattenCustomFields(instances);
-
-    const headers = this.buildAssetExportHeaders(customFields);
-    const records = this.buildAssetRecords(instances, customFields);
-
+    const headers = this.buildCombinedHeaders();
+    const records = await this.buildCombinedRecords(filters);
     if (format === 'xlsx') {
-      return this.generateExcelBuffer(headers, records, 'Assets');
+      return this.generateExcelBuffer(headers, records, 'Inventory');
     }
     return this.generateCsvBuffer(headers, records);
   }
@@ -210,44 +394,8 @@ class CsvExportService {
   }
 
   async exportCombined(filters = {}, format = 'csv') {
-    const assetsQuery = this.buildAssetExportQuery(filters);
-    const instances = await this.models.Asset.findAll(assetsQuery);
-
-    const headers = [
-      { key: 'manufacturer', header: 'Manufacturer' },
-      { key: 'model', header: 'Model' },
-      { key: 'category', header: 'Category' },
-      { key: 'description', header: 'Description' },
-      { key: 'technicalDescription', header: 'TechnicalDescription' },
-      { key: 'imageUrl', header: 'ImageURL' },
-      { key: 'isActive', header: 'IsActive' },
-      { key: 'inventoryNumber', header: 'InventoryNumber' },
-      { key: 'serialNumber', header: 'SerialNumber' },
-      { key: 'status', header: 'Status' },
-      { key: 'condition', header: 'Condition' },
-      { key: 'lendingLocation', header: 'LendingLocation' },
-    ];
-
-    const assetRecords = instances.map((asset) => {
-      const model = asset.model;
-      return {
-        manufacturer: model && model.manufacturer ? model.manufacturer.name : '',
-        model: model ? model.name : '',
-        category: model && model.category ? model.category.name : '',
-        description: model && model.description ? model.description : '',
-        technicalDescription: model && model.technicalDescription ? model.technicalDescription : '',
-        imageUrl: model && model.imageUrl ? model.imageUrl : '',
-        isActive: asset.isActive ? 'true' : 'false',
-        inventoryNumber: asset.inventoryNumber || '',
-        serialNumber: asset.serialNumber || '',
-        status: asset.isActive ? 'active' : 'inactive',
-        condition: asset.condition || '',
-        lendingLocation: asset.lendingLocation ? asset.lendingLocation.name : '',
-      };
-    });
-
-    const records = assetRecords;
-
+    const headers = this.buildCombinedHeaders();
+    const records = await this.buildCombinedRecords(filters);
     if (format === 'xlsx') {
       return this.generateExcelBuffer(headers, records, 'Export');
     }

@@ -12,6 +12,14 @@
     const match = errorsList.find(function (err) { return err.field === field; });
     return match ? match.message : '';
   };
+  const toHm = (typeof formatTimeHHMM === 'function')
+    ? formatTimeHHMM
+    : function (value) {
+        if (!value) return '';
+        const match = String(value).match(/^(\d{1,2}):(\d{2})/);
+        if (!match) return String(value);
+        return String(Number(match[1])).padStart(2, '0') + ':' + match[2];
+      };
 %>
 
 <section class="admin opening-exceptions">
@@ -43,41 +51,41 @@
           <% if (errorFor('dateTo')) { %><div class="invalid-feedback"><%= errorFor('dateTo') %></div><% } %>
         </div>
         <div class="col-md-6">
+          <label for="openTime" class="form-label">Öffnet (HH:MM)</label>
+          <input type="text" class="form-control <%= errorFor('openTime') ? 'is-invalid' : '' %>" id="openTime" name="openTime" value="<%= toHm(values.openTime || '') %>" placeholder="08:00">
+          <% if (errorFor('openTime')) { %><div class="invalid-feedback"><%= errorFor('openTime') %></div><% } %>
+        </div>
+        <div class="col-md-6">
+          <label for="closeTime" class="form-label">Schließt (HH:MM)</label>
+          <input type="text" class="form-control <%= errorFor('closeTime') ? 'is-invalid' : '' %>" id="closeTime" name="closeTime" value="<%= toHm(values.closeTime || '') %>" placeholder="17:00">
+          <% if (errorFor('closeTime')) { %><div class="invalid-feedback"><%= errorFor('closeTime') %></div><% } %>
+        </div>
+        <div class="col-md-6">
+          <label for="pickupOpenTime" class="form-label">Abholung von (HH:MM)</label>
+          <input type="text" class="form-control <%= errorFor('pickupOpenTime') ? 'is-invalid' : '' %>" id="pickupOpenTime" name="pickupOpenTime" value="<%= toHm(values.pickupOpenTime || '') %>" placeholder="09:00">
+          <% if (errorFor('pickupOpenTime')) { %><div class="invalid-feedback"><%= errorFor('pickupOpenTime') %></div><% } %>
+        </div>
+        <div class="col-md-6">
+          <label for="pickupCloseTime" class="form-label">Abholung bis (HH:MM)</label>
+          <input type="text" class="form-control <%= errorFor('pickupCloseTime') ? 'is-invalid' : '' %>" id="pickupCloseTime" name="pickupCloseTime" value="<%= toHm(values.pickupCloseTime || '') %>" placeholder="12:00">
+          <% if (errorFor('pickupCloseTime')) { %><div class="invalid-feedback"><%= errorFor('pickupCloseTime') %></div><% } %>
+        </div>
+        <div class="col-md-6">
+          <label for="returnOpenTime" class="form-label">Rückgabe von (HH:MM)</label>
+          <input type="text" class="form-control <%= errorFor('returnOpenTime') ? 'is-invalid' : '' %>" id="returnOpenTime" name="returnOpenTime" value="<%= toHm(values.returnOpenTime || '') %>" placeholder="13:00">
+          <% if (errorFor('returnOpenTime')) { %><div class="invalid-feedback"><%= errorFor('returnOpenTime') %></div><% } %>
+        </div>
+        <div class="col-md-6">
+          <label for="returnCloseTime" class="form-label">Rückgabe bis (HH:MM)</label>
+          <input type="text" class="form-control <%= errorFor('returnCloseTime') ? 'is-invalid' : '' %>" id="returnCloseTime" name="returnCloseTime" value="<%= toHm(values.returnCloseTime || '') %>" placeholder="16:00">
+          <% if (errorFor('returnCloseTime')) { %><div class="invalid-feedback"><%= errorFor('returnCloseTime') %></div><% } %>
+        </div>
+        <div class="col-md-6">
           <label for="isClosed" class="form-label">Status</label>
           <select id="isClosed" name="isClosed" class="form-select">
             <option value="false" <%= values.isClosed === true || values.isClosed === 'true' ? '' : 'selected' %>>Offen</option>
             <option value="true" <%= values.isClosed === true || values.isClosed === 'true' ? 'selected' : '' %>>Geschlossen</option>
           </select>
-        </div>
-        <div class="col-md-6">
-          <label for="openTime" class="form-label">Öffnet (HH:MM)</label>
-          <input type="text" class="form-control <%= errorFor('openTime') ? 'is-invalid' : '' %>" id="openTime" name="openTime" value="<%= values.openTime || '' %>" placeholder="08:00">
-          <% if (errorFor('openTime')) { %><div class="invalid-feedback"><%= errorFor('openTime') %></div><% } %>
-        </div>
-        <div class="col-md-6">
-          <label for="closeTime" class="form-label">Schließt (HH:MM)</label>
-          <input type="text" class="form-control <%= errorFor('closeTime') ? 'is-invalid' : '' %>" id="closeTime" name="closeTime" value="<%= values.closeTime || '' %>" placeholder="17:00">
-          <% if (errorFor('closeTime')) { %><div class="invalid-feedback"><%= errorFor('closeTime') %></div><% } %>
-        </div>
-        <div class="col-md-6">
-          <label for="pickupOpenTime" class="form-label">Abholung von (HH:MM)</label>
-          <input type="text" class="form-control <%= errorFor('pickupOpenTime') ? 'is-invalid' : '' %>" id="pickupOpenTime" name="pickupOpenTime" value="<%= values.pickupOpenTime || '' %>" placeholder="09:00">
-          <% if (errorFor('pickupOpenTime')) { %><div class="invalid-feedback"><%= errorFor('pickupOpenTime') %></div><% } %>
-        </div>
-        <div class="col-md-6">
-          <label for="pickupCloseTime" class="form-label">Abholung bis (HH:MM)</label>
-          <input type="text" class="form-control <%= errorFor('pickupCloseTime') ? 'is-invalid' : '' %>" id="pickupCloseTime" name="pickupCloseTime" value="<%= values.pickupCloseTime || '' %>" placeholder="12:00">
-          <% if (errorFor('pickupCloseTime')) { %><div class="invalid-feedback"><%= errorFor('pickupCloseTime') %></div><% } %>
-        </div>
-        <div class="col-md-6">
-          <label for="returnOpenTime" class="form-label">Rückgabe von (HH:MM)</label>
-          <input type="text" class="form-control <%= errorFor('returnOpenTime') ? 'is-invalid' : '' %>" id="returnOpenTime" name="returnOpenTime" value="<%= values.returnOpenTime || '' %>" placeholder="13:00">
-          <% if (errorFor('returnOpenTime')) { %><div class="invalid-feedback"><%= errorFor('returnOpenTime') %></div><% } %>
-        </div>
-        <div class="col-md-6">
-          <label for="returnCloseTime" class="form-label">Rückgabe bis (HH:MM)</label>
-          <input type="text" class="form-control <%= errorFor('returnCloseTime') ? 'is-invalid' : '' %>" id="returnCloseTime" name="returnCloseTime" value="<%= values.returnCloseTime || '' %>" placeholder="16:00">
-          <% if (errorFor('returnCloseTime')) { %><div class="invalid-feedback"><%= errorFor('returnCloseTime') %></div><% } %>
         </div>
         <div class="col-12">
           <label for="reason" class="form-label">Reason</label>

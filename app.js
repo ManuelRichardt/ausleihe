@@ -60,6 +60,32 @@ app.use(flash());
 app.use(sanitize);
 app.use(csrfProtectionMiddleware({ ignorePaths: ['/auth/saml/callback'] }));
 app.use((req, res, next) => {
+  const formatTimeHHMM = (value) => {
+    if (value === undefined || value === null || value === '') {
+      return '';
+    }
+    if (value instanceof Date) {
+      const hh = String(value.getHours()).padStart(2, '0');
+      const mm = String(value.getMinutes()).padStart(2, '0');
+      return `${hh}:${mm}`;
+    }
+    const text = String(value).trim();
+    const hhmmMatch = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (hhmmMatch) {
+      const hh = String(Number(hhmmMatch[1])).padStart(2, '0');
+      return `${hh}:${hhmmMatch[2]}`;
+    }
+    if (text.includes('T')) {
+      const parsed = new Date(text);
+      if (!Number.isNaN(parsed.getTime())) {
+        const hh = String(parsed.getHours()).padStart(2, '0');
+        const mm = String(parsed.getMinutes()).padStart(2, '0');
+        return `${hh}:${mm}`;
+      }
+    }
+    return text;
+  };
+
   res.locals.user = res.locals.user || null;
   res.locals.permissions = res.locals.permissions || { list: [], map: {} };
   res.locals.breadcrumbs = res.locals.breadcrumbs || [];
@@ -75,6 +101,7 @@ app.use((req, res, next) => {
   res.locals.can = res.locals.can || (() => false);
   res.locals.canAny = res.locals.canAny || (() => false);
   res.locals.canAll = res.locals.canAll || (() => false);
+  res.locals.formatTimeHHMM = res.locals.formatTimeHHMM || formatTimeHHMM;
   next();
 });
 

@@ -65,6 +65,20 @@ class AssetController {
         scope: 'global',
         isActive: true,
       });
+      const trackingType = assetModel.trackingType || 'serialized';
+      const bundleDefinition = trackingType === 'bundle'
+        ? await services.bundleService.getByAssetModel(assetModel.id, assetModel.lendingLocationId)
+        : null;
+      const bundleAvailability = bundleDefinition
+        ? await services.bundleService.computeBundleAvailability(
+          bundleDefinition.id,
+          assetModel.lendingLocationId,
+          { reservedFrom: new Date(), reservedUntil: new Date(Date.now() + (24 * 60 * 60 * 1000)) }
+        )
+        : null;
+      const stock = trackingType === 'bulk'
+        ? await services.inventoryStockService.getStock(assetModel.id, assetModel.lendingLocationId)
+        : null;
 
       return renderPage(res, 'assets/show', req, {
         breadcrumbs: [
@@ -73,6 +87,9 @@ class AssetController {
         ],
         assetModel,
         customFieldDefinitions,
+        bundleDefinition,
+        bundleAvailability,
+        stock,
       });
     } catch (err) {
       if (err && err.message && err.message.toLowerCase().includes('not found')) {
@@ -85,6 +102,13 @@ class AssetController {
   async reserve(req, res, next) {
     try {
       const assetModel = await services.assetModelService.getById(req.params.id);
+      const trackingType = assetModel.trackingType || 'serialized';
+      const bundleDefinition = trackingType === 'bundle'
+        ? await services.bundleService.getByAssetModel(assetModel.id, assetModel.lendingLocationId)
+        : null;
+      const stock = trackingType === 'bulk'
+        ? await services.inventoryStockService.getStock(assetModel.id, assetModel.lendingLocationId)
+        : null;
       return renderPage(res, 'assets/reserve', req, {
         breadcrumbs: [
           { label: 'Assets', href: '/assets' },
@@ -92,6 +116,9 @@ class AssetController {
           { label: 'Reservieren', href: `/assets/${assetModel.id}/reserve` },
         ],
         assetModel,
+        trackingType,
+        bundleDefinition,
+        stock,
         dailyAvailability: await services.availabilityService.getDailyAvailability(assetModel.id, new Date(), 90),
       });
     } catch (err) {

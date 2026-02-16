@@ -26,7 +26,7 @@
     </div>
   </div>
 
-  <form method="post" action="/admin/categories/<%= safeCategory.id %>" class="card shadow-sm" enctype="multipart/form-data">
+  <form method="post" action="/admin/categories/<%= safeCategory.id %>?csrfToken=<%= encodeURIComponent(csrfToken || '') %>" class="card shadow-sm" enctype="multipart/form-data">
     <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
     <div class="card-body">
       <div class="row g-3">

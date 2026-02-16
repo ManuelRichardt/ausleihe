@@ -85,26 +85,26 @@
       <table class="table table-hover align-middle">
         <thead>
           <tr>
-            <th scope="col">Bild</th>
+            <th scope="col" class="image-col">Bild</th>
             <th scope="col"><a class="text-decoration-none" href="<%= sortLink('name') %>">Name</a></th>
             <th scope="col">Beschreibung</th>
-            <th scope="col">Status / Aktionen</th>
+            <th scope="col" class="actions-col">Status / Aktionen</th>
           </tr>
         </thead>
         <tbody>
           <% if (Array.isArray(categories) && categories.length) { %>
           <% categories.forEach(function(cat) { %>
             <tr>
-              <td>
+              <td class="image-cell">
                 <% if (cat.imageUrl) { %>
-                  <img src="<%= cat.imageUrl %>" alt="<%= cat.name %>" width="64" height="48" class="rounded border object-fit-cover">
+                  <img src="<%= cat.imageUrl %>" alt="<%= cat.name %>" class="rounded border table-thumb">
                 <% } else { %>
                   <span class="text-muted small">-</span>
                 <% } %>
               </td>
               <td><%= cat.name %></td>
               <td><%= cat.description || '-' %></td>
-              <td class="d-flex align-items-center gap-2">
+              <td class="actions-cell d-flex align-items-center gap-2">
                 <% if (cat.deletedAt) { %>
                   <span class="badge text-bg-secondary">Gelöscht</span>
                   <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/categories/<%= cat.id %>/restore" formmethod="post" aria-label="Wiederherstellen">

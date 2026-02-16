@@ -4,26 +4,29 @@
 <% const safeCurrentUser = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : ((typeof user !== 'undefined' && user) ? user : null); %>
 <% const safeCsrfToken = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : ''; %>
 <% const safeLendingLocations = (typeof lendingLocations !== 'undefined' && Array.isArray(lendingLocations)) ? lendingLocations : []; %>
+<% const tr = (typeof t === 'function') ? t : function (key, fallback) { return fallback || key; }; %>
+<% const langUrl = (typeof switchLanguageUrl === 'function') ? switchLanguageUrl : function () { return currentPathValue || '/'; }; %>
+<% const localeValue = (typeof locale !== 'undefined' && locale) ? locale : 'de'; %>
 <% const isActive = function (path) { return currentPathValue === path; }; %>
 <nav class="navbar navbar-expand-lg navbar-dark navbar-custom fixed-top navbar-height">
   <div class="container-fluid align-items-center">
-    <a class="navbar-brand d-flex align-items-center" href="/" aria-label="Startseite">
+    <a class="navbar-brand d-flex align-items-center" href="/" aria-label="<%= tr('nav.home', 'Startseite') %>">
       <img src="/images/Rundlogo_weiss.png" alt="Universität Logo" height="50">
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Navigation umschalten">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="<%= tr('nav.toggle', 'Navigation umschalten') %>">
       <span class="navbar-toggler-icon"></span>
     </button>
 
     <div class="collapse navbar-collapse" id="mainNavbar">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item">
-          <a class="nav-link <%= isActive('/lending-locations') ? 'active' : '' %>" aria-current="<%= isActive('/lending-locations') ? 'page' : '' %>" href="/lending-locations">Labore</a>
+          <a class="nav-link <%= isActive('/lending-locations') ? 'active' : '' %>" aria-current="<%= isActive('/lending-locations') ? 'page' : '' %>" href="/lending-locations"><%= tr('nav.lending_locations', 'Labore') %></a>
         </li>
         <li class="nav-item">
-          <a class="nav-link <%= isActive('/categories') ? 'active' : '' %>" aria-current="<%= isActive('/categories') ? 'page' : '' %>" href="/categories">Categories</a>
+          <a class="nav-link <%= isActive('/categories') ? 'active' : '' %>" aria-current="<%= isActive('/categories') ? 'page' : '' %>" href="/categories"><%= tr('nav.categories', 'Kategorien') %></a>
         </li>
         <li class="nav-item">
-          <a class="nav-link <%= isActive('/assets') ? 'active' : '' %>" aria-current="<%= isActive('/assets') ? 'page' : '' %>" href="/assets">Assets</a>
+          <a class="nav-link <%= isActive('/assets') ? 'active' : '' %>" aria-current="<%= isActive('/assets') ? 'page' : '' %>" href="/assets"><%= tr('nav.assets', 'Assets') %></a>
         </li>
       </ul>
 
@@ -31,18 +34,21 @@
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle d-flex align-items-center gap-2" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             <i class="bi bi-person-circle"></i>
-            <span><%= safeCurrentUser && safeCurrentUser.username ? safeCurrentUser.username : 'Gast' %></span>
+            <span><%= safeCurrentUser && safeCurrentUser.username ? safeCurrentUser.username : tr('nav.guest', 'Gast') %></span>
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
-            <li><a class="dropdown-item" href="/profile">Profil</a></li>
-            <li><a class="dropdown-item" href="/cart">Warenkorb</a></li>
-            <li><a class="dropdown-item" href="/reservations">Meine Reservierungen</a></li>
-            <li><a class="dropdown-item" href="/loans">Meine Ausleihen</a></li>
+            <li><a class="dropdown-item" href="/profile"><%= tr('nav.profile', 'Profil') %></a></li>
+            <li><a class="dropdown-item" href="/cart"><%= tr('nav.cart', 'Warenkorb') %></a></li>
+            <li><a class="dropdown-item" href="/reservations"><%= tr('nav.my_reservations', 'Meine Reservierungen') %></a></li>
+            <li><a class="dropdown-item" href="/loans"><%= tr('nav.my_loans', 'Meine Ausleihen') %></a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item <%= localeValue === 'de' ? 'active' : '' %>" href="<%= langUrl('de') %>">Deutsch</a></li>
+            <li><a class="dropdown-item <%= localeValue === 'en' ? 'active' : '' %>" href="<%= langUrl('en') %>">English</a></li>
             <li><hr class="dropdown-divider"></li>
             <li>
               <form action="/logout" method="post" class="dropdown-item p-0">
                 <input type="hidden" name="csrfToken" value="<%= safeCsrfToken %>">
-                <button type="submit" class="btn btn-link dropdown-item">Logout</button>
+                <button type="submit" class="btn btn-link dropdown-item"><%= tr('nav.logout', 'Logout') %></button>
               </form>
             </li>
           </ul>
@@ -54,14 +60,14 @@
           <input type="hidden" name="csrfToken" value="<%= safeCsrfToken %>">
           <input type="hidden" name="returnTo" value="<%= currentPathValue || '/' %>">
           <div class="input-group input-group-sm">
-            <label class="input-group-text" for="lendingLocationSelect">Ausleihe</label>
-            <select id="lendingLocationSelect" name="lendingLocationId" class="form-select" aria-label="Ausleihe wählen">
-              <option value="">Bitte wählen</option>
+            <label class="input-group-text" for="lendingLocationSelect"><%= tr('nav.lending_location', 'Ausleihe') %></label>
+            <select id="lendingLocationSelect" name="lendingLocationId" class="form-select" aria-label="<%= tr('nav.select_lending_location', 'Ausleihe wählen') %>">
+              <option value=""><%= tr('common.select', 'Bitte wählen') %></option>
               <% safeLendingLocations.forEach(function(loc) { %>
                 <option value="<%= loc.id %>" <%= (activeLendingLocation && activeLendingLocation.id === loc.id) ? 'selected' : '' %>><%= loc.name %></option>
               <% }) %>
             </select>
-            <button class="btn btn-outline-light" type="submit">Setzen</button>
+            <button class="btn btn-outline-light" type="submit"><%= tr('common.apply', 'Setzen') %></button>
           </div>
         </form>
       <% } %>

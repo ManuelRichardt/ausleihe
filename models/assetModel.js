@@ -40,6 +40,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(500),
         allowNull: true,
       },
+      trackingType: {
+        type: DataTypes.ENUM('serialized', 'bulk', 'bundle'),
+        allowNull: false,
+        defaultValue: 'serialized',
+      },
       isActive: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -78,6 +83,9 @@ module.exports = (sequelize, DataTypes) => {
     AssetModel.hasMany(models.Asset, { foreignKey: 'assetModelId', as: 'assets' });
     AssetModel.hasMany(models.AssetAttachment, { foreignKey: 'assetModelId', as: 'attachments' });
     AssetModel.hasMany(models.CustomFieldDefinition, { foreignKey: 'assetModelId', as: 'customFieldDefinitions' });
+    AssetModel.hasMany(models.InventoryStock, { foreignKey: 'assetModelId', as: 'stocks' });
+    AssetModel.hasMany(models.BundleDefinition, { foreignKey: 'assetModelId', as: 'bundleDefinitions' });
+    AssetModel.hasMany(models.BundleItem, { foreignKey: 'componentAssetModelId', as: 'bundleComponents' });
   };
 
   return AssetModel;
