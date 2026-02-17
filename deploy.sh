@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPO_URL_DEFAULT="https://github.com/ManuelRichardt/ausleihe.git"
 APP_DIR_DEFAULT="/opt/ausleihe"
-BRANCH_DEFAULT="main"
+BRANCH_DEFAULT=""
 SERVER_NAME_DEFAULT="_"
 APP_PORT_DEFAULT="3000"
 NGINX_SITE_DEFAULT="ausleihe"
@@ -84,9 +84,46 @@ Use one of the following:
 EOF
 }
 
+resolve_branch() {
+  local requested_branch="$1"
+  local remote_head
+
+  if [[ -n "${requested_branch}" ]]; then
+    if git show-ref --verify --quiet "refs/remotes/origin/${requested_branch}"; then
+      printf '%s' "${requested_branch}"
+      return
+    fi
+    echo "Requested branch '${requested_branch}' not found on origin. Falling back to default branch."
+  fi
+
+  remote_head="$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+  if [[ -n "${remote_head}" ]]; then
+    printf '%s' "${remote_head#origin/}"
+    return
+  fi
+
+  remote_head="$(git ls-remote --symref origin HEAD 2>/dev/null | awk '/^ref:/ { print $2; exit }' | sed 's#^refs/heads/##')"
+  if [[ -n "${remote_head}" ]]; then
+    printf '%s' "${remote_head}"
+    return
+  fi
+
+  if git show-ref --verify --quiet refs/remotes/origin/main; then
+    printf 'main'
+    return
+  fi
+  if git show-ref --verify --quiet refs/remotes/origin/master; then
+    printf 'master'
+    return
+  fi
+
+  echo "Could not resolve a deploy branch. Use --branch <name>." >&2
+  exit 1
+}
+
 install_prerequisites() {
   as_root apt-get update -y
-  as_root apt-get install -y ca-certificates curl git docker nginx
+  as_root apt-get install -y ca-certificates curl git nginx
 
   if ! command -v docker >/dev/null 2>&1; then
     curl -fsSL https://get.docker.com | as_root sh
@@ -125,7 +162,9 @@ prepare_source() {
   fi
 
   git fetch --all --prune
-  git checkout "${BRANCH}"
+
+  BRANCH="$(resolve_branch "${BRANCH}")"
+  git checkout "${BRANCH}" 2>/dev/null || git checkout -b "${BRANCH}" "origin/${BRANCH}"
   git pull --ff-only origin "${BRANCH}"
 
   if [[ "${auth_repo_url}" != "${REPO_URL}" ]]; then
