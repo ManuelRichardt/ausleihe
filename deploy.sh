@@ -118,6 +118,8 @@ PASSWORD_MIN_LENGTH=12
 PORT=3000
 REFRESH_TOKEN_SECRET=$(random_secret)
 REFRESH_TOKEN_TTL_DAYS=14
+SESSION_COOKIE_SECURE=false
+CSRF_COOKIE_SECURE=false
 SESSION_SECRET=$(random_secret)
 EOF
   else
@@ -137,6 +139,8 @@ EOF
     ensure_env_key "PORT" "3000" "${env_file}"
     ensure_env_key "REFRESH_TOKEN_SECRET" "$(random_secret)" "${env_file}"
     ensure_env_key "REFRESH_TOKEN_TTL_DAYS" "14" "${env_file}"
+    ensure_env_key "SESSION_COOKIE_SECURE" "false" "${env_file}"
+    ensure_env_key "CSRF_COOKIE_SECURE" "false" "${env_file}"
     ensure_env_key "SESSION_SECRET" "$(random_secret)" "${env_file}"
   fi
 }

@@ -1,8 +1,19 @@
 const crypto = require('crypto');
 const { doubleCsrf } = require('csrf-csrf');
 
-const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production';
-const useHostPrefix = isProduction;
+function shouldUseSecureCookie() {
+  const raw = String(process.env.CSRF_COOKIE_SECURE || '').toLowerCase();
+  if (raw === 'true') {
+    return true;
+  }
+  if (raw === 'false') {
+    return false;
+  }
+  return String(process.env.NODE_ENV || '').toLowerCase() === 'production';
+}
+
+const useSecureCookie = shouldUseSecureCookie();
+const useHostPrefix = useSecureCookie;
 const cookieName = useHostPrefix ? '__Host-csrf' : 'csrf';
 const secret = process.env.CSRF_SECRET || process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 
@@ -12,7 +23,7 @@ const { generateCsrfToken: generateCsrfTokenInternal, doubleCsrfProtection } = d
   cookieName,
   cookieOptions: {
     httpOnly: true,
-    secure: isProduction,
+    secure: useSecureCookie,
     sameSite: 'lax',
     path: '/',
   },

@@ -2,6 +2,17 @@ function isProduction() {
   return String(process.env.NODE_ENV || '').toLowerCase() === 'production';
 }
 
+function getSessionCookieSecure() {
+  const raw = String(process.env.SESSION_COOKIE_SECURE || 'auto').toLowerCase();
+  if (raw === 'true') {
+    return true;
+  }
+  if (raw === 'false') {
+    return false;
+  }
+  return isProduction() ? 'auto' : false;
+}
+
 function getSessionSecret() {
   const secret = process.env.SESSION_SECRET;
   if (!secret) {
@@ -20,7 +31,7 @@ function buildSessionConfig() {
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: isProduction(),
+      secure: getSessionCookieSecure(),
       maxAge: 1000 * 60 * 60 * 8,
     },
   };
