@@ -15,6 +15,8 @@ BRANCH="${BRANCH:-$BRANCH_DEFAULT}"
 SERVER_NAME="${SERVER_NAME:-$SERVER_NAME_DEFAULT}"
 APP_PORT="${APP_PORT:-$APP_PORT_DEFAULT}"
 NGINX_SITE="${NGINX_SITE:-$NGINX_SITE_DEFAULT}"
+GIT_TOKEN="${GIT_TOKEN:-${GITHUB_TOKEN:-${GH_TOKEN:-}}}"
+GIT_USERNAME="${GIT_USERNAME:-x-access-token}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -57,6 +59,31 @@ as_root() {
   fi
 }
 
+make_authenticated_repo_url() {
+  local repo_url="$1"
+  if [[ -n "${GIT_TOKEN}" && "${repo_url}" =~ ^https://github\.com/ ]]; then
+    local suffix="${repo_url#https://}"
+    printf 'https://%s:%s@%s' "${GIT_USERNAME}" "${GIT_TOKEN}" "${suffix}"
+    return
+  fi
+  printf '%s' "${repo_url}"
+}
+
+show_git_auth_hint() {
+  cat <<'EOF'
+Git authentication failed.
+GitHub no longer supports password authentication for git operations.
+
+Use one of the following:
+1) Personal Access Token (recommended for HTTPS):
+   export GITHUB_TOKEN=ghp_xxx
+   ./deploy.sh --repo https://github.com/OWNER/REPO.git
+
+2) SSH:
+   ./deploy.sh --repo git@github.com:OWNER/REPO.git
+EOF
+}
+
 install_prerequisites() {
   as_root apt-get update -y
   as_root apt-get install -y ca-certificates curl git docker nginx
@@ -76,17 +103,34 @@ install_prerequisites() {
 }
 
 prepare_source() {
+  local auth_repo_url
+  auth_repo_url="$(make_authenticated_repo_url "${REPO_URL}")"
+
+  if ! git ls-remote "${auth_repo_url}" >/dev/null 2>&1; then
+    show_git_auth_hint
+    exit 1
+  fi
+
   as_root mkdir -p "${APP_DIR}"
   as_root chown -R "${USER}:${USER}" "${APP_DIR}"
 
   if [[ ! -d "${APP_DIR}/.git" ]]; then
-    git clone "${REPO_URL}" "${APP_DIR}"
+    git clone "${auth_repo_url}" "${APP_DIR}"
   fi
 
   cd "${APP_DIR}"
+
+  if [[ "${auth_repo_url}" != "${REPO_URL}" ]]; then
+    git remote set-url origin "${auth_repo_url}"
+  fi
+
   git fetch --all --prune
   git checkout "${BRANCH}"
   git pull --ff-only origin "${BRANCH}"
+
+  if [[ "${auth_repo_url}" != "${REPO_URL}" ]]; then
+    git remote set-url origin "${REPO_URL}"
+  fi
 
   if [[ ! -f "${APP_DIR}/.env" ]]; then
     cat > "${APP_DIR}/.env" <<EOF
