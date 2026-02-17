@@ -6,6 +6,7 @@ const AuditLogController = require('../../controllers/web/system/AuditLogControl
 const LendingLocationContextController = require('../../controllers/web/system/LendingLocationContextController');
 const UiTextController = require('../../controllers/web/system/UiTextController');
 const MailAdminController = require('../../controllers/web/system/MailAdminController');
+const PrivacyController = require('../../controllers/web/system/PrivacyController');
 const validate = require('../../middleware/validate');
 const { lendingLocationValidation } = require('../../validation');
 const uploadLendingLocationImage = require('../../middleware/lendingLocationImageUpload');
@@ -18,6 +19,7 @@ const auditLogController = new AuditLogController();
 const lendingLocationContextController = new LendingLocationContextController();
 const uiTextController = new UiTextController();
 const mailAdminController = new MailAdminController();
+const privacyController = new PrivacyController();
 
 router.get(
   '/system/lending-locations',
@@ -155,6 +157,48 @@ router.post(
   requireLogin,
   requirePermission('system.admin', globalScope),
   mailAdminController.updateTemplate.bind(mailAdminController)
+);
+router.get(
+  '/system/privacy',
+  requireLogin,
+  requirePermission('system.admin', globalScope),
+  privacyController.index.bind(privacyController)
+);
+router.post(
+  '/system/privacy/config',
+  requireLogin,
+  requirePermission('system.admin', globalScope),
+  privacyController.updateConfig.bind(privacyController)
+);
+router.post(
+  '/system/privacy/run-cleanup',
+  requireLogin,
+  requirePermission('system.admin', globalScope),
+  privacyController.runCleanup.bind(privacyController)
+);
+router.post(
+  '/system/privacy/requests',
+  requireLogin,
+  requirePermission('system.admin', globalScope),
+  privacyController.createRequest.bind(privacyController)
+);
+router.post(
+  '/system/privacy/requests/:id/process',
+  requireLogin,
+  requirePermission('system.admin', globalScope),
+  privacyController.processRequest.bind(privacyController)
+);
+router.post(
+  '/system/privacy/requests/:id/reject',
+  requireLogin,
+  requirePermission('system.admin', globalScope),
+  privacyController.rejectRequest.bind(privacyController)
+);
+router.get(
+  '/system/privacy/users/search',
+  requireLogin,
+  requirePermission('system.admin', globalScope),
+  privacyController.searchUsers.bind(privacyController)
 );
 
 module.exports = router;

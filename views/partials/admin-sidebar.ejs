@@ -14,10 +14,20 @@
     <nav class="nav flex-column">
 
     <!-- Manage LendingLocation -->
-    <% if (sidebarCan('openinghours.manage')) { %>
+    <% if (sidebarCanAny(['openinghours.manage', 'lendinglocations.manage', 'system.admin']) || (sidebarCan('admin.access') && sidebarCan('loan.manage'))) { %>
       <div class="mb-3">
         <div class="text-uppercase small text-muted fw-semibold mt-2"><%= tr('admin.sidebar.lending_management', 'Ausleih Verwaltung') %></div>
-        <a class="nav-link" href="/admin/opening-hours"><%= tr('admin.sidebar.opening_hours', 'Öffnungszeiten') %></a>
+        <% if (activeLendingLocation) { %>
+          <a class="nav-link" href="/system/lending-locations/<%= activeLendingLocation.id %>/edit"><%= tr('admin.sidebar.settings', 'Einstellungen') %></a>
+        <% } else if (sidebarCan('system.admin')) { %>
+          <a class="nav-link" href="/system/lending-locations"><%= tr('admin.sidebar.settings', 'Einstellungen') %></a>
+        <% } %>
+        <% if (sidebarCan('openinghours.manage')) { %>
+          <a class="nav-link" href="/admin/opening-hours"><%= tr('admin.sidebar.opening_hours', 'Öffnungszeiten') %></a>
+        <% } %>
+        <% if (sidebarCan('admin.access') && sidebarCan('loan.manage')) { %>
+          <a class="nav-link" href="/admin/lending-user-roles"><%= tr('admin.sidebar.lending_roles', 'Benutzerrolle (Ausleihe)') %></a>
+        <% } %>
       </div>
     <% } %>
 
@@ -25,11 +35,11 @@
     <% if (sidebarCan('inventory.manage')) { %>
       <div class="mb-3">
       <div class="text-uppercase small text-muted fw-semibold mt-2"><%= tr('admin.sidebar.inventory_management', 'Inventar Verwaltung') %></div>
+      <a class="nav-link" href="/admin/storage-locations"><%= tr('admin.sidebar.storage_locations', 'Lagerorte') %></a>
       <a class="nav-link" href="/admin/categories"><%= tr('admin.sidebar.categories', 'Kategorien') %></a>
       <a class="nav-link" href="/admin/manufacturers"><%= tr('admin.sidebar.manufacturers', 'Hersteller') %></a>
       <a class="nav-link" href="/admin/asset-models"><%= tr('admin.sidebar.asset_models', 'Asset Models') %></a>
       <a class="nav-link" href="/admin/assets"><%= tr('admin.sidebar.assets', 'Assets') %></a>
-      <a class="nav-link" href="/admin/storage-locations"><%= tr('admin.sidebar.storage_locations', 'Lagerorte') %></a>
       <hr class="my-0">
       <a class="nav-link" href="/admin/assets/import"><%= tr('admin.sidebar.import', 'Import') %></a>
       <a class="nav-link" href="/admin/exports"><%= tr('admin.sidebar.export', 'Export') %></a>
@@ -48,14 +58,11 @@
     <% } %>
 
     <!-- Manage Users and Permissions -->
-    <% if (sidebarCanAny(['users.manage', 'roles.manage', 'permissions.manage', 'admin.access'])) { %>
+    <% if (sidebarCan('system.admin')) { %>
       <div class="mb-3">
       <div class="text-uppercase small text-muted fw-semibold mt-4"><%= tr('admin.sidebar.user_management', 'Benutzerverwaltung') %></div>
       <% if (sidebarCan('users.manage')) { %>
         <a class="nav-link" href="/admin/users"><%= tr('admin.sidebar.users', 'Benutzer') %></a>
-      <% } %>
-      <% if (sidebarCan('admin.access')) { %>
-        <a class="nav-link" href="/admin/lending-user-roles"><%= tr('admin.sidebar.lending_roles', 'Benutzerrollen (Ausleihe)') %></a>
       <% } %>
       <% if (sidebarCan('roles.manage')) { %>
         <a class="nav-link" href="/admin/roles"><%= tr('admin.sidebar.roles', 'Rollen') %></a>
@@ -67,14 +74,11 @@
     <% } %>
 
     <!-- System Settings -->
-    <% if (sidebarCanAny(['system.admin', 'customfields.manage', 'audit.view', 'lendinglocations.manage', 'system.auth.manage'])) { %>
+    <% if (sidebarCan('system.admin')) { %>
       <div class="mb-3">
       <div class="text-uppercase small text-muted fw-semibold mt-4"><%= tr('admin.sidebar.system', 'System') %></div>
       <% if (sidebarCan('system.admin')) { %>
         <a class="nav-link" href="/system/lending-locations"><%= tr('admin.sidebar.lending_locations', 'Ausleihstellen') %></a>
-      <% } %>
-      <% if (!sidebarCan('system.admin') && sidebarCan('lendinglocations.manage') && activeLendingLocation) { %>
-        <a class="nav-link" href="/system/lending-locations/<%= activeLendingLocation.id %>/edit"><%= tr('admin.sidebar.lending_location', 'Ausleihe') %></a>
       <% } %>
       <% if (sidebarCan('customfields.manage')) { %>
         <a class="nav-link" href="/admin/custom-fields"><%= tr('admin.sidebar.custom_fields', 'Custom Fields') %></a>
@@ -85,6 +89,7 @@
       <% if (sidebarCan('system.admin')) { %>
         <a class="nav-link" href="/system/ui-texts"><%= tr('admin.sidebar.ui_texts', 'UI Texte') %></a>
         <a class="nav-link" href="/system/mail"><%= tr('admin.sidebar.mail', 'Mail-System') %></a>
+        <a class="nav-link" href="/system/privacy"><%= tr('admin.sidebar.privacy', 'Datenschutz') %></a>
       <% } %>
       <% if (sidebarCan('audit.view') || sidebarCan('system.admin')) { %>
         <a class="nav-link" href="/system/audit-log"><%= tr('admin.sidebar.audit_log', 'Audit Log') %></a>

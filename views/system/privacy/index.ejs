@@ -1,0 +1,222 @@
+<% pageTitle = 'Datenschutz' %>
+<%
+  const cfg = (typeof config !== 'undefined' && config) ? config : {};
+  const requestList = Array.isArray(requests) ? requests : [];
+  const safeFilters = (typeof filters !== 'undefined' && filters) ? filters : {};
+  const currentPage = (pagination && pagination.page) ? pagination.page : 1;
+  const perPage = (pagination && pagination.limit) ? pagination.limit : 20;
+  const total = (pagination && pagination.total) ? pagination.total : requestList.length;
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  const fmt = function (value) {
+    if (!value) return '-';
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+    const p = function (n) { return String(n).padStart(2, '0'); };
+    return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ' - ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  };
+  const userLabel = function (u) {
+    if (!u) return '-';
+    const name = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
+    if (name) return name + ' (' + (u.username || '-') + ')';
+    return u.username || '-';
+  };
+%>
+
+<section class="system privacy">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-end justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-2">Datenschutz</h1>
+      <p class="text-muted mb-0">Aufbewahrung, automatische Löschung und Bearbeitung von Löschanfragen.</p>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-12 col-lg-8">
+      <div class="card shadow-sm h-100">
+        <div class="card-header">
+          <h2 class="h6 mb-0">Automatische Löschung</h2>
+        </div>
+        <div class="card-body">
+          <form method="post" action="/system/privacy/config" class="row g-3">
+            <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+            <div class="col-12">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="isEnabled" name="isEnabled" <%= cfg.isEnabled ? 'checked' : '' %>>
+                <label class="form-check-label" for="isEnabled">Automatische Löschung aktiv</label>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="returnedLoanRetentionMonths">Aufbewahrung abgeschlossener Ausleihen (Monate)</label>
+              <input
+                type="number"
+                min="1"
+                max="120"
+                class="form-control"
+                id="returnedLoanRetentionMonths"
+                name="returnedLoanRetentionMonths"
+                value="<%= cfg.returnedLoanRetentionMonths || 3 %>"
+                required
+              >
+            </div>
+            <div class="col-md-6 d-flex align-items-end">
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="autoDeleteExternalUsers" name="autoDeleteExternalUsers" <%= cfg.autoDeleteExternalUsers ? 'checked' : '' %>>
+                <label class="form-check-label" for="autoDeleteExternalUsers">Externe Benutzer automatisch löschen</label>
+              </div>
+            </div>
+            <div class="col-12 d-flex flex-wrap gap-2">
+              <button type="submit" class="btn btn-primary">Speichern</button>
+              <button type="submit" formaction="/system/privacy/run-cleanup" class="btn btn-outline-secondary">Cleanup jetzt ausführen</button>
+            </div>
+          </form>
+        </div>
+        <div class="card-footer text-muted small">
+          Letzter Lauf: <%= fmt(cfg.lastRunAt) %>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header">
+          <h2 class="h6 mb-0">Löschanfrage anlegen</h2>
+        </div>
+        <div class="card-body">
+          <form method="post" action="/system/privacy/requests" class="row g-3" id="privacyDeletionRequestForm">
+            <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+            <div class="col-12">
+              <label class="form-label" for="privacyUserSearchInput">Benutzer suchen</label>
+              <div class="position-relative">
+                <input
+                  type="text"
+                  class="form-control"
+                  id="privacyUserSearchInput"
+                  placeholder="Name, Benutzername oder E-Mail"
+                  autocomplete="off"
+                  required
+                >
+                <input type="hidden" id="privacyDeletionUserId" name="userId" required>
+                <div id="privacyUserSearchResults" class="list-group position-absolute top-100 start-0 w-100 z-3 d-none"></div>
+              </div>
+              <div class="form-text" id="privacyUserSelectedLabel">Kein Benutzer ausgewählt.</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="requestNote">Notiz</label>
+              <textarea class="form-control" id="requestNote" name="requestNote" rows="3"></textarea>
+            </div>
+            <div class="col-12">
+              <button type="submit" class="btn btn-outline-primary">Löschanfrage erstellen</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <form method="get" action="/system/privacy" class="row g-2 align-items-end mb-3 panel">
+    <div class="col-12 col-lg-4">
+      <label class="form-label" for="q">Suche</label>
+      <input type="text" class="form-control" id="q" name="q" value="<%= safeFilters.q || '' %>" placeholder="Name, Benutzername oder E-Mail">
+    </div>
+    <div class="col-12 col-lg-3">
+      <label class="form-label" for="status">Status</label>
+      <select class="form-select" id="status" name="status">
+        <option value="">Alle</option>
+        <option value="open" <%= safeFilters.status === 'open' ? 'selected' : '' %>>Offen</option>
+        <option value="in_progress" <%= safeFilters.status === 'in_progress' ? 'selected' : '' %>>In Bearbeitung</option>
+        <option value="completed" <%= safeFilters.status === 'completed' ? 'selected' : '' %>>Abgeschlossen</option>
+        <option value="rejected" <%= safeFilters.status === 'rejected' ? 'selected' : '' %>>Abgelehnt</option>
+      </select>
+    </div>
+    <div class="col-12 col-lg-5 d-flex gap-2 justify-content-lg-end">
+      <button type="submit" class="btn btn-outline-primary">Filtern</button>
+      <a href="/system/privacy" class="btn btn-outline-secondary">Zurücksetzen</a>
+    </div>
+  </form>
+
+  <div class="card shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h2 class="h6 mb-0">Löschanfragen</h2>
+      <span class="text-muted small">Seite <%= currentPage %> / <%= totalPages %></span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Erstellt</th>
+            <th>Benutzer</th>
+            <th>Status</th>
+            <th>Anfrage</th>
+            <th>Bearbeitung</th>
+            <th class="actions-col">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (requestList.length) { %>
+            <% requestList.forEach(function(item) { %>
+              <tr>
+                <td><%= fmt(item.createdAt) %></td>
+                <td>
+                  <div><%= userLabel(item.user) %></div>
+                  <div class="text-muted small"><%= item.user && item.user.email ? item.user.email : '-' %></div>
+                </td>
+                <td>
+                  <% if (item.status === 'completed') { %>
+                    <span class="badge text-bg-success">Abgeschlossen</span>
+                  <% } else if (item.status === 'rejected') { %>
+                    <span class="badge text-bg-danger">Abgelehnt</span>
+                  <% } else if (item.status === 'in_progress') { %>
+                    <span class="badge text-bg-warning">In Bearbeitung</span>
+                  <% } else { %>
+                    <span class="badge text-bg-primary">Offen</span>
+                  <% } %>
+                </td>
+                <td class="text-break"><%= item.requestNote || '-' %></td>
+                <td>
+                  <div class="text-break"><%= item.processNote || '-' %></div>
+                  <div class="text-muted small"><%= fmt(item.processedAt) %></div>
+                </td>
+                <td class="actions-cell">
+                  <% if (item.status === 'open' || item.status === 'in_progress') { %>
+                    <form method="post" action="/system/privacy/requests/<%= item.id %>/process" class="d-inline-block me-1">
+                      <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                      <input type="hidden" name="processNote" value="DSGVO-Löschanfrage verarbeitet">
+                      <button type="submit" class="btn btn-sm btn-outline-success">Verarbeiten</button>
+                    </form>
+                    <form method="post" action="/system/privacy/requests/<%= item.id %>/reject" class="d-inline-block">
+                      <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+                      <input type="hidden" name="processNote" value="Löschanfrage abgelehnt">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Ablehnen</button>
+                    </form>
+                  <% } else { %>
+                    <span class="text-muted small">—</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="6" class="text-muted text-center py-4">Keine Löschanfragen vorhanden.</td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <% if (totalPages > 1) { %>
+    <div class="d-flex justify-content-end mt-3">
+      <nav aria-label="Pagination">
+        <ul class="pagination mb-0">
+          <% for (let p = 1; p <= totalPages; p += 1) { %>
+            <% const isActive = p === currentPage; %>
+            <li class="page-item <%= isActive ? 'active' : '' %>">
+              <a class="page-link" href="/system/privacy?page=<%= p %>&limit=<%= perPage %>&q=<%= encodeURIComponent(safeFilters.q || '') %>&status=<%= encodeURIComponent(safeFilters.status || '') %>"><%= p %></a>
+            </li>
+          <% } %>
+        </ul>
+      </nav>
+    </div>
+  <% } %>
+</section>
+
+<script src="/js/privacy-admin.js"></script>

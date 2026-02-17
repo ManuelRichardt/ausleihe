@@ -16,6 +16,7 @@
     "migrate-add-location-category-images": "node ./scripts/migrate-add-location-category-images.js",
     "migrate-add-ui-texts": "node ./scripts/migrate-add-ui-texts.js",
     "migrate-add-mail-system": "node ./scripts/migrate-add-mail-system.js",
+    "migrate-add-privacy-system": "node ./scripts/migrate-add-privacy-system.js",
     "sync-ui-texts": "node ./scripts/sync-ui-texts.js"
   },
   "dependencies": {

@@ -99,6 +99,15 @@ module.exports = (sequelize, DataTypes) => {
     User.hasMany(models.AuditLog, { foreignKey: 'userId', as: 'auditLogs' });
     User.hasMany(models.LoanEvent, { foreignKey: 'userId', as: 'loanEvents' });
     User.hasMany(models.Installation, { foreignKey: 'installedByUserId', as: 'installations' });
+    User.hasMany(models.PrivacyDeletionRequest, { foreignKey: 'userId', as: 'privacyDeletionRequests' });
+    User.hasMany(models.PrivacyDeletionRequest, {
+      foreignKey: 'requestedByUserId',
+      as: 'requestedPrivacyDeletionRequests',
+    });
+    User.hasMany(models.PrivacyDeletionRequest, {
+      foreignKey: 'processedByUserId',
+      as: 'processedPrivacyDeletionRequests',
+    });
   };
 
   User.prototype.comparePassword = async function comparePassword(plainPassword) {

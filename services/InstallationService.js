@@ -40,6 +40,7 @@ const uiTextSeed = [
   { key: 'admin.sidebar.loans', de: 'Ausleihe', en: 'Loans' },
   { key: 'admin.sidebar.system', de: 'System', en: 'System' },
   { key: 'admin.sidebar.mail', de: 'Mail-System', en: 'Mail system' },
+  { key: 'admin.sidebar.privacy', de: 'Datenschutz', en: 'Privacy' },
 ];
 
 const mailTemplateSeed = [
@@ -325,6 +326,18 @@ class InstallationService {
         },
         transaction,
       });
+
+      const existingPrivacyConfig = await models.PrivacyConfig.findOne({ transaction });
+      if (!existingPrivacyConfig) {
+        await models.PrivacyConfig.create(
+          {
+            isEnabled: true,
+            returnedLoanRetentionMonths: 3,
+            autoDeleteExternalUsers: true,
+          },
+          { transaction }
+        );
+      }
 
       for (const template of mailTemplateSeed) {
         const [entry] = await models.MailTemplate.findOrCreate({

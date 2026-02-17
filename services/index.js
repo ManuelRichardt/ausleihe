@@ -41,6 +41,7 @@ const MailConfigService = require('./MailConfigService');
 const MailTemplateService = require('./MailTemplateService');
 const NotificationService = require('./NotificationService');
 const MailService = require('./MailService');
+const PrivacyService = require('./PrivacyService');
 
 function createServices(customModels = models) {
   const availabilityService = new AvailabilityService(customModels);
@@ -52,6 +53,7 @@ function createServices(customModels = models) {
   const mailConfigService = new MailConfigService(customModels);
   const mailTemplateService = new MailTemplateService(customModels);
   const notificationService = new NotificationService(customModels);
+  const privacyService = new PrivacyService(customModels);
   return {
     authService: new AuthService(customModels),
     userService: new UserService(customModels),
@@ -99,6 +101,7 @@ function createServices(customModels = models) {
     mailTemplateService,
     notificationService,
     mailService: new MailService(customModels, mailConfigService, mailTemplateService, notificationService),
+    privacyService,
   };
 }
 
@@ -145,4 +148,5 @@ module.exports = {
   MailTemplateService,
   NotificationService,
   MailService,
+  PrivacyService,
 };

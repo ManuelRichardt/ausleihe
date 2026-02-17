@@ -10,6 +10,7 @@ const flash = require('connect-flash');
 const sanitize = require('./middleware/sanitize');
 const { csrfProtectionMiddleware } = require('./config/csrf');
 const buildSessionConfig = require('./config/session');
+const { createServices } = require('./services');
 
 const webRouter = require('./routes/web');
 const apiV1Router = require('./routes/api/v1');
@@ -17,6 +18,43 @@ const apiV1Router = require('./routes/api/v1');
 const db = require('./models');
 
 const app = express();
+const services = createServices(db);
+let privacyCleanupTimer = null;
+let privacyCleanupRunning = false;
+
+function getPrivacyCleanupIntervalMs() {
+  const raw = parseInt(process.env.PRIVACY_CLEANUP_INTERVAL_MINUTES || '60', 10);
+  const minutes = Number.isNaN(raw) ? 60 : Math.max(raw, 5);
+  return minutes * 60 * 1000;
+}
+
+function startPrivacyCleanupJob() {
+  if (privacyCleanupTimer || process.env.NODE_ENV === 'test') {
+    return;
+  }
+  const runCleanup = async () => {
+    if (privacyCleanupRunning) {
+      return;
+    }
+    privacyCleanupRunning = true;
+    try {
+      await services.privacyService.runAutomaticCleanup();
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'test') {
+        // eslint-disable-next-line no-console
+        console.error('Privacy cleanup failed:', err.message || err);
+      }
+    } finally {
+      privacyCleanupRunning = false;
+    }
+  };
+
+  runCleanup();
+  privacyCleanupTimer = setInterval(runCleanup, getPrivacyCleanupIntervalMs());
+  if (typeof privacyCleanupTimer.unref === 'function') {
+    privacyCleanupTimer.unref();
+  }
+}
 
 app.set('trust proxy', 1);
 
@@ -115,6 +153,7 @@ app.use('/api/v1', apiV1Router);
     if (process.env.DB_SYNC === 'true') {
       await db.sequelize.sync();
     }
+    startPrivacyCleanupJob();
   } catch (err) {
     if (process.env.NODE_ENV !== 'test') {
       // eslint-disable-next-line no-console

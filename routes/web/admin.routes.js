@@ -63,6 +63,34 @@ const reportAdminController = new ReportAdminController();
 const services = createServices();
 const OPENING_HOUR_ID_PARAM = ':id([0-9a-fA-F-]{36})';
 
+const requireLendingRoleManagement = (req, res, next) => {
+  const lendingLocationId =
+    req.lendingLocationId ||
+    req.body.lendingLocationId ||
+    req.query.lendingLocationId ||
+    null;
+  const userRoles = Array.isArray(req.userRoles) ? req.userRoles : [];
+  const hasSystemAdmin = services.authzService.hasPermission({
+    userRoles,
+    permissionKey: 'system.admin',
+    lendingLocationId: null,
+  });
+  const hasLendingLocationManage = services.authzService.hasPermission({
+    userRoles,
+    permissionKey: 'lendinglocations.manage',
+    lendingLocationId,
+  });
+  const hasLoanManage = services.authzService.hasPermission({
+    userRoles,
+    permissionKey: 'loan.manage',
+    lendingLocationId,
+  });
+  if (!hasSystemAdmin && !(hasLendingLocationManage && hasLoanManage)) {
+    return res.redirect('/access-denied');
+  }
+  return next();
+};
+
 const loanScope = async (req) => {
   if (req.loanScopeLendingLocationId) {
     return req.loanScopeLendingLocationId;
@@ -1017,21 +1045,21 @@ router.get(
   '/admin/lending-user-roles',
   requireLogin,
   lendingLocationContext,
-  requirePermission('admin.access', locationScope),
+  requireLendingRoleManagement,
   lendingUserRoleAdminController.index.bind(lendingUserRoleAdminController)
 );
 router.post(
   '/admin/lending-user-roles/:id/roles/assign',
   requireLogin,
   lendingLocationContext,
-  requirePermission('admin.access', locationScope),
+  requireLendingRoleManagement,
   lendingUserRoleAdminController.assign.bind(lendingUserRoleAdminController)
 );
 router.post(
   '/admin/lending-user-roles/:id/roles/:roleId/revoke',
   requireLogin,
   lendingLocationContext,
-  requirePermission('admin.access', locationScope),
+  requireLendingRoleManagement,
   lendingUserRoleAdminController.revoke.bind(lendingUserRoleAdminController)
 );
 router.get(
