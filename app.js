@@ -18,6 +18,7 @@ const apiV1Router = require('./routes/api/v1');
 const db = require('./models');
 
 const app = express();
+const enableHsts = String(process.env.ENABLE_HSTS || '').toLowerCase() === 'true';
 const services = createServices(db);
 let privacyCleanupTimer = null;
 let privacyCleanupRunning = false;
@@ -80,11 +81,13 @@ app.use(
         frameAncestors: ["'none'"],
       },
     },
-    hsts: {
-      maxAge: 15552000,
-      includeSubDomains: true,
-      preload: true,
-    },
+    hsts: enableHsts
+      ? {
+          maxAge: 15552000,
+          includeSubDomains: true,
+          preload: true,
+        }
+      : false,
     referrerPolicy: { policy: 'no-referrer' },
   })
 );

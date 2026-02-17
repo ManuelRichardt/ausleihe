@@ -111,6 +111,7 @@ DB_PASSWORD=inventory_password
 DB_PORT=3306
 DB_ROOT_PASSWORD=root_password
 DB_USER=inventory
+ENABLE_HSTS=false
 HTTP_PORT=3000
 NODE_ENV=development
 PASSWORD_MIN_LENGTH=12
@@ -129,6 +130,7 @@ EOF
     ensure_env_key "DB_PORT" "3306" "${env_file}"
     ensure_env_key "DB_ROOT_PASSWORD" "root_password" "${env_file}"
     ensure_env_key "DB_USER" "inventory" "${env_file}"
+    ensure_env_key "ENABLE_HSTS" "false" "${env_file}"
     ensure_env_key "HTTP_PORT" "3000" "${env_file}"
     ensure_env_key "NODE_ENV" "development" "${env_file}"
     ensure_env_key "PASSWORD_MIN_LENGTH" "12" "${env_file}"
@@ -171,10 +173,13 @@ server {
 }
 EOF
 
+  as_root mkdir -p /etc/nginx/sites-enabled
+  for enabled in /etc/nginx/sites-enabled/*; do
+    if [[ -e "${enabled}" ]] && [[ "$(basename "${enabled}")" != "${NGINX_SITE}.conf" ]]; then
+      as_root rm -f "${enabled}"
+    fi
+  done
   as_root ln -sfn "${nginx_conf}" "/etc/nginx/sites-enabled/${NGINX_SITE}.conf"
-  if [[ -e /etc/nginx/sites-enabled/default ]]; then
-    as_root rm -f /etc/nginx/sites-enabled/default
-  fi
   as_root nginx -t
   as_root systemctl enable nginx
   as_root systemctl restart nginx
