@@ -7,10 +7,24 @@ const { validatePasswordPolicy } = require('../../utils/passwordPolicy');
 const { renderPage, handleError } = require('./_controllerUtils');
 
 class InstallController {
+  buildDefaultFormData() {
+    return {
+      dbHost: process.env.DB_HOST || 'db',
+      dbPort: process.env.DB_PORT || '3306',
+      dbName: process.env.DB_NAME || 'inventory',
+      dbUser: process.env.DB_USER || 'inventory',
+      dbPassword: process.env.DB_PASSWORD || '',
+      dbDialect: process.env.DB_DIALECT || 'mariadb',
+      adminFirstName: 'System',
+      adminLastName: 'Administrator',
+    };
+  }
+
   async show(req, res, next) {
     try {
       return renderPage(res, 'system/install', req, {
         breadcrumbs: [{ label: 'Installation', href: '/install' }],
+        formData: this.buildDefaultFormData(),
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -54,7 +68,7 @@ class InstallController {
         res.status(422);
         return renderPage(res, 'system/install', req, {
           errors,
-          formData: req.body,
+          formData: { ...this.buildDefaultFormData(), ...req.body },
         });
       }
 
@@ -88,7 +102,7 @@ class InstallController {
   }
 
   async writeEnv(dbConfig) {
-    const envPath = path.join(__dirname, '..', '..', '.env');
+    const envPath = path.join(__dirname, '..', '..', '..', '.env');
     const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
     const lines = existing.split(/\r?\n/).filter(Boolean);
     const map = {};

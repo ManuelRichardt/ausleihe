@@ -2,34 +2,16 @@
 
 set -euo pipefail
 
-REPO_URL_DEFAULT="https://github.com/ManuelRichardt/ausleihe.git"
-APP_DIR_DEFAULT="/opt/ausleihe"
-BRANCH_DEFAULT=""
-SERVER_NAME_DEFAULT="_"
-APP_PORT_DEFAULT="3000"
-NGINX_SITE_DEFAULT="ausleihe"
-
-REPO_URL="${REPO_URL:-$REPO_URL_DEFAULT}"
-APP_DIR="${APP_DIR:-$APP_DIR_DEFAULT}"
-BRANCH="${BRANCH:-$BRANCH_DEFAULT}"
-SERVER_NAME="${SERVER_NAME:-$SERVER_NAME_DEFAULT}"
-APP_PORT="${APP_PORT:-$APP_PORT_DEFAULT}"
-NGINX_SITE="${NGINX_SITE:-$NGINX_SITE_DEFAULT}"
-GIT_TOKEN="${GIT_TOKEN:-${GITHUB_TOKEN:-${GH_TOKEN:-}}}"
-GIT_USERNAME="${GIT_USERNAME:-x-access-token}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="${APP_DIR:-$SCRIPT_DIR}"
+SERVER_NAME="${SERVER_NAME:-_}"
+APP_PORT="${APP_PORT:-3000}"
+NGINX_SITE="${NGINX_SITE:-ausleihe}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --repo)
-      REPO_URL="$2"
-      shift 2
-      ;;
     --app-dir)
       APP_DIR="$2"
-      shift 2
-      ;;
-    --branch)
-      BRANCH="$2"
       shift 2
       ;;
     --server-name)
@@ -59,66 +41,21 @@ as_root() {
   fi
 }
 
-make_authenticated_repo_url() {
-  local repo_url="$1"
-  if [[ -n "${GIT_TOKEN}" && "${repo_url}" =~ ^https://github\.com/ ]]; then
-    local suffix="${repo_url#https://}"
-    printf 'https://%s:%s@%s' "${GIT_USERNAME}" "${GIT_TOKEN}" "${suffix}"
-    return
+random_secret() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32
+  else
+    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64
   fi
-  printf '%s' "${repo_url}"
 }
 
-show_git_auth_hint() {
-  cat <<'EOF'
-Git authentication failed.
-GitHub no longer supports password authentication for git operations.
-
-Use one of the following:
-1) Personal Access Token (recommended for HTTPS):
-   export GITHUB_TOKEN=ghp_xxx
-   ./deploy.sh --repo https://github.com/OWNER/REPO.git
-
-2) SSH:
-   ./deploy.sh --repo git@github.com:OWNER/REPO.git
-EOF
-}
-
-resolve_branch() {
-  local requested_branch="$1"
-  local remote_head
-
-  if [[ -n "${requested_branch}" ]]; then
-    if git show-ref --verify --quiet "refs/remotes/origin/${requested_branch}"; then
-      printf '%s' "${requested_branch}"
-      return
-    fi
-    echo "Requested branch '${requested_branch}' not found on origin. Falling back to default branch."
+ensure_env_key() {
+  local key="$1"
+  local value="$2"
+  local env_file="$3"
+  if ! grep -q "^${key}=" "$env_file"; then
+    echo "${key}=${value}" >>"$env_file"
   fi
-
-  remote_head="$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)"
-  if [[ -n "${remote_head}" ]]; then
-    printf '%s' "${remote_head#origin/}"
-    return
-  fi
-
-  remote_head="$(git ls-remote --symref origin HEAD 2>/dev/null | awk '/^ref:/ { print $2; exit }' | sed 's#^refs/heads/##')"
-  if [[ -n "${remote_head}" ]]; then
-    printf '%s' "${remote_head}"
-    return
-  fi
-
-  if git show-ref --verify --quiet refs/remotes/origin/main; then
-    printf 'main'
-    return
-  fi
-  if git show-ref --verify --quiet refs/remotes/origin/master; then
-    printf 'master'
-    return
-  fi
-
-  echo "Could not resolve a deploy branch. Use --branch <name>." >&2
-  exit 1
 }
 
 install_prerequisites() {
@@ -133,73 +70,80 @@ install_prerequisites() {
     as_root apt-get install -y docker-compose-plugin
   fi
 
-  if [[ "$(id -u)" -ne 0 ]] && groups "${USER}" | grep -qv '\bdocker\b'; then
+  if [[ "$(id -u)" -ne 0 ]] && ! id -nG "${USER}" | grep -qw docker; then
     as_root usermod -aG docker "${USER}"
-    echo "User '${USER}' was added to docker group. Re-login may be required."
+    echo "User '${USER}' added to docker group. If docker command fails, re-login and run script again."
   fi
 }
 
-prepare_source() {
-  local auth_repo_url
-  auth_repo_url="$(make_authenticated_repo_url "${REPO_URL}")"
-
-  if ! git ls-remote "${auth_repo_url}" >/dev/null 2>&1; then
-    show_git_auth_hint
-    exit 1
-  fi
-
+prepare_app_dir() {
   as_root mkdir -p "${APP_DIR}"
   as_root chown -R "${USER}:${USER}" "${APP_DIR}"
 
-  if [[ ! -d "${APP_DIR}/.git" ]]; then
-    git clone "${auth_repo_url}" "${APP_DIR}"
+  if [[ "${APP_DIR}" != "${SCRIPT_DIR}" ]]; then
+    if command -v rsync >/dev/null 2>&1; then
+      rsync -a --delete \
+        --exclude='.git' \
+        --exclude='node_modules' \
+        --exclude='uploads/signatures' \
+        "${SCRIPT_DIR}/" "${APP_DIR}/"
+    else
+      as_root apt-get install -y rsync
+      rsync -a --delete \
+        --exclude='.git' \
+        --exclude='node_modules' \
+        --exclude='uploads/signatures' \
+        "${SCRIPT_DIR}/" "${APP_DIR}/"
+    fi
   fi
+}
 
-  cd "${APP_DIR}"
-
-  if [[ "${auth_repo_url}" != "${REPO_URL}" ]]; then
-    git remote set-url origin "${auth_repo_url}"
-  fi
-
-  git fetch --all --prune
-
-  BRANCH="$(resolve_branch "${BRANCH}")"
-  git checkout "${BRANCH}" 2>/dev/null || git checkout -b "${BRANCH}" "origin/${BRANCH}"
-  git pull --ff-only origin "${BRANCH}"
-
-  if [[ "${auth_repo_url}" != "${REPO_URL}" ]]; then
-    git remote set-url origin "${REPO_URL}"
-  fi
-
-  if [[ ! -f "${APP_DIR}/.env" ]]; then
-    cat > "${APP_DIR}/.env" <<EOF
-ACCESS_TOKEN_SECRET=change_me_access_token_secret
+ensure_env_file() {
+  local env_file="${APP_DIR}/.env"
+  if [[ ! -f "${env_file}" ]]; then
+    cat >"${env_file}" <<EOF
+ACCESS_TOKEN_SECRET=$(random_secret)
 ACCESS_TOKEN_TTL_SECONDS=900
 DB_DIALECT=mariadb
 DB_HOST=db
 DB_NAME=inventory
-DB_PASSWORD=change_me_db_password
+DB_PASSWORD=inventory_password
 DB_PORT=3306
+DB_ROOT_PASSWORD=root_password
 DB_USER=inventory
 HTTP_PORT=3000
+NODE_ENV=development
 PASSWORD_MIN_LENGTH=12
 PORT=3000
-REFRESH_TOKEN_SECRET=change_me_refresh_token_secret
+REFRESH_TOKEN_SECRET=$(random_secret)
 REFRESH_TOKEN_TTL_DAYS=14
-SESSION_SECRET=change_me_session_secret
-NODE_ENV=development
+SESSION_SECRET=$(random_secret)
 EOF
-    echo "Created ${APP_DIR}/.env. Please set secure secrets before productive usage."
+  else
+    ensure_env_key "ACCESS_TOKEN_SECRET" "$(random_secret)" "${env_file}"
+    ensure_env_key "ACCESS_TOKEN_TTL_SECONDS" "900" "${env_file}"
+    ensure_env_key "DB_DIALECT" "mariadb" "${env_file}"
+    ensure_env_key "DB_HOST" "db" "${env_file}"
+    ensure_env_key "DB_NAME" "inventory" "${env_file}"
+    ensure_env_key "DB_PASSWORD" "inventory_password" "${env_file}"
+    ensure_env_key "DB_PORT" "3306" "${env_file}"
+    ensure_env_key "DB_ROOT_PASSWORD" "root_password" "${env_file}"
+    ensure_env_key "DB_USER" "inventory" "${env_file}"
+    ensure_env_key "HTTP_PORT" "3000" "${env_file}"
+    ensure_env_key "NODE_ENV" "development" "${env_file}"
+    ensure_env_key "PASSWORD_MIN_LENGTH" "12" "${env_file}"
+    ensure_env_key "PORT" "3000" "${env_file}"
+    ensure_env_key "REFRESH_TOKEN_SECRET" "$(random_secret)" "${env_file}"
+    ensure_env_key "REFRESH_TOKEN_TTL_DAYS" "14" "${env_file}"
+    ensure_env_key "SESSION_SECRET" "$(random_secret)" "${env_file}"
   fi
 }
 
-deploy_compose() {
+docker_compose_up() {
   cd "${APP_DIR}"
-  if docker compose version >/dev/null 2>&1; then
-    docker compose pull || true
+  if docker info >/dev/null 2>&1; then
     docker compose up -d --build
   else
-    as_root docker compose pull || true
     as_root docker compose up -d --build
   fi
 }
@@ -236,25 +180,32 @@ EOF
   as_root systemctl restart nginx
 }
 
-main() {
-  install_prerequisites
-  prepare_source
-  deploy_compose
-  configure_nginx
+print_result() {
+  local server_ip
+  server_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  if [[ -z "${server_ip}" ]]; then
+    server_ip="localhost"
+  fi
 
   cat <<EOF
 Deployment completed.
-- Repo: ${REPO_URL}
-- App dir: ${APP_DIR}
-- Branch: ${BRANCH}
-- Nginx server_name: ${SERVER_NAME}
-- App proxied to: http://127.0.0.1:${APP_PORT}
 
-Useful commands:
-  cd ${APP_DIR}
-  docker compose logs -f app
-  docker compose ps
+Open:
+  http://${server_ip}/install
+
+Then enter:
+  - Database connection
+  - Initial admin account
 EOF
+}
+
+main() {
+  install_prerequisites
+  prepare_app_dir
+  ensure_env_file
+  docker_compose_up
+  configure_nginx
+  print_result
 }
 
 main
