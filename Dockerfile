@@ -1,19 +1,16 @@
 FROM node:22-alpine
 
-WORKDIR /usr/src/app
+# PM2 global installieren
+RUN npm install pm2 -g
 
-ENV NODE_ENV=production
+WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# Abhängigkeiten kopieren und installieren
+COPY package*.json ./
+RUN npm install --production
 
+# Restlichen Code kopieren
 COPY . .
 
-RUN mkdir -p /usr/src/app/uploads/signatures \
-  && chown -R node:node /usr/src/app
-
-USER node
-
-EXPOSE 3000
-
-CMD ["node", "./bin/www"]
+# Wichtig: express-generator startet über bin/www
+CMD ["pm2-runtime", "start", "./bin/www", "--name", "express-app"]
