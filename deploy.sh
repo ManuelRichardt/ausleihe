@@ -101,3 +101,9 @@ sudo systemctl start nginx
 
 echo "Setup abgeschlossen im Modus ${MODE#--}!"
 echo "Vergiss nicht, die .env in $APP_DIR zu prüfen und 'docker compose up -d --build' zu starten."
+
+# 6. Docker Compose starten
+sudo cd $APP_DIR && docker compose up -d --build
+
+# 7. PM2 Monitoring starten
+sudo docker exec -it app-app-1 npx pm2 monit
