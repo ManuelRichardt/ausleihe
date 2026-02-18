@@ -1,8 +1,5 @@
 FROM node:22-alpine
 
-# PM2 global installieren
-RUN npm install pm2 -g
-
 WORKDIR /app
 
 # Abhängigkeiten kopieren und installieren
@@ -13,4 +10,4 @@ RUN npm install --production
 COPY . .
 
 # Wichtig: express-generator startet über bin/www
-CMD ["pm2-runtime", "start", "./bin/www", "--name", "express-app"]
+CMD ["npx", "pm2-runtime", "start", "./bin/www"]
