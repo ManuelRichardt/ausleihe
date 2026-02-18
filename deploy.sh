@@ -1,220 +1,103 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-set -euo pipefail
+# --- ALLGEMEINE KONFIGURATION ---
+GIT_REPO="https://github.com/ManuelRichardt/ausleihe.git"
+APP_DIR="/var/www/app"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_DIR="${APP_DIR:-$SCRIPT_DIR}"
-SERVER_NAME="${SERVER_NAME:-_}"
-APP_PORT="${APP_PORT:-3000}"
-NGINX_SITE="${NGINX_SITE:-ausleihe}"
+# --- PROD SPEZIFISCH (Wird nur bei --prod genutzt) ---
+MAIL="deine-mail@beispiel.de"
+EAB_KID="DEINE_KEY_ID"
+EAB_HMAC="DEIN_HMAC_KEY"
+API_URL="https://api.dein-rechenzentrum.de/acme"
+DOMAIN="deine-domain.de"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --app-dir)
-      APP_DIR="$2"
-      shift 2
-      ;;
-    --server-name)
-      SERVER_NAME="$2"
-      shift 2
-      ;;
-    --app-port)
-      APP_PORT="$2"
-      shift 2
-      ;;
-    --site-name)
-      NGINX_SITE="$2"
-      shift 2
-      ;;
-    *)
-      echo "Unknown option: $1" >&2
-      exit 1
-      ;;
-  esac
-done
+# Modus auslesen
+MODE=$1
 
-as_root() {
-  if [[ "$(id -u)" -eq 0 ]]; then
-    "$@"
-  else
-    sudo "$@"
-  fi
-}
+if [[ "$MODE" != "--dev" && "$MODE" != "--prod" ]]; then
+    echo "Fehler: Bitte Modus angeben! Nutzung: ./deploy.sh --dev ODER ./deploy.sh --prod"
+    exit 1
+fi
 
-random_secret() {
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex 32
-  else
-    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64
-  fi
-}
+echo "Starte Deployment im Modus: ${MODE#--}"
 
-ensure_env_key() {
-  local key="$1"
-  local value="$2"
-  local env_file="$3"
-  if ! grep -q "^${key}=" "$env_file"; then
-    echo "${key}=${value}" >>"$env_file"
-  fi
-}
+# 1. System-Updates & Docker
+sudo apt update && sudo apt install -y curl git nginx openssl python3-certbot-nginx
+if ! command -v docker &> /dev/null; then
+    curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
+    sudo usermod -aG docker $USER
+fi
 
-install_prerequisites() {
-  as_root apt-get update -y
-  as_root apt-get install -y ca-certificates curl git nginx
+# 2. Firewall
+sudo ufw allow OpenSSH
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw --force enable
 
-  if ! command -v docker >/dev/null 2>&1; then
-    curl -fsSL https://get.docker.com | as_root sh
-  fi
+# 3. Projekt klonen
+sudo mkdir -p $APP_DIR
+sudo chown $USER:$USER $APP_DIR
+if [ ! -d "$APP_DIR/.git" ]; then
+    git clone $GIT_REPO $APP_DIR
+fi
 
-  if ! docker compose version >/dev/null 2>&1; then
-    as_root apt-get install -y docker-compose-plugin
-  fi
+# 4. SSL Zertifikate generieren (Modus-Abhängig)
+sudo systemctl stop nginx
 
-  if [[ "$(id -u)" -ne 0 ]] && ! id -nG "${USER}" | grep -qw docker; then
-    as_root usermod -aG docker "${USER}"
-    echo "User '${USER}' added to docker group. If docker command fails, re-login and run script again."
-  fi
-}
+if [ "$MODE" == "--dev" ]; then
+    echo "Modus DEV: Generiere Self-Signed Zertifikate..."
+    sudo mkdir -p /etc/nginx/ssl
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+      -keyout /etc/nginx/ssl/cert.key \
+      -out /etc/nginx/ssl/cert.crt \
+      -subj "/C=DE/ST=State/L=City/O=Dev/CN=localhost"
+    CERT_PATH="/etc/nginx/ssl/cert.crt"
+    KEY_PATH="/etc/nginx/ssl/cert.key"
+    SERVER_NAME="localhost"
+else
+    echo "Modus PROD: Fordere Zertifikat via EAB an..."
+    sudo certbot certonly --standalone --non-interactive --agree-tos \
+      --email "$MAIL" \
+      --eab-kid "$EAB_KID" \
+      --eab-hmac-key "$EAB_HMAC" \
+      --server "$API_URL" \
+      --domain "$DOMAIN"
+    CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
+    KEY_PATH="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
+    SERVER_NAME="$DOMAIN"
+fi
 
-prepare_app_dir() {
-  as_root mkdir -p "${APP_DIR}"
-  as_root chown -R "${USER}:${USER}" "${APP_DIR}"
-
-  if [[ "${APP_DIR}" != "${SCRIPT_DIR}" ]]; then
-    if command -v rsync >/dev/null 2>&1; then
-      rsync -a --delete \
-        --exclude='.git' \
-        --exclude='node_modules' \
-        --exclude='uploads/signatures' \
-        "${SCRIPT_DIR}/" "${APP_DIR}/"
-    else
-      as_root apt-get install -y rsync
-      rsync -a --delete \
-        --exclude='.git' \
-        --exclude='node_modules' \
-        --exclude='uploads/signatures' \
-        "${SCRIPT_DIR}/" "${APP_DIR}/"
-    fi
-  fi
-}
-
-ensure_env_file() {
-  local env_file="${APP_DIR}/.env"
-  if [[ ! -f "${env_file}" ]]; then
-    cat >"${env_file}" <<EOF
-ACCESS_TOKEN_SECRET=$(random_secret)
-ACCESS_TOKEN_TTL_SECONDS=900
-DB_DIALECT=mariadb
-DB_HOST=db
-DB_NAME=inventory
-DB_PASSWORD=inventory_password
-DB_PORT=3306
-DB_ROOT_PASSWORD=root_password
-DB_USER=inventory
-ENABLE_HSTS=false
-HTTP_PORT=3000
-NODE_ENV=development
-PASSWORD_MIN_LENGTH=12
-PORT=3000
-REFRESH_TOKEN_SECRET=$(random_secret)
-REFRESH_TOKEN_TTL_DAYS=14
-SESSION_COOKIE_SECURE=false
-CSRF_COOKIE_SECURE=false
-SESSION_SECRET=$(random_secret)
-EOF
-  else
-    ensure_env_key "ACCESS_TOKEN_SECRET" "$(random_secret)" "${env_file}"
-    ensure_env_key "ACCESS_TOKEN_TTL_SECONDS" "900" "${env_file}"
-    ensure_env_key "DB_DIALECT" "mariadb" "${env_file}"
-    ensure_env_key "DB_HOST" "db" "${env_file}"
-    ensure_env_key "DB_NAME" "inventory" "${env_file}"
-    ensure_env_key "DB_PASSWORD" "inventory_password" "${env_file}"
-    ensure_env_key "DB_PORT" "3306" "${env_file}"
-    ensure_env_key "DB_ROOT_PASSWORD" "root_password" "${env_file}"
-    ensure_env_key "DB_USER" "inventory" "${env_file}"
-    ensure_env_key "ENABLE_HSTS" "false" "${env_file}"
-    ensure_env_key "HTTP_PORT" "3000" "${env_file}"
-    ensure_env_key "NODE_ENV" "development" "${env_file}"
-    ensure_env_key "PASSWORD_MIN_LENGTH" "12" "${env_file}"
-    ensure_env_key "PORT" "3000" "${env_file}"
-    ensure_env_key "REFRESH_TOKEN_SECRET" "$(random_secret)" "${env_file}"
-    ensure_env_key "REFRESH_TOKEN_TTL_DAYS" "14" "${env_file}"
-    ensure_env_key "SESSION_COOKIE_SECURE" "false" "${env_file}"
-    ensure_env_key "CSRF_COOKIE_SECURE" "false" "${env_file}"
-    ensure_env_key "SESSION_SECRET" "$(random_secret)" "${env_file}"
-  fi
-}
-
-docker_compose_up() {
-  cd "${APP_DIR}"
-  if docker info >/dev/null 2>&1; then
-    docker compose up -d --build
-  else
-    as_root docker compose up -d --build
-  fi
-}
-
-configure_nginx() {
-  local nginx_conf="/etc/nginx/sites-available/${NGINX_SITE}.conf"
-
-  as_root bash -c "cat > '${nginx_conf}'" <<EOF
+# 5. Nginx Konfiguration
+echo "Konfiguriere Nginx..."
+NGINX_CONF="/etc/nginx/sites-available/nodejs-app"
+sudo bash -c "cat > $NGINX_CONF" <<EOF
 server {
     listen 80;
-    server_name ${SERVER_NAME};
+    server_name $SERVER_NAME;
+    return 301 https://\$host\$request_uri;
+}
 
-    client_max_body_size 50m;
+server {
+    listen 443 ssl http2;
+    server_name $SERVER_NAME;
+
+    ssl_certificate $CERT_PATH;
+    ssl_certificate_key $KEY_PATH;
 
     location / {
-        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_pass http://localhost:3000;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
     }
 }
 EOF
 
-  as_root mkdir -p /etc/nginx/sites-enabled
-  for enabled in /etc/nginx/sites-enabled/*; do
-    if [[ -e "${enabled}" ]] && [[ "$(basename "${enabled}")" != "${NGINX_SITE}.conf" ]]; then
-      as_root rm -f "${enabled}"
-    fi
-  done
-  as_root ln -sfn "${nginx_conf}" "/etc/nginx/sites-enabled/${NGINX_SITE}.conf"
-  as_root nginx -t
-  as_root systemctl enable nginx
-  as_root systemctl restart nginx
-}
+sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo systemctl start nginx
 
-print_result() {
-  local server_ip
-  server_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  if [[ -z "${server_ip}" ]]; then
-    server_ip="localhost"
-  fi
-
-  cat <<EOF
-Deployment completed.
-
-Open:
-  http://${server_ip}/install
-
-Then enter:
-  - Database connection
-  - Initial admin account
-EOF
-}
-
-main() {
-  install_prerequisites
-  prepare_app_dir
-  ensure_env_file
-  docker_compose_up
-  configure_nginx
-  print_result
-}
-
-main
+echo "Setup abgeschlossen im Modus ${MODE#--}!"
+echo "Vergiss nicht, die .env in $APP_DIR zu prüfen und 'docker compose up -d --build' zu starten."
