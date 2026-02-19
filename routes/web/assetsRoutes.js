@@ -2,8 +2,8 @@ const express = require('express');
 const requireLogin = require('../../middleware/web/requireLogin');
 const requirePermission = require('../../middleware/web/requirePermission');
 const lendingLocationContext = require('../../middleware/web/lendingLocationContext');
-const AssetController = require('../../controllers/web/assetController');
-const CatalogController = require('../../controllers/web/catalogController');
+const AssetController = require('../../controllers/web/AssetController');
+const CatalogController = require('../../controllers/web/CatalogController');
 
 const router = express.Router();
 const controller = new AssetController();

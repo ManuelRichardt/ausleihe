@@ -1,7 +1,7 @@
 const express = require('express');
 const requireLogin = require('../../middleware/web/requireLogin');
 const requirePermission = require('../../middleware/web/requirePermission');
-const CartController = require('../../controllers/web/cartController');
+const CartController = require('../../controllers/web/CartController');
 
 const router = express.Router();
 const controller = new CartController();

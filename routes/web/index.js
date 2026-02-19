@@ -3,7 +3,7 @@ const injectUser = require('../../middleware/web/injectUser');
 const lendingLocationContext = require('../../middleware/web/lendingLocationContext');
 const navigationMiddleware = require('../../middleware/navigationMiddleware');
 const i18nMiddleware = require('../../middleware/i18n');
-const HomeController = require('../../controllers/web/homeController');
+const HomeController = require('../../controllers/web/HomeController');
 
 const authRoutes = require('./authRoutes');
 const installRoutes = require('./installRoutes');

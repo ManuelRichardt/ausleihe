@@ -1,4 +1,4 @@
-const { InstallationService } = require('../../services/installationService');
+const { InstallationService } = require('../../services/InstallationService');
 const { validatePasswordPolicy } = require('../../utils/passwordPolicy');
 const { renderPage, handleError } = require('./controllerUtils');
 const models = require('../../models');

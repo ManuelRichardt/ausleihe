@@ -1,4 +1,4 @@
-const AuthzService = require('../../../services/authzService');
+const AuthzService = require('../../../services/AuthzService');
 const { services, handleError } = require('../controllerUtils');
 
 class LendingLocationContextController {

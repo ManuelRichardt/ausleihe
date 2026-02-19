@@ -3,7 +3,7 @@ const requireLogin = require('../../middleware/web/requireLogin');
 const requirePermission = require('../../middleware/web/requirePermission');
 const lendingLocationContext = require('../../middleware/web/lendingLocationContext');
 const resolveLoanScope = require('../../middleware/loanScope');
-const LoanSignatureController = require('../../controllers/loanSignatureController');
+const LoanSignatureController = require('../../controllers/LoanSignatureController');
 const validate = require('../../middleware/validation/handleValidation');
 const { loanSignValidation } = require('../../middleware/validation');
 

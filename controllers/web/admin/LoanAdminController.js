@@ -1,6 +1,6 @@
 const { services, renderPage, handleError } = require('../controllerUtils');
 const { formatDateTime } = require('../../../utils/dateFormat');
-const SignatureService = require('../../../services/signatureService');
+const SignatureService = require('../../../services/SignatureService');
 const models = require('../../../models');
 
 const RETURN_ITEM_REDIRECT = Object.freeze({

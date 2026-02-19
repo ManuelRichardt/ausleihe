@@ -1,7 +1,7 @@
 const express = require('express');
 const requireLogin = require('../../middleware/web/requireLogin');
 const requirePermission = require('../../middleware/web/requirePermission');
-const UserReservationController = require('../../controllers/web/user/reservationController');
+const UserReservationController = require('../../controllers/web/user/ReservationController');
 
 const router = express.Router();
 const controller = new UserReservationController();

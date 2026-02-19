@@ -1,7 +1,7 @@
 const express = require('express');
 const requireLogin = require('../../middleware/web/requireLogin');
 const requirePermission = require('../../middleware/web/requirePermission');
-const UserLoanController = require('../../controllers/web/user/loanController');
+const UserLoanController = require('../../controllers/web/user/LoanController');
 
 const router = express.Router();
 const controller = new UserLoanController();

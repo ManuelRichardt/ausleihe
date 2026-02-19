@@ -1,5 +1,5 @@
 const express = require('express');
-const AdminAssetImportController = require('../../../controllers/adminAssetImportController');
+const AdminAssetImportController = require('../../../controllers/AdminAssetImportController');
 const { requirePermission } = require('./authzMiddleware');
 const { resolveLendingLocationId } = require('./scope');
 

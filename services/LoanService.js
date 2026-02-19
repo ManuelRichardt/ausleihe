@@ -32,19 +32,19 @@ class LoanService {
     if (availabilityService) {
       this.availabilityService = availabilityService;
     } else {
-      const AvailabilityService = require('./availabilityService');
+      const AvailabilityService = require('./AvailabilityService');
       this.availabilityService = new AvailabilityService(models);
     }
     if (inventoryStockService) {
       this.inventoryStockService = inventoryStockService;
     } else {
-      const InventoryStockService = require('./inventoryStockService');
+      const InventoryStockService = require('./InventoryStockService');
       this.inventoryStockService = new InventoryStockService(models);
     }
     if (bundleService) {
       this.bundleService = bundleService;
     } else {
-      const BundleService = require('./bundleService');
+      const BundleService = require('./BundleService');
       this.bundleService = new BundleService(models, this.availabilityService, this.inventoryStockService);
     }
   }

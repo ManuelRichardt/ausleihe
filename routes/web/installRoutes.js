@@ -1,5 +1,5 @@
 const express = require('express');
-const InstallController = require('../../controllers/web/installController');
+const InstallController = require('../../controllers/web/InstallController');
 
 const router = express.Router();
 const controller = new InstallController();

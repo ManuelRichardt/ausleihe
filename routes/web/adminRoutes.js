@@ -26,22 +26,22 @@ const {
   storageLocationValidation,
 } = require('../../middleware/validation');
 
-const UserAdminController = require('../../controllers/web/admin/userAdminController');
-const RoleAdminController = require('../../controllers/web/admin/roleAdminController');
-const PermissionAdminController = require('../../controllers/web/admin/permissionAdminController');
-const CustomFieldAdminController = require('../../controllers/web/admin/customFieldAdminController');
-const CategoryAdminController = require('../../controllers/web/admin/categoryAdminController');
-const ManufacturerAdminController = require('../../controllers/web/admin/manufacturerAdminController');
-const AssetModelAdminController = require('../../controllers/web/admin/assetModelAdminController');
-const AssetInstanceAdminController = require('../../controllers/web/admin/assetInstanceAdminController');
-const OpeningHourAdminController = require('../../controllers/web/admin/openingHourAdminController');
-const StorageLocationAdminController = require('../../controllers/web/admin/storageLocationAdminController');
-const ReservationAdminController = require('../../controllers/web/admin/reservationAdminController');
-const LoanAdminController = require('../../controllers/web/admin/loanAdminController');
-const LendingUserRoleAdminController = require('../../controllers/web/admin/lendingUserRoleAdminController');
-const AdminAssetImportController = require('../../controllers/adminAssetImportController');
-const ExportAdminController = require('../../controllers/web/admin/exportAdminController');
-const ReportAdminController = require('../../controllers/web/admin/reportAdminController');
+const UserAdminController = require('../../controllers/web/admin/UserAdminController');
+const RoleAdminController = require('../../controllers/web/admin/RoleAdminController');
+const PermissionAdminController = require('../../controllers/web/admin/PermissionAdminController');
+const CustomFieldAdminController = require('../../controllers/web/admin/CustomFieldAdminController');
+const CategoryAdminController = require('../../controllers/web/admin/CategoryAdminController');
+const ManufacturerAdminController = require('../../controllers/web/admin/ManufacturerAdminController');
+const AssetModelAdminController = require('../../controllers/web/admin/AssetModelAdminController');
+const AssetInstanceAdminController = require('../../controllers/web/admin/AssetInstanceAdminController');
+const OpeningHourAdminController = require('../../controllers/web/admin/OpeningHourAdminController');
+const StorageLocationAdminController = require('../../controllers/web/admin/StorageLocationAdminController');
+const ReservationAdminController = require('../../controllers/web/admin/ReservationAdminController');
+const LoanAdminController = require('../../controllers/web/admin/LoanAdminController');
+const LendingUserRoleAdminController = require('../../controllers/web/admin/LendingUserRoleAdminController');
+const AdminAssetImportController = require('../../controllers/AdminAssetImportController');
+const ExportAdminController = require('../../controllers/web/admin/ExportAdminController');
+const ReportAdminController = require('../../controllers/web/admin/ReportAdminController');
 
 const registerInventoryRoutes = require('./admin/modules/inventoryRoutes');
 const registerOpeningHourRoutes = require('./admin/modules/openingHoursRoutes');
