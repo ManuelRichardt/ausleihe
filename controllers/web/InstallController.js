@@ -56,7 +56,7 @@ class InstallController {
 
       const installer = new InstallationService(models);
 
-      await installer.run({
+      await installer.runInitialInstallation({
         adminUsername: admin.username,
         adminEmail: admin.email,
         adminPassword: admin.password,

@@ -95,14 +95,14 @@ class LendingLocationController {
         missing.status = 422;
         throw missing;
       }
-      await services.userService.assignRole(
-        {
+      await services.userService.assignRole({
+        assignment: {
           userId: adminUser.id,
           roleId: adminRoles[0].id,
           lendingLocationId: location.id,
         },
-        { actorId: req.user ? req.user.id : null }
-      );
+        actorContext: { actorId: req.user ? req.user.id : null },
+      });
       if (typeof req.flash === 'function') {
         req.flash('success', 'Lending location created');
       }
@@ -196,19 +196,19 @@ class LendingLocationController {
           where: { lendingLocationId: req.params.id, roleId: adminRole[0].id },
         });
         for (const role of existingRoles) {
-          await services.userService.revokeRole(
-            { userId: role.userId, roleId: role.roleId, lendingLocationId: req.params.id },
-            { actorId: req.user ? req.user.id : null }
-          );
+          await services.userService.revokeRole({
+            assignment: { userId: role.userId, roleId: role.roleId, lendingLocationId: req.params.id },
+            actorContext: { actorId: req.user ? req.user.id : null },
+          });
         }
-        await services.userService.assignRole(
-          {
+        await services.userService.assignRole({
+          assignment: {
             userId: req.body.adminUserId,
             roleId: adminRole[0].id,
             lendingLocationId: req.params.id,
           },
-          { actorId: req.user ? req.user.id : null }
-        );
+          actorContext: { actorId: req.user ? req.user.id : null },
+        });
       }
       if (typeof req.flash === 'function') {
         req.flash('success', 'Lending location updated');

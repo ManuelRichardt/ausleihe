@@ -101,14 +101,14 @@ class LendingUserRoleAdminController {
         throw err;
       }
 
-      await services.userService.assignRole(
-        {
+      await services.userService.assignRole({
+        assignment: {
           userId: targetUserId,
           roleId: role.id,
           lendingLocationId: req.lendingLocationId,
         },
-        { actorId: req.user ? req.user.id : null }
-      );
+        actorContext: { actorId: req.user ? req.user.id : null },
+      });
 
       if (typeof req.flash === 'function') {
         req.flash('success', 'Rolle zugewiesen.');
@@ -143,14 +143,14 @@ class LendingUserRoleAdminController {
         throw err;
       }
 
-      await services.userService.revokeRole(
-        {
+      await services.userService.revokeRole({
+        assignment: {
           userId: targetUserId,
           roleId: role.id,
           lendingLocationId: req.lendingLocationId,
         },
-        { actorId: req.user ? req.user.id : null }
-      );
+        actorContext: { actorId: req.user ? req.user.id : null },
+      });
 
       if (typeof req.flash === 'function') {
         req.flash('success', 'Rolle entfernt.');

@@ -1,4 +1,5 @@
 const { stringify } = require('csv-stringify/sync');
+const { TRACKING_TYPE } = require('../config/dbConstants');
 const { parseBooleanToken, toActiveStatusLabel } = require('../utils/valueParsing');
 const { DEFAULT_ITEM_QUANTITY, parsePositiveQuantity } = require('../utils/quantity');
 
@@ -35,6 +36,16 @@ const EXPORT_COLUMN_SCHEMAS = Object.freeze({
 });
 
 const GLOBAL_BUNDLE_LOCATION_KEY = 'global';
+const DEFAULT_TRACKING_TYPE = TRACKING_TYPE.SERIALIZED;
+const TRACKING_TYPES = Object.freeze({
+  BULK: TRACKING_TYPE.BULK,
+  BUNDLE: TRACKING_TYPE.BUNDLE,
+  SERIALIZED: TRACKING_TYPE.SERIALIZED,
+});
+const STATUS_LABELS = Object.freeze({
+  ACTIVE: toActiveStatusLabel(true),
+  INACTIVE: toActiveStatusLabel(false),
+});
 
 class CsvExportService {
   constructor(models) {
@@ -61,20 +72,23 @@ class CsvExportService {
     return workbook.xlsx.writeBuffer();
   }
 
-  async generateExcelWorkbook(sheets = []) {
-    const ExcelJS = require('exceljs');
-    const workbook = new ExcelJS.Workbook();
-    sheets.forEach((sheet) => {
-      const worksheet = workbook.addWorksheet(sheet.name || 'Sheet');
-      worksheet.columns = sheet.headers.map((header) => ({
-        header: header.header,
-        key: header.key,
-      }));
-      sheet.records.forEach((record) => {
-        worksheet.addRow(record);
-      });
-    });
-    return workbook.xlsx.writeBuffer();
+  resolveStatusLabel(isActive) {
+    return isActive ? STATUS_LABELS.ACTIVE : STATUS_LABELS.INACTIVE;
+  }
+
+  resolveTrackingType(trackingType) {
+    const normalizedTrackingType = String(trackingType || '').trim().toLowerCase();
+    if (Object.values(TRACKING_TYPES).includes(normalizedTrackingType)) {
+      return normalizedTrackingType;
+    }
+    return DEFAULT_TRACKING_TYPE;
+  }
+
+  async exportDatasetByFormat(dataset, format = 'csv', sheetName = 'Export') {
+    if (format === 'xlsx') {
+      return this.generateExcelBuffer(dataset.headers, dataset.records, sheetName);
+    }
+    return this.generateCsvBuffer(dataset.headers, dataset.records);
   }
 
   buildModelExportHeaders() {
@@ -114,7 +128,7 @@ class CsvExportService {
     const stock = stockByKey.get(this.buildStockKey(model.id, model.lendingLocationId)) || null;
     return {
       ...baseRecord,
-      status: toActiveStatusLabel(baseRecord.isActive === 'true'),
+      status: this.resolveStatusLabel(baseRecord.isActive === 'true'),
       quantityTotal: stock ? String(stock.quantityTotal) : '0',
       quantityAvailable: stock ? String(stock.quantityAvailable) : '0',
     };
@@ -127,7 +141,7 @@ class CsvExportService {
       null;
     return {
       ...baseRecord,
-      status: toActiveStatusLabel(baseRecord.isActive === 'true'),
+      status: this.resolveStatusLabel(baseRecord.isActive === 'true'),
       bundleName: bundle && bundle.name ? bundle.name : model.name,
       bundleDescription: bundle && bundle.description ? bundle.description : (model.description || ''),
       bundleComponents: this.serializeBundleItems(bundle),
@@ -152,7 +166,7 @@ class CsvExportService {
       isActive: asset.isActive ? 'true' : 'false',
       inventoryNumber: asset.inventoryNumber || '',
       serialNumber: asset.serialNumber || '',
-      status: toActiveStatusLabel(asset.isActive),
+      status: this.resolveStatusLabel(asset.isActive),
       condition: asset.condition || '',
     }));
   }
@@ -183,11 +197,11 @@ class CsvExportService {
       description: model && model.description ? model.description : '',
       technicalDescription: model && model.technicalDescription ? model.technicalDescription : '',
       imageUrl: model && model.imageUrl ? model.imageUrl : '',
-      trackingType: model && model.trackingType ? model.trackingType : 'serialized',
+      trackingType: this.resolveTrackingType(model && model.trackingType),
       isActive: model && model.isActive ? 'true' : 'false',
       inventoryNumber: '',
       serialNumber: '',
-      status: toActiveStatusLabel(Boolean(model && model.isActive)),
+      status: this.resolveStatusLabel(Boolean(model && model.isActive)),
       condition: '',
       lendingLocation: model && model.lendingLocation ? model.lendingLocation.name : '',
       quantityTotal: '',
@@ -267,15 +281,15 @@ class CsvExportService {
     const { assetModels, stockByKey, bundleByKey, assetActivityFilter } = combinedSourceData;
     const records = [];
     assetModels.forEach((model) => {
-      const trackingType = model.trackingType || 'serialized';
+      const trackingType = this.resolveTrackingType(model && model.trackingType);
       const baseRecord = this.buildCombinedBaseRecord(model);
 
-      if (trackingType === 'bulk') {
+      if (trackingType === TRACKING_TYPES.BULK) {
         records.push(this.buildBulkCombinedRecord(baseRecord, model, stockByKey));
         return;
       }
 
-      if (trackingType === 'bundle') {
+      if (trackingType === TRACKING_TYPES.BUNDLE) {
         records.push(this.buildBundleCombinedRecord(baseRecord, model, bundleByKey));
         return;
       }
@@ -299,10 +313,7 @@ class CsvExportService {
 
   async exportInventoryCombinedByFormat(filters = {}, format = 'csv', sheetName = 'Export') {
     const dataset = await this.buildInventoryCombinedDataset(filters);
-    if (format === 'xlsx') {
-      return this.generateExcelBuffer(dataset.headers, dataset.records, sheetName);
-    }
-    return this.generateCsvBuffer(dataset.headers, dataset.records);
+    return this.exportDatasetByFormat(dataset, format, sheetName);
   }
 
   async exportAssets(filters = {}, format = 'csv') {
@@ -324,11 +335,7 @@ class CsvExportService {
 
     const headers = this.buildModelExportHeaders();
     const records = this.buildModelRecords(assetModels);
-
-    if (format === 'xlsx') {
-      return this.generateExcelBuffer(headers, records, 'Asset Models');
-    }
-    return this.generateCsvBuffer(headers, records);
+    return this.exportDatasetByFormat({ headers, records }, format, 'Asset Models');
   }
 
   async exportCombined(filters = {}, format = 'csv') {

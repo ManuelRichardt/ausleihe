@@ -71,26 +71,26 @@ const remove = handle(async (req) => {
 });
 
 const assignRole = handle((req) =>
-  services.userService.assignRole(
-    {
+  services.userService.assignRole({
+    assignment: {
       userId: req.body.userId || req.params.id,
       roleId: req.body.roleId,
       lendingLocationId: req.body.lendingLocationId,
     },
-    { actorId: req.user ? req.user.id : null }
-  ),
+    actorContext: { actorId: req.user ? req.user.id : null },
+  }),
   { idempotent: true }
 );
 
 const revokeRole = handle(async (req) => {
-  await services.userService.revokeRole(
-    {
+  await services.userService.revokeRole({
+    assignment: {
       userId: req.body.userId || req.params.id,
       roleId: req.body.roleId,
       lendingLocationId: req.body.lendingLocationId,
     },
-    { actorId: req.user ? req.user.id : null }
-  );
+    actorContext: { actorId: req.user ? req.user.id : null },
+  });
 }, { idempotent: true });
 
 const listUserRoles = handle((req) => services.userService.listUserRoles(req.params.id));

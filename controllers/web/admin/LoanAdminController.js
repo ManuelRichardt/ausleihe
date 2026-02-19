@@ -3,9 +3,49 @@ const { formatDateTime } = require('../../../utils/dateFormat');
 const SignatureService = require('../../../services/signatureService');
 const models = require('../../../models');
 
+const RETURN_ITEM_REDIRECT = Object.freeze({
+  form: (loanId) => `/admin/loans/${loanId}/return`,
+  detail: (loanId) => `/admin/loans/${loanId}`,
+});
+
+const KNOWN_RETURN_ERROR_HANDLERS = Object.freeze([
+  {
+    matcher: 'signature',
+    message: (err) => err.message,
+    redirectTo: (loanId) => RETURN_ITEM_REDIRECT.form(loanId),
+  },
+  {
+    matcher: 'at least one item',
+    message: () => 'Bitte mindestens ein Item auswählen.',
+    redirectTo: (loanId) => RETURN_ITEM_REDIRECT.form(loanId),
+  },
+]);
+
 class LoanAdminController {
   constructor() {
     this.signatureService = new SignatureService(models);
+  }
+
+  resolveSignedByName(req) {
+    return (req.body.signedByName && String(req.body.signedByName).trim())
+      || [req.user.firstName, req.user.lastName].filter(Boolean).join(' ')
+      || req.user.username;
+  }
+
+  handleKnownReturnErrors(err, req, res) {
+    const errMessage = String((err && err.message) || '').toLowerCase();
+    if (!errMessage) {
+      return false;
+    }
+    const knownErrorHandler = KNOWN_RETURN_ERROR_HANDLERS.find((entry) => errMessage.includes(entry.matcher));
+    if (!knownErrorHandler) {
+      return false;
+    }
+    if (typeof req.flash === 'function') {
+      req.flash('error', knownErrorHandler.message(err));
+    }
+    res.redirect(knownErrorHandler.redirectTo(req.params.id));
+    return true;
   }
 
   async index(req, res, next) {
@@ -120,17 +160,16 @@ class LoanAdminController {
   async returnItems(req, res, next) {
     try {
       const signatureBase64 = req.body.signatureBase64;
-      const signedByName = (req.body.signedByName && String(req.body.signedByName).trim())
-        || [req.user.firstName, req.user.lastName].filter(Boolean).join(' ')
-        || req.user.username;
+      const signedByName = this.resolveSignedByName(req);
 
       if (!signatureBase64) {
         if (typeof req.flash === 'function') {
           req.flash('error', 'Unterschrift für die Rücknahme ist erforderlich.');
         }
-        return res.redirect(`/admin/loans/${req.params.id}/return`);
+        return res.redirect(RETURN_ITEM_REDIRECT.form(req.params.id));
       }
 
+      // Signature is validated before item return to enforce legal proof requirements.
       this.signatureService.validateSignature(signatureBase64);
 
       await services.loanPortalService.returnItems(req.params.id, req.lendingLocationId, {
@@ -158,19 +197,10 @@ class LoanAdminController {
       if (typeof req.flash === 'function') {
         req.flash('success', 'Ausgewählte Items wurden zurückgenommen.');
       }
-      return res.redirect(`/admin/loans/${req.params.id}`);
+      return res.redirect(RETURN_ITEM_REDIRECT.detail(req.params.id));
     } catch (err) {
-      if (err && err.message && err.message.toLowerCase().includes('signature')) {
-        if (typeof req.flash === 'function') {
-          req.flash('error', err.message);
-        }
-        return res.redirect(`/admin/loans/${req.params.id}/return`);
-      }
-      if (err && err.message && err.message.toLowerCase().includes('at least one item')) {
-        if (typeof req.flash === 'function') {
-          req.flash('error', 'Bitte mindestens ein Item auswählen.');
-        }
-        return res.redirect(`/admin/loans/${req.params.id}/return`);
+      if (this.handleKnownReturnErrors(err, req, res)) {
+        return null;
       }
       return handleError(res, next, req, err);
     }

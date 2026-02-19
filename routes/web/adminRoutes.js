@@ -51,9 +51,18 @@ const registerRbacRoutes = require('./admin/modules/rbacRoutes');
 const router = express.Router();
 const services = createServices();
 const OPENING_HOUR_ID_PARAM = ':id([0-9a-fA-F-]{36})';
+const PERMISSION_KEYS = Object.freeze({
+  inventoryManage: 'inventory.manage',
+  openingHoursManage: 'openinghours.manage',
+  loanManage: 'loan.manage',
+  usersManage: 'users.manage',
+  rolesManage: 'roles.manage',
+  permissionsManage: 'permissions.manage',
+  customFieldsManage: 'customfields.manage',
+});
 
 // Route helpers.
-const resolveLocationScopeOrThrow = (req) => req.lendingLocationId || req.body.lendingLocationId || null;
+const resolveLocationScopeOrNull = (req) => req.lendingLocationId || req.body.lendingLocationId || null;
 const resolveGlobalScopeOrThrow = () => null;
 
 const middlewareStacks = {
@@ -61,33 +70,33 @@ const middlewareStacks = {
   inventory: () => [
     requireLogin,
     lendingLocationContext,
-    requirePermission('inventory.manage', resolveLocationScopeOrThrow),
+    requirePermission(PERMISSION_KEYS.inventoryManage, resolveLocationScopeOrNull),
   ],
   openingHours: () => [
     requireLogin,
     lendingLocationContext,
-    requirePermission('openinghours.manage', resolveLocationScopeOrThrow),
+    requirePermission(PERMISSION_KEYS.openingHoursManage, resolveLocationScopeOrNull),
   ],
   loanScopedLocation: () => [
     requireLogin,
     lendingLocationContext,
-    requirePermission('loan.manage', resolveLocationScopeOrThrow),
+    requirePermission(PERMISSION_KEYS.loanManage, resolveLocationScopeOrNull),
   ],
   usersGlobal: () => [
     requireLogin,
-    requirePermission('users.manage', resolveGlobalScopeOrThrow),
+    requirePermission(PERMISSION_KEYS.usersManage, resolveGlobalScopeOrThrow),
   ],
   rolesGlobal: () => [
     requireLogin,
-    requirePermission('roles.manage', resolveGlobalScopeOrThrow),
+    requirePermission(PERMISSION_KEYS.rolesManage, resolveGlobalScopeOrThrow),
   ],
   permissionsGlobal: () => [
     requireLogin,
-    requirePermission('permissions.manage', resolveGlobalScopeOrThrow),
+    requirePermission(PERMISSION_KEYS.permissionsManage, resolveGlobalScopeOrThrow),
   ],
   customFieldsGlobal: () => [
     requireLogin,
-    requirePermission('customfields.manage', resolveGlobalScopeOrThrow),
+    requirePermission(PERMISSION_KEYS.customFieldsManage, resolveGlobalScopeOrThrow),
   ],
 };
 
@@ -411,81 +420,86 @@ function registerInventoryCrudRoutes({
   );
 }
 
-const routeContext = {
-  router,
-  models,
-  services,
-  middlewareStacks,
-  middlewares: {
-    requireLogin,
-    requirePermission,
-    lendingLocationContext,
-    resolveLoanScope: resolveLoanScopeMiddleware,
-    validate,
-    uploadAssetModelImages,
-    uploadCategoryImage,
-    setLendingLocation,
-  },
-  permissions: {
-    resolveLocationScopeOrThrow,
-    resolveGlobalScopeOrThrow,
-    resolveLoanScope,
-    resolveOpeningHourScope,
-    resolveOpeningExceptionScope,
-  },
-  validations: {
-    userCreateValidation,
-    userUpdateValidation,
-    roleValidation,
-    permissionValidation,
-    customFieldCreateValidation,
-    customFieldUpdateValidation,
-    categoryValidation,
-    manufacturerValidation,
-    assetModelValidation,
-    assetValidation,
-    openingHoursValidation,
-    openingExceptionValidation,
-    storageLocationValidation,
-  },
-  controllers: {
-    userAdminController: new UserAdminController(),
-    roleAdminController: new RoleAdminController(),
-    permissionAdminController: new PermissionAdminController(),
-    customFieldAdminController: new CustomFieldAdminController(),
-    categoryAdminController: new CategoryAdminController(),
-    manufacturerAdminController: new ManufacturerAdminController(),
-    assetModelAdminController: new AssetModelAdminController(),
-    assetInstanceAdminController: new AssetInstanceAdminController(),
-    openingHourAdminController: new OpeningHourAdminController(),
-    storageLocationAdminController: new StorageLocationAdminController(),
-    reservationController: new ReservationAdminController(),
-    loanController: new LoanAdminController(),
-    lendingUserRoleAdminController: new LendingUserRoleAdminController(),
-    assetImportController: new AdminAssetImportController(),
-    exportAdminController: new ExportAdminController(),
-    reportAdminController: new ReportAdminController(),
-  },
-  loaders: {
-    loadAllRoles,
-    loadUserEditData,
-    loadAllPermissions,
-    loadRoleEditData,
-    loadCustomFieldFormData,
-    loadCategoryEditData,
-    loadManufacturerEditData,
-    loadAssetModelFormData,
-    loadAssetFormData,
-    loadStorageLocationEditData,
-    loadOpeningHourEditData,
-    loadOpeningExceptionEditData,
-  },
-  helpers: {
-    OPENING_HOUR_ID_PARAM,
-    registerInventoryCrudRoutes,
-    requireLendingRoleManagement,
-  },
-};
+function buildRouteContext() {
+  // Route context is DI-only; avoid business logic in this module.
+  return {
+    router,
+    models,
+    services,
+    middlewareStacks,
+    middlewares: {
+      requireLogin,
+      requirePermission,
+      lendingLocationContext,
+      resolveLoanScope: resolveLoanScopeMiddleware,
+      validate,
+      uploadAssetModelImages,
+      uploadCategoryImage,
+      setLendingLocation,
+    },
+    permissions: {
+      resolveLocationScopeOrNull,
+      resolveGlobalScopeOrThrow,
+      resolveLoanScope,
+      resolveOpeningHourScope,
+      resolveOpeningExceptionScope,
+    },
+    validations: {
+      userCreateValidation,
+      userUpdateValidation,
+      roleValidation,
+      permissionValidation,
+      customFieldCreateValidation,
+      customFieldUpdateValidation,
+      categoryValidation,
+      manufacturerValidation,
+      assetModelValidation,
+      assetValidation,
+      openingHoursValidation,
+      openingExceptionValidation,
+      storageLocationValidation,
+    },
+    controllers: {
+      userAdminController: new UserAdminController(),
+      roleAdminController: new RoleAdminController(),
+      permissionAdminController: new PermissionAdminController(),
+      customFieldAdminController: new CustomFieldAdminController(),
+      categoryAdminController: new CategoryAdminController(),
+      manufacturerAdminController: new ManufacturerAdminController(),
+      assetModelAdminController: new AssetModelAdminController(),
+      assetInstanceAdminController: new AssetInstanceAdminController(),
+      openingHourAdminController: new OpeningHourAdminController(),
+      storageLocationAdminController: new StorageLocationAdminController(),
+      reservationController: new ReservationAdminController(),
+      loanController: new LoanAdminController(),
+      lendingUserRoleAdminController: new LendingUserRoleAdminController(),
+      assetImportController: new AdminAssetImportController(),
+      exportAdminController: new ExportAdminController(),
+      reportAdminController: new ReportAdminController(),
+    },
+    loaders: {
+      loadAllRoles,
+      loadUserEditData,
+      loadAllPermissions,
+      loadRoleEditData,
+      loadCustomFieldFormData,
+      loadCategoryEditData,
+      loadManufacturerEditData,
+      loadAssetModelFormData,
+      loadAssetFormData,
+      loadStorageLocationEditData,
+      loadOpeningHourEditData,
+      loadOpeningExceptionEditData,
+    },
+    helpers: {
+      OPENING_HOUR_ID_PARAM,
+      registerInventoryCrudRoutes,
+      requireLendingRoleManagement,
+    },
+  };
+}
+
+const routeContext = buildRouteContext();
 
 registerInventoryRoutes(routeContext);
 registerOpeningHourRoutes(routeContext);

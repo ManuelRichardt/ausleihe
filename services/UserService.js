@@ -19,85 +19,94 @@ class UserService {
     this.models = models;
   }
 
-  buildUserWhere(filter = {}) {
+  buildCaseInsensitiveEq(column, value) {
     const { sequelize } = this.models;
+    return sequelize.where(sequelize.fn('LOWER', sequelize.col(column)), {
+      [Op.eq]: String(value).toLowerCase(),
+    });
+  }
+
+  buildCaseInsensitiveLike(column, value) {
+    const { sequelize } = this.models;
+    return sequelize.where(sequelize.fn('LOWER', sequelize.col(column)), {
+      [Op.like]: `%${String(value).toLowerCase()}%`,
+    });
+  }
+
+  resolveExternalProviderFilter(externalProvider) {
+    if (!externalProvider) {
+      return undefined;
+    }
+    if (externalProvider === 'local') {
+      return null;
+    }
+    return externalProvider;
+  }
+
+  normalizeDateRangeInput({ from, to, inclusiveEndOfDay = true } = {}) {
+    const range = {};
+    if (from) {
+      const fromDate = new Date(from);
+      if (!Number.isNaN(fromDate.getTime())) {
+        range[Op.gte] = fromDate;
+      }
+    }
+    if (to) {
+      const toDate = new Date(to);
+      if (!Number.isNaN(toDate.getTime())) {
+        if (inclusiveEndOfDay) {
+          toDate.setHours(23, 59, 59, 999);
+        }
+        range[Op.lte] = toDate;
+      }
+    }
+    return range;
+  }
+
+  buildUserWhere(filter = {}) {
     const where = {};
     const andParts = [];
     if (filter.isActive !== undefined) {
       where.isActive = filter.isActive;
     }
     if (filter.query) {
-      const likeValue = `%${String(filter.query).toLowerCase()}%`;
+      // Query mode (q) intentionally overrides field-specific exact filters.
       andParts.push({
         [Op.or]: [
-        sequelize.where(sequelize.fn('LOWER', sequelize.col('username')), { [Op.like]: likeValue }),
-        sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), { [Op.like]: likeValue }),
-        sequelize.where(sequelize.fn('LOWER', sequelize.col('first_name')), { [Op.like]: likeValue }),
-        sequelize.where(sequelize.fn('LOWER', sequelize.col('last_name')), { [Op.like]: likeValue }),
+          this.buildCaseInsensitiveLike('username', filter.query),
+          this.buildCaseInsensitiveLike('email', filter.query),
+          this.buildCaseInsensitiveLike('first_name', filter.query),
+          this.buildCaseInsensitiveLike('last_name', filter.query),
         ],
       });
     } else {
       if (filter.username) {
-        andParts.push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('username')), {
-            [Op.eq]: String(filter.username).toLowerCase(),
-          })
-        );
+        andParts.push(this.buildCaseInsensitiveEq('username', filter.username));
       }
       if (filter.email) {
-        andParts.push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), {
-            [Op.eq]: String(filter.email).toLowerCase(),
-          })
-        );
+        andParts.push(this.buildCaseInsensitiveEq('email', filter.email));
       }
       if (filter.firstName) {
-        andParts.push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('first_name')), {
-            [Op.eq]: String(filter.firstName).toLowerCase(),
-          })
-        );
+        andParts.push(this.buildCaseInsensitiveEq('first_name', filter.firstName));
       }
       if (filter.lastName) {
-        andParts.push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('last_name')), {
-            [Op.eq]: String(filter.lastName).toLowerCase(),
-          })
-        );
+        andParts.push(this.buildCaseInsensitiveEq('last_name', filter.lastName));
       }
     }
-    if (filter.externalProvider) {
-      if (filter.externalProvider === 'local') {
-        where.externalProvider = null;
-      } else {
-        where.externalProvider = filter.externalProvider;
-      }
+    const externalProviderFilterValue = this.resolveExternalProviderFilter(filter.externalProvider);
+    if (externalProviderFilterValue !== undefined) {
+      where.externalProvider = externalProviderFilterValue;
     }
     if (filter.externalId) {
-      andParts.push(
-        sequelize.where(sequelize.fn('LOWER', sequelize.col('external_id')), {
-          [Op.like]: `%${String(filter.externalId).toLowerCase()}%`,
-        })
-      );
+      andParts.push(this.buildCaseInsensitiveLike('external_id', filter.externalId));
     }
-    if (filter.lastLoginAtFrom || filter.lastLoginAtTo) {
-      const range = {};
-      if (filter.lastLoginAtFrom) {
-        const fromDate = new Date(filter.lastLoginAtFrom);
-        if (!Number.isNaN(fromDate.getTime())) {
-          range[Op.gte] = fromDate;
-        }
-      }
-      if (filter.lastLoginAtTo) {
-        const toDate = new Date(filter.lastLoginAtTo);
-        if (!Number.isNaN(toDate.getTime())) {
-          toDate.setHours(23, 59, 59, 999);
-          range[Op.lte] = toDate;
-        }
-      }
-      if (Object.keys(range).length) {
-        andParts.push({ lastLoginAt: range });
-      }
+    const lastLoginAtRange = this.normalizeDateRangeInput({
+      from: filter.lastLoginAtFrom,
+      to: filter.lastLoginAtTo,
+      inclusiveEndOfDay: true,
+    });
+    if (Object.keys(lastLoginAtRange).length) {
+      andParts.push({ lastLoginAt: lastLoginAtRange });
     }
     if (andParts.length) {
       where[Op.and] = andParts;
@@ -298,7 +307,35 @@ class UserService {
     return this.getById(id);
   }
 
-  async assignRole(data, meta = {}) {
+  normalizeRoleAssignmentCommand(roleAssignmentCommand, actorContext) {
+    if (roleAssignmentCommand && roleAssignmentCommand.assignment) {
+      return {
+        assignment: roleAssignmentCommand.assignment,
+        actorContext: roleAssignmentCommand.actorContext || {},
+      };
+    }
+    return {
+      assignment: roleAssignmentCommand || {},
+      actorContext: actorContext || {},
+    };
+  }
+
+  resolveAuditActorId(actorContext, data) {
+    return (actorContext && actorContext.actorId) || data.userId;
+  }
+
+  buildRoleAuditMetadata(data, extra = {}) {
+    return {
+      targetUserId: data.userId,
+      roleId: data.roleId,
+      lendingLocationId: data.lendingLocationId || null,
+      ...extra,
+    };
+  }
+
+  async assignRole(roleAssignmentCommand, actorContext) {
+    const command = this.normalizeRoleAssignmentCommand(roleAssignmentCommand, actorContext);
+    const data = command.assignment;
     const { sequelize } = this.models;
     return sequelize.transaction(async (transaction) => {
       await this.validateRoleAssignment(data, transaction);
@@ -309,15 +346,11 @@ class UserService {
       const created = await this.createUserRole(data, transaction);
       await this.models.AuditLog.create(
         {
-          userId: meta.actorId || data.userId,
+          userId: this.resolveAuditActorId(command.actorContext, data),
           action: 'role.assign',
           entity: 'UserRole',
           entityId: created.id,
-          metadata: {
-            targetUserId: data.userId,
-            roleId: data.roleId,
-            lendingLocationId: data.lendingLocationId || null,
-          },
+          metadata: this.buildRoleAuditMetadata(data),
         },
         { transaction }
       );
@@ -325,7 +358,9 @@ class UserService {
     });
   }
 
-  async revokeRole(data, meta = {}) {
+  async revokeRole(roleAssignmentCommand, actorContext) {
+    const command = this.normalizeRoleAssignmentCommand(roleAssignmentCommand, actorContext);
+    const data = command.assignment;
     const { UserRole } = this.models;
     const existing = await UserRole.findOne({
       where: this.resolveUserRoleKey(data),
@@ -335,20 +370,18 @@ class UserService {
     }
     await existing.destroy();
     await this.models.AuditLog.create({
-      userId: meta.actorId || data.userId,
+      userId: this.resolveAuditActorId(command.actorContext, data),
       action: 'role.revoke',
       entity: 'UserRole',
       entityId: existing.id,
-      metadata: {
-        targetUserId: data.userId,
-        roleId: data.roleId,
-        lendingLocationId: data.lendingLocationId || null,
-      },
+      metadata: this.buildRoleAuditMetadata(data),
     });
     return true;
   }
 
-  async revokeRoleEverywhere(data, meta = {}) {
+  async revokeRoleEverywhere(roleAssignmentCommand, actorContext) {
+    const command = this.normalizeRoleAssignmentCommand(roleAssignmentCommand, actorContext);
+    const data = command.assignment;
     const { sequelize, UserRole } = this.models;
     return sequelize.transaction(async (transaction) => {
       const roles = await UserRole.findAll({
@@ -364,15 +397,11 @@ class UserService {
       });
       await this.models.AuditLog.create(
         {
-          userId: meta.actorId || data.userId,
+          userId: this.resolveAuditActorId(command.actorContext, data),
           action: 'role.revoke_all',
           entity: 'UserRole',
           entityId: data.roleId,
-          metadata: {
-            targetUserId: data.userId,
-            roleId: data.roleId,
-            count: roles.length,
-          },
+          metadata: this.buildRoleAuditMetadata(data, { count: roles.length }),
         },
         { transaction }
       );

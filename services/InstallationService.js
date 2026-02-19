@@ -17,6 +17,123 @@ const permissionsSeed = [
   { key: 'openinghours.manage', description: 'Oeffnungszeiten verwalten', scope: 'ausleihe' },
 ];
 
+const ROLE_DEFINITIONS = Object.freeze({
+  superAdmin: {
+    where: { name: 'Super Admin' },
+    defaults: {
+      name: 'Super Admin',
+      description: 'Systemweite Administration (ohne Ausleihe-Rechte)',
+      scope: 'global',
+    },
+  },
+  locationAdmin: {
+    where: { name: 'Admin', scope: 'ausleihe' },
+    defaults: {
+      name: 'Admin',
+      description: 'Adminrechte innerhalb einer Ausleihe',
+      scope: 'ausleihe',
+    },
+  },
+  student: {
+    where: { name: 'Students', scope: 'global' },
+    defaults: {
+      name: 'Students',
+      description: 'Studierende mit Reservierungsrecht',
+      scope: 'global',
+    },
+  },
+  loanDesk: {
+    where: { name: 'Ausleihe Operator', scope: 'ausleihe' },
+    defaults: {
+      name: 'Ausleihe Operator',
+      description: 'Ausgaben bearbeiten, übergeben und zurücknehmen',
+      scope: 'ausleihe',
+    },
+  },
+  inventoryManager: {
+    where: { name: 'Inventarverwaltung', scope: 'ausleihe' },
+    defaults: {
+      name: 'Inventarverwaltung',
+      description: 'Inventarverwaltung für Kategorien, Hersteller, Modelle und Assets',
+      scope: 'ausleihe',
+    },
+  },
+});
+
+const ROLE_PERMISSION_KEYS = Object.freeze({
+  superAdmin: [
+    'system.admin',
+    'users.manage',
+    'roles.manage',
+    'permissions.manage',
+    'customfields.manage',
+    'audit.view',
+    'system.auth.manage',
+  ],
+  locationAdmin: [
+    'admin.access',
+    'lendinglocations.manage',
+    'loan.create',
+    'loan.manage',
+    'inventory.manage',
+    'openinghours.manage',
+  ],
+  student: ['loan.create'],
+  loanDesk: ['admin.access', 'loan.manage'],
+  inventoryManager: ['admin.access', 'inventory.manage'],
+});
+
+const AUTH_PROVIDER_SEED = Object.freeze([
+  {
+    where: { provider: 'saml' },
+    defaults: {
+      provider: 'saml',
+      enabled: false,
+      displayName: 'Shibboleth',
+      config: {
+        spEntityId: '',
+        acsUrl: '',
+        sloUrl: '',
+        idpEntityId: '',
+        idpSsoUrl: '',
+        idpSloUrl: '',
+        nameIdFormat: '',
+        clockSkewSec: 120,
+      },
+    },
+  },
+  {
+    where: { provider: 'ldap' },
+    defaults: {
+      provider: 'ldap',
+      enabled: false,
+      displayName: 'LDAP',
+      config: {
+        url: '',
+        baseDn: '',
+        bindDn: '',
+        bindPassword: '',
+        tlsRejectUnauthorized: true,
+        userFilter: '(uid={{username}})',
+        userDnTemplate: '',
+        searchScope: 'sub',
+        attrUsername: 'uid',
+        attrEmail: 'mail',
+        attrDisplayName: 'displayName',
+        attrFirstName: 'givenName',
+        attrLastName: 'sn',
+        attrExternalId: 'entryUUID',
+        attrGroups: 'memberOf',
+        startTls: false,
+        timeoutMs: 8000,
+        connectTimeoutMs: 8000,
+        roleMapJson: {},
+        defaultRole: 'Students',
+      },
+    },
+  },
+]);
+
 const uiTextSeed = [
   { key: 'nav.home', de: 'Startseite', en: 'Home' },
   { key: 'nav.toggle', de: 'Navigation umschalten', en: 'Toggle navigation' },
@@ -86,235 +203,210 @@ class InstallationService {
     this.models = models;
   }
 
-  async run({
+  async seedPermissions(transaction) {
+    const permissions = [];
+    for (const permissionSeedEntry of permissionsSeed) {
+      const [record] = await this.models.Permission.findOrCreate({
+        where: { key: permissionSeedEntry.key },
+        defaults: {
+          key: permissionSeedEntry.key,
+          description: permissionSeedEntry.description,
+          scope: permissionSeedEntry.scope || DEFAULT_PERMISSION_SCOPE,
+        },
+        transaction,
+      });
+      permissions.push(record);
+    }
+    return permissions;
+  }
+
+  async seedRoles(transaction) {
+    const roles = {};
+    for (const [roleKey, roleDefinition] of Object.entries(ROLE_DEFINITIONS)) {
+      const [role] = await this.models.Role.findOrCreate({
+        where: roleDefinition.where,
+        defaults: roleDefinition.defaults,
+        transaction,
+      });
+      roles[roleKey] = role;
+    }
+    return roles;
+  }
+
+  async seedRolePermissions({ permissions, roles, transaction }) {
+    const permissionMap = permissions.reduce((acc, permission) => {
+      acc[permission.key] = permission;
+      return acc;
+    }, {});
+
+    const rolePermissionRows = Object.entries(ROLE_PERMISSION_KEYS).flatMap(([roleKey, permissionKeys]) => {
+      const role = roles[roleKey];
+      if (!role) {
+        return [];
+      }
+      return permissionKeys
+        .map((permissionKey) => permissionMap[permissionKey])
+        .filter(Boolean)
+        .map((permission) => ({
+          roleId: role.id,
+          permissionId: permission.id,
+        }));
+    });
+
+    if (!rolePermissionRows.length) {
+      return;
+    }
+
+    await this.models.RolePermission.bulkCreate(rolePermissionRows, {
+      transaction,
+      ignoreDuplicates: true,
+    });
+  }
+
+  async seedAuthProviders(transaction) {
+    for (const authProviderConfig of AUTH_PROVIDER_SEED) {
+      await this.models.AuthProviderConfig.findOrCreate({
+        where: authProviderConfig.where,
+        defaults: authProviderConfig.defaults,
+        transaction,
+      });
+    }
+  }
+
+  async seedUiTexts(transaction) {
+    for (const text of uiTextSeed) {
+      const [entry] = await this.models.UiText.findOrCreate({
+        where: { key: text.key },
+        defaults: {
+          key: text.key,
+          de: text.de || '',
+          en: text.en || '',
+          isActive: true,
+        },
+        transaction,
+      });
+      await entry.update(
+        {
+          de: entry.de || text.de || '',
+          en: entry.en || text.en || '',
+        },
+        { transaction }
+      );
+    }
+  }
+
+  async seedMailTemplates(transaction) {
+    for (const template of mailTemplateSeed) {
+      const [entry] = await this.models.MailTemplate.findOrCreate({
+        where: { key: template.key },
+        defaults: {
+          key: template.key,
+          subjectDe: template.subjectDe,
+          subjectEn: template.subjectEn,
+          bodyDe: template.bodyDe,
+          bodyEn: template.bodyEn,
+          isActive: true,
+        },
+        transaction,
+      });
+      await entry.update(
+        {
+          subjectDe: entry.subjectDe || template.subjectDe,
+          subjectEn: entry.subjectEn || template.subjectEn,
+          bodyDe: entry.bodyDe || template.bodyDe,
+          bodyEn: entry.bodyEn || template.bodyEn,
+        },
+        { transaction }
+      );
+    }
+  }
+
+  async createInitialAdmin({ adminUserData, superAdminRole, permissions, transaction }) {
+    const existingUser = await this.models.User.findOne({
+      where: { username: adminUserData.adminUsername },
+      transaction,
+    });
+    if (existingUser) {
+      throw new Error('Admin user already exists');
+    }
+
+    const existingEmail = await this.models.User.findOne({
+      where: { email: adminUserData.adminEmail },
+      transaction,
+    });
+    if (existingEmail) {
+      throw new Error('Admin email already exists');
+    }
+
+    const adminUser = await this.models.User.create(
+      {
+        username: adminUserData.adminUsername,
+        email: adminUserData.adminEmail,
+        firstName: adminUserData.adminFirstName,
+        lastName: adminUserData.adminLastName,
+        password: adminUserData.adminPassword,
+        isActive: true,
+      },
+      { transaction }
+    );
+
+    await this.models.UserRole.findOrCreate({
+      where: {
+        userId: adminUser.id,
+        roleId: superAdminRole.id,
+        lendingLocationId: null,
+      },
+      defaults: {
+        userId: adminUser.id,
+        roleId: superAdminRole.id,
+        lendingLocationId: null,
+      },
+      transaction,
+    });
+
+    await this.models.Installation.create(
+      {
+        key: INSTALLATION_KEY,
+        installedAt: new Date(),
+        installedByUserId: adminUser.id,
+        metadata: {
+          roleId: superAdminRole.id,
+          permissionKeys: permissions.map((permission) => permission.key),
+        },
+      },
+      { transaction }
+    );
+
+    return adminUser;
+  }
+
+  async runInitialInstallation({
     adminUsername,
     adminEmail,
     adminPassword,
     adminFirstName,
     adminLastName,
   }) {
-    const models = this.models;
-    await models.sequelize.authenticate();
-    await models.sequelize.sync();
+    const { sequelize } = this.models;
+    await sequelize.authenticate();
+    await sequelize.sync();
 
-    const existingInstallation = await models.Installation.findOne({
+    const existingInstallation = await this.models.Installation.findOne({
       where: { key: INSTALLATION_KEY },
     });
     if (existingInstallation) {
       throw new Error('Installation already completed');
     }
 
-    await models.sequelize.transaction(async (transaction) => {
-      const permissions = [];
-      for (const perm of permissionsSeed) {
-        const [record] = await models.Permission.findOrCreate({
-          where: { key: perm.key },
-          defaults: {
-            key: perm.key,
-            description: perm.description,
-            scope: perm.scope || DEFAULT_PERMISSION_SCOPE,
-          },
-          transaction,
-        });
-        permissions.push(record);
-      }
+    await sequelize.transaction(async (transaction) => {
+      // Order matters: permissions and roles must exist before role-permission links are created.
+      const permissions = await this.seedPermissions(transaction);
+      const roles = await this.seedRoles(transaction);
+      await this.seedRolePermissions({ permissions, roles, transaction });
+      await this.seedAuthProviders(transaction);
+      await this.seedUiTexts(transaction);
 
-      const [superAdminRole] = await models.Role.findOrCreate({
-        where: { name: 'Super Admin' },
-        defaults: {
-          name: 'Super Admin',
-          description: 'Systemweite Administration (ohne Ausleihe-Rechte)',
-          scope: 'global',
-        },
-        transaction,
-      });
-
-      const [locationAdminRole] = await models.Role.findOrCreate({
-        where: { name: 'Admin', scope: 'ausleihe' },
-        defaults: {
-          name: 'Admin',
-          description: 'Adminrechte innerhalb einer Ausleihe',
-          scope: 'ausleihe',
-        },
-        transaction,
-      });
-
-      const [studentRole] = await models.Role.findOrCreate({
-        where: { name: 'Students', scope: 'global' },
-        defaults: {
-          name: 'Students',
-          description: 'Studierende mit Reservierungsrecht',
-          scope: 'global',
-        },
-        transaction,
-      });
-
-      const [loanDeskRole] = await models.Role.findOrCreate({
-        where: { name: 'Ausleihe Operator', scope: 'ausleihe' },
-        defaults: {
-          name: 'Ausleihe Operator',
-          description: 'Ausgaben bearbeiten, übergeben und zurücknehmen',
-          scope: 'ausleihe',
-        },
-        transaction,
-      });
-
-      const [inventoryManagerRole] = await models.Role.findOrCreate({
-        where: { name: 'Inventarverwaltung', scope: 'ausleihe' },
-        defaults: {
-          name: 'Inventarverwaltung',
-          description: 'Inventarverwaltung für Kategorien, Hersteller, Modelle und Assets',
-          scope: 'ausleihe',
-        },
-        transaction,
-      });
-
-      const permissionMap = permissions.reduce((acc, perm) => {
-        acc[perm.key] = perm;
-        return acc;
-      }, {});
-
-      const superAdminKeys = [
-        'system.admin',
-        'users.manage',
-        'roles.manage',
-        'permissions.manage',
-        'customfields.manage',
-        'audit.view',
-        'system.auth.manage',
-      ];
-      const locationAdminKeys = [
-        'admin.access',
-        'lendinglocations.manage',
-        'loan.create',
-        'loan.manage',
-        'inventory.manage',
-        'openinghours.manage',
-      ];
-      const studentKeys = ['loan.create'];
-      const loanDeskKeys = ['admin.access', 'loan.manage'];
-      const inventoryManagerKeys = ['admin.access', 'inventory.manage'];
-
-      const superAdminRolePermissions = superAdminKeys
-        .map((key) => permissionMap[key])
-        .filter(Boolean)
-        .map((permission) => ({
-          roleId: superAdminRole.id,
-          permissionId: permission.id,
-        }));
-      const locationAdminRolePermissions = locationAdminKeys
-        .map((key) => permissionMap[key])
-        .filter(Boolean)
-        .map((permission) => ({
-          roleId: locationAdminRole.id,
-          permissionId: permission.id,
-        }));
-      const studentRolePermissions = studentKeys
-        .map((key) => permissionMap[key])
-        .filter(Boolean)
-        .map((permission) => ({
-          roleId: studentRole.id,
-          permissionId: permission.id,
-        }));
-      const loanDeskRolePermissions = loanDeskKeys
-        .map((key) => permissionMap[key])
-        .filter(Boolean)
-        .map((permission) => ({
-          roleId: loanDeskRole.id,
-          permissionId: permission.id,
-        }));
-      const inventoryManagerRolePermissions = inventoryManagerKeys
-        .map((key) => permissionMap[key])
-        .filter(Boolean)
-        .map((permission) => ({
-          roleId: inventoryManagerRole.id,
-          permissionId: permission.id,
-        }));
-
-      await models.RolePermission.bulkCreate(
-        [
-          ...superAdminRolePermissions,
-          ...locationAdminRolePermissions,
-          ...studentRolePermissions,
-          ...loanDeskRolePermissions,
-          ...inventoryManagerRolePermissions,
-        ],
-        { transaction, ignoreDuplicates: true }
-      );
-
-      await models.AuthProviderConfig.findOrCreate({
-        where: { provider: 'saml' },
-        defaults: {
-          provider: 'saml',
-          enabled: false,
-          displayName: 'Shibboleth',
-          config: {
-            spEntityId: '',
-            acsUrl: '',
-            sloUrl: '',
-            idpEntityId: '',
-            idpSsoUrl: '',
-            idpSloUrl: '',
-            nameIdFormat: '',
-            clockSkewSec: 120,
-          },
-        },
-        transaction,
-      });
-
-      await models.AuthProviderConfig.findOrCreate({
-        where: { provider: 'ldap' },
-        defaults: {
-          provider: 'ldap',
-          enabled: false,
-          displayName: 'LDAP',
-          config: {
-            url: '',
-            baseDn: '',
-            bindDn: '',
-            bindPassword: '',
-            tlsRejectUnauthorized: true,
-            userFilter: '(uid={{username}})',
-            userDnTemplate: '',
-            searchScope: 'sub',
-            attrUsername: 'uid',
-            attrEmail: 'mail',
-            attrDisplayName: 'displayName',
-            attrFirstName: 'givenName',
-            attrLastName: 'sn',
-            attrExternalId: 'entryUUID',
-            attrGroups: 'memberOf',
-            startTls: false,
-            timeoutMs: 8000,
-            connectTimeoutMs: 8000,
-            roleMapJson: {},
-            defaultRole: 'Students',
-          },
-        },
-        transaction,
-      });
-
-      for (const text of uiTextSeed) {
-        const [entry] = await models.UiText.findOrCreate({
-          where: { key: text.key },
-          defaults: {
-            key: text.key,
-            de: text.de || '',
-            en: text.en || '',
-            isActive: true,
-          },
-          transaction,
-        });
-        await entry.update(
-          {
-            de: entry.de || text.de || '',
-            en: entry.en || text.en || '',
-          },
-          { transaction }
-        );
-      }
-
-      await models.MailConfig.findOrCreate({
+      await this.models.MailConfig.findOrCreate({
         where: { transport: 'sendmail' },
         defaults: {
           isEnabled: false,
@@ -327,9 +419,9 @@ class InstallationService {
         transaction,
       });
 
-      const existingPrivacyConfig = await models.PrivacyConfig.findOne({ transaction });
+      const existingPrivacyConfig = await this.models.PrivacyConfig.findOne({ transaction });
       if (!existingPrivacyConfig) {
-        await models.PrivacyConfig.create(
+        await this.models.PrivacyConfig.create(
           {
             isEnabled: true,
             returnedLoanRetentionMonths: 3,
@@ -339,86 +431,23 @@ class InstallationService {
         );
       }
 
-      for (const template of mailTemplateSeed) {
-        const [entry] = await models.MailTemplate.findOrCreate({
-          where: { key: template.key },
-          defaults: {
-            key: template.key,
-            subjectDe: template.subjectDe,
-            subjectEn: template.subjectEn,
-            bodyDe: template.bodyDe,
-            bodyEn: template.bodyEn,
-            isActive: true,
-          },
-          transaction,
-        });
-        await entry.update(
-          {
-            subjectDe: entry.subjectDe || template.subjectDe,
-            subjectEn: entry.subjectEn || template.subjectEn,
-            bodyDe: entry.bodyDe || template.bodyDe,
-            bodyEn: entry.bodyEn || template.bodyEn,
-          },
-          { transaction }
-        );
-      }
+      await this.seedMailTemplates(transaction);
 
-      const existingUser = await models.User.findOne({
-        where: { username: adminUsername },
+      await this.createInitialAdmin({
+        adminUserData: {
+          adminUsername,
+          adminEmail,
+          adminPassword,
+          adminFirstName,
+          adminLastName,
+        },
+        superAdminRole: roles.superAdmin,
+        permissions,
         transaction,
       });
-      if (existingUser) {
-        throw new Error('Admin user already exists');
-      }
-
-      const existingEmail = await models.User.findOne({
-        where: { email: adminEmail },
-        transaction,
-      });
-      if (existingEmail) {
-        throw new Error('Admin email already exists');
-      }
-
-      const adminUser = await models.User.create(
-        {
-          username: adminUsername,
-          email: adminEmail,
-          firstName: adminFirstName,
-          lastName: adminLastName,
-          password: adminPassword,
-          isActive: true,
-        },
-        { transaction }
-      );
-
-      await models.UserRole.findOrCreate({
-        where: {
-          userId: adminUser.id,
-          roleId: superAdminRole.id,
-          lendingLocationId: null,
-        },
-        defaults: {
-          userId: adminUser.id,
-          roleId: superAdminRole.id,
-          lendingLocationId: null,
-        },
-        transaction,
-      });
-
-      await models.Installation.create(
-        {
-          key: INSTALLATION_KEY,
-          installedAt: new Date(),
-          installedByUserId: adminUser.id,
-          metadata: {
-            roleId: superAdminRole.id,
-            permissionKeys: permissions.map((perm) => perm.key),
-          },
-        },
-        { transaction }
-      );
     });
   }
+
 }
 
 module.exports = {
@@ -427,4 +456,5 @@ module.exports = {
   uiTextSeed,
   mailTemplateSeed,
   INSTALLATION_KEY,
+  ROLE_PERMISSION_KEYS,
 };

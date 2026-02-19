@@ -4,24 +4,55 @@ const path = require('path');
 const services = createServices();
 const VIEWS_ROOT = path.join(process.cwd(), 'views');
 const PROTECTED_TRANSLATION_TAGS = Object.freeze(['script', 'style', 'pre', 'code', 'textarea']);
+const PROTECTED_TAG_PATTERNS = Object.freeze(
+  PROTECTED_TRANSLATION_TAGS.map((tagName) => new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, 'gi'))
+);
 const FALLBACK_LOCALE = 'de';
 const LOCALE_COOKIE_KEY = 'ui_lang';
+const LOCALE_COOKIE_OPTIONS = Object.freeze({
+  httpOnly: true,
+  sameSite: 'lax',
+  maxAge: 1000 * 60 * 60 * 24 * 365,
+});
+const PROTECTED_BLOCK_TOKEN_PREFIX = '__I18N_BLOCK_';
+const PROTECTED_BLOCK_TOKEN_SUFFIX = '__';
+
+function buildProtectedBlockToken(index) {
+  // Token format must stay unique and impossible in normal HTML output.
+  return `${PROTECTED_BLOCK_TOKEN_PREFIX}${index}${PROTECTED_BLOCK_TOKEN_SUFFIX}`;
+}
+
+function protectBlocks(html) {
+  const protectedBlocks = [];
+  let transformed = String(html);
+  PROTECTED_TAG_PATTERNS.forEach((pattern) => {
+    transformed = transformed.replace(pattern, (match) => {
+      const token = buildProtectedBlockToken(protectedBlocks.length);
+      protectedBlocks.push(match);
+      return token;
+    });
+  });
+  return { transformed, protectedBlocks };
+}
+
+function restoreBlocks(html, protectedBlocks) {
+  const protectedBlockPattern = new RegExp(
+    `${PROTECTED_BLOCK_TOKEN_PREFIX}(\\d+)${PROTECTED_BLOCK_TOKEN_SUFFIX}`,
+    'g'
+  );
+  return html.replace(protectedBlockPattern, (full, index) => {
+    const block = protectedBlocks[Number(index)];
+    return block !== undefined ? block : full;
+  });
+}
 
 function translateMarkup(html, phraseTranslations) {
   if (!html || !Array.isArray(phraseTranslations) || !phraseTranslations.length) {
     return html;
   }
 
-  const protectedBlocks = [];
-  let transformed = String(html);
-  PROTECTED_TRANSLATION_TAGS.forEach((tagName) => {
-    const pattern = new RegExp(`<${tagName}\\b[\\s\\S]*?<\\/${tagName}>`, 'gi');
-    transformed = transformed.replace(pattern, (match) => {
-      const token = `__I18N_BLOCK_${protectedBlocks.length}__`;
-      protectedBlocks.push(match);
-      return token;
-    });
-  });
+  const protectedMarkup = protectBlocks(html);
+  let transformed = protectedMarkup.transformed;
 
   // Phrase replacement is a fallback for legacy templates not yet migrated to explicit t(key) calls.
   phraseTranslations.forEach((pair) => {
@@ -33,12 +64,7 @@ function translateMarkup(html, phraseTranslations) {
     transformed = transformed.split(source).join(target);
   });
 
-  transformed = transformed.replace(/__I18N_BLOCK_(\d+)__/g, (full, index) => {
-    const block = protectedBlocks[Number(index)];
-    return block !== undefined ? block : full;
-  });
-
-  return transformed;
+  return restoreBlocks(transformed, protectedMarkup.protectedBlocks);
 }
 
 function normalizeLocale(value) {
@@ -60,10 +86,8 @@ function ensureLocaleCookie(res, locale, queryLocale, cookieLocale) {
     return;
   }
   res.cookie(LOCALE_COOKIE_KEY, locale, {
-    httpOnly: true,
-    sameSite: 'lax',
+    ...LOCALE_COOKIE_OPTIONS,
     secure: String(process.env.NODE_ENV || '').toLowerCase() === 'production',
-    maxAge: 1000 * 60 * 60 * 24 * 365,
   });
 }
 

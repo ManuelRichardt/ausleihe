@@ -515,6 +515,7 @@ class CsvImportService {
   }
 
   async importBulkRow(rowContext, model, transaction, importExecutionContext) {
+    const { results } = importExecutionContext;
     const quantityTotal = Math.max(
       this.parseInteger(this.readColumn(rowContext.row, ...CSV_HEADERS.QUANTITY_TOTAL), 0),
       0
@@ -547,7 +548,7 @@ class CsvImportService {
       },
       { transaction }
     );
-    importExecutionContext.results.updated.push({
+    results.updated.push({
       row: rowContext.rowNumber,
       modelId: model.id,
       type: TRACKING_TYPE.BULK,
@@ -555,7 +556,8 @@ class CsvImportService {
   }
 
   queueBundleRow(rowContext, model, importExecutionContext) {
-    importExecutionContext.bundleResolutionQueue.push({
+    const { bundleQueue, results } = importExecutionContext;
+    bundleQueue.push({
       row: rowContext.rowNumber,
       modelId: model.id,
       lendingLocationId: rowContext.lendingLocationId,
@@ -567,7 +569,7 @@ class CsvImportService {
       ).trim(),
       bundleComponentsRaw: this.readColumn(rowContext.row, ...CSV_HEADERS.BUNDLE_COMPONENTS),
     });
-    importExecutionContext.results.updated.push({
+    results.updated.push({
       row: rowContext.rowNumber,
       modelId: model.id,
       type: TRACKING_TYPE.BUNDLE,
@@ -575,8 +577,9 @@ class CsvImportService {
   }
 
   async importSerializedRow(rowContext, model, transaction, importExecutionContext) {
+    const { results } = importExecutionContext;
     if (!rowContext.inventoryNumber && !rowContext.serialNumber) {
-      importExecutionContext.results.updated.push({
+      results.updated.push({
         row: rowContext.rowNumber,
         modelId: model.id,
         type: TRACKING_TYPE.SERIALIZED,
@@ -602,9 +605,9 @@ class CsvImportService {
     );
 
     if (created) {
-      importExecutionContext.results.created.push(asset.id);
+      results.created.push(asset.id);
     } else {
-      importExecutionContext.results.updated.push(asset.id);
+      results.updated.push(asset.id);
     }
   }
 
@@ -672,14 +675,15 @@ class CsvImportService {
     }
   }
 
-  async importBundleRowsSecondPass(importExecutionContext, transaction) {
+  async resolveBundleQueueSecondPass(importExecutionContext, transaction) {
+    const { bundleQueue, results } = importExecutionContext;
     // Second pass resolves references that may point to rows imported later in the same file.
-    for (const pendingBundleRow of importExecutionContext.bundleResolutionQueue) {
+    for (const pendingBundleRow of bundleQueue) {
       try {
         const bundleDefinition = await this.upsertBundleDefinition(pendingBundleRow, transaction);
         await this.replaceBundleItems(bundleDefinition, pendingBundleRow, transaction);
       } catch (err) {
-        importExecutionContext.results.errors.push({
+        results.errors.push({
           row: pendingBundleRow.row,
           errors: [err.message || 'Bundle Import fehlgeschlagen'],
         });
@@ -712,11 +716,12 @@ class CsvImportService {
   async importRowSafely(executionContext) {
     const { transaction, rowNumber, row, importExecutionContext } = executionContext;
     // Row numbers are 1-based to match spreadsheet line numbers shown to users.
+    // Row errors are collected and import continues by design (best-effort import).
     try {
       const rowContext = this.buildRowContext({
         row,
         rowNumber,
-        lendingLocationId: importExecutionContext.lendingLocationId,
+        lendingLocationId: importExecutionContext.context.lendingLocationId,
       });
       await this.importRow(rowContext, transaction, importExecutionContext);
     } catch (err) {
@@ -727,10 +732,37 @@ class CsvImportService {
 
   createImportExecutionContext(options) {
     return {
-      lendingLocationId: options.lendingLocationId,
+      context: {
+        lendingLocationId: options.lendingLocationId,
+      },
       results: { created: [], updated: [], errors: [] },
-      bundleResolutionQueue: [],
+      bundleQueue: [],
     };
+  }
+
+  async assertImportLendingLocation(lendingLocationId) {
+    if (!lendingLocationId) {
+      throw new Error('LendingLocationId is required');
+    }
+    const location = await this.models.LendingLocation.findByPk(lendingLocationId);
+    if (!location) {
+      throw new Error('LendingLocation not found');
+    }
+  }
+
+  async processRowsFirstPass(rows, transaction, importExecutionContext) {
+    for (let index = 0; index < rows.length; index += 1) {
+      await this.importRowSafely({
+        transaction,
+        rowNumber: index + 1,
+        row: rows[index],
+        importExecutionContext,
+      });
+    }
+  }
+
+  async processBundleRowsSecondPass(importExecutionContext, transaction) {
+    await this.resolveBundleQueueSecondPass(importExecutionContext, transaction);
   }
 
   async importAssets(buffer, options = {}) {
@@ -739,27 +771,12 @@ class CsvImportService {
     this.validateHeaders(headers);
 
     const importExecutionContext = this.createImportExecutionContext(options);
-    const { lendingLocationId } = importExecutionContext;
-
-    if (!lendingLocationId) {
-      throw new Error('LendingLocationId is required');
-    }
-    const location = await this.models.LendingLocation.findByPk(lendingLocationId);
-    if (!location) {
-      throw new Error('LendingLocation not found');
-    }
+    const { lendingLocationId } = importExecutionContext.context;
+    await this.assertImportLendingLocation(lendingLocationId);
 
     await this.models.sequelize.transaction(async (transaction) => {
-      for (let index = 0; index < rows.length; index += 1) {
-        await this.importRowSafely({
-          transaction,
-          rowNumber: index + 1,
-          row: rows[index],
-          importExecutionContext,
-        });
-      }
-
-      await this.importBundleRowsSecondPass(importExecutionContext, transaction);
+      await this.processRowsFirstPass(rows, transaction, importExecutionContext);
+      await this.processBundleRowsSecondPass(importExecutionContext, transaction);
     });
 
     return importExecutionContext.results;

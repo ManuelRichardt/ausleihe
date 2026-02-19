@@ -24,6 +24,8 @@ const OPEN_LOAN_ITEM_STATUSES = Object.freeze([
   LOAN_ITEM_STATUS.HANDED_OVER,
 ]);
 
+const ITEM_KIND_BUNDLE = 'bundle';
+
 class LoanService {
   constructor(models, availabilityService, inventoryStockService, bundleService) {
     this.models = models;
@@ -176,6 +178,71 @@ class LoanService {
     );
   }
 
+  async #finalizeLoanIfNoOpenItems(loan, loanId, returnCommand, returnExecutionOptions, transaction) {
+    if (!returnExecutionOptions.partialReturn) {
+      await this.#finalizeLoanAsReturned(loan, returnCommand, transaction);
+      return;
+    }
+
+    const remaining = await this.models.LoanItem.count({
+      where: {
+        loanId,
+        status: { [Op.in]: OPEN_LOAN_ITEM_STATUSES },
+      },
+      transaction,
+    });
+    if (remaining === 0) {
+      await this.#finalizeLoanAsReturned(loan, returnCommand, transaction);
+    }
+  }
+
+  async #executeReturnPipeline(loanId, returnCommand, returnExecutionOptions, transaction) {
+    const options = {
+      partialReturn: Boolean(returnExecutionOptions.partialReturn),
+      updateAssetStatus: Boolean(returnExecutionOptions.updateAssetStatus),
+      requireItemIds: Boolean(returnExecutionOptions.requireItemIds),
+    };
+    const { Loan, LoanItem, Asset } = this.models;
+
+    const loan = await this.#loadLoanForTransition(
+      Loan,
+      loanId,
+      TRANSITION_ALLOWED_STATUSES.RETURN,
+      'Loan cannot be returned',
+      transaction
+    );
+
+    if (!options.partialReturn) {
+      await assertOpenAt(this.models, loan.lendingLocationId, returnCommand.returnedAt, 'return');
+    }
+
+    const selectedItemIds = returnCommand.itemIds;
+    if (options.requireItemIds && !selectedItemIds.length) {
+      throw new Error('At least one item is required');
+    }
+
+    const itemQuery = options.requireItemIds
+      ? { where: { loanId, id: selectedItemIds } }
+      : { where: { loanId } };
+    if (options.updateAssetStatus) {
+      itemQuery.include = [{ model: Asset, as: 'asset' }];
+    }
+
+    const items = await this.#loadLoanItemsOrThrow(
+      LoanItem,
+      itemQuery,
+      transaction,
+      options.requireItemIds ? 'Loan items not found' : 'Loan has no items'
+    );
+
+    await this.#transitionItemsForReturn(items, returnCommand, transaction, options.updateAssetStatus);
+    await this.#releaseBulkItems(items, loan.lendingLocationId, transaction);
+    await this.#finalizeLoanIfNoOpenItems(loan, loanId, returnCommand, options, transaction);
+    await this.#recordReturnedEvent(loan.id, returnCommand, transaction);
+
+    return loan;
+  }
+
   async #loadAssetModelForLendingLocation(assetModelId, lendingLocationId, transaction) {
     const { AssetModel } = this.models;
     const model = await AssetModel.findByPk(assetModelId, { transaction });
@@ -305,29 +372,60 @@ class LoanService {
     }
   }
 
+  async #validateReservationPrerequisites(reservationCommand, transaction) {
+    const { User, LendingLocation } = this.models;
+    const user = await User.findByPk(reservationCommand.userId, { transaction });
+    if (!user) {
+      throw new Error('User not found');
+    }
+    const location = await LendingLocation.findByPk(reservationCommand.lendingLocationId, { transaction });
+    if (!location) {
+      throw new Error('LendingLocation not found');
+    }
+    if (reservationCommand.items.length === 0) {
+      throw new Error('At least one item is required');
+    }
+
+    await assertOpenForRange(
+      this.models,
+      reservationCommand.lendingLocationId,
+      reservationCommand.reservedFrom,
+      reservationCommand.reservedUntil
+    );
+  }
+
+  async #reserveItemByKindOrTrackingType(item, reservationCommand, reservationContext) {
+    const kind = String(item.kind || '').trim().toLowerCase();
+    if (kind === ITEM_KIND_BUNDLE || item.bundleDefinitionId) {
+      await this.#reserveBundleItem(item, reservationContext);
+      return;
+    }
+
+    const { model, selectedAssetId } = await this.#resolveReservationItemTarget(
+      item,
+      reservationCommand,
+      reservationContext.transaction
+    );
+
+    const modelTrackingType = model.trackingType || TRACKING_TYPE.SERIALIZED;
+    // Item kind has priority only when explicitly provided; otherwise model trackingType decides flow.
+    const effectiveTrackingType = [TRACKING_TYPE.BULK, TRACKING_TYPE.SERIALIZED].includes(kind)
+      ? kind
+      : modelTrackingType;
+    if (effectiveTrackingType === TRACKING_TYPE.BULK) {
+      await this.#reserveBulkItem(item, model, reservationContext);
+      return;
+    }
+
+    await this.#reserveSerializedItems(item, model, selectedAssetId, reservationContext);
+  }
+
   async createReservation(data) {
-    const { Loan, User, LendingLocation, sequelize } = this.models;
+    const { Loan, sequelize } = this.models;
     const reservationCommand = this.#buildReservationCommand(data);
     // All state changes inside this block are transactional; emit side effects only after commit.
     return sequelize.transaction(async (transaction) => {
-      const user = await User.findByPk(reservationCommand.userId, { transaction });
-      if (!user) {
-        throw new Error('User not found');
-      }
-      const location = await LendingLocation.findByPk(reservationCommand.lendingLocationId, { transaction });
-      if (!location) {
-        throw new Error('LendingLocation not found');
-      }
-      if (reservationCommand.items.length === 0) {
-        throw new Error('At least one item is required');
-      }
-
-      await assertOpenForRange(
-        this.models,
-        reservationCommand.lendingLocationId,
-        reservationCommand.reservedFrom,
-        reservationCommand.reservedUntil
-      );
+      await this.#validateReservationPrerequisites(reservationCommand, transaction);
 
       const loan = await Loan.create(
         {
@@ -343,25 +441,7 @@ class LoanService {
       const reservationContext = this.#buildReservationContext(reservationCommand, loan, transaction);
 
       for (const item of reservationCommand.items) {
-        const kind = String(item.kind || '').trim().toLowerCase();
-        if (kind === 'bundle' || item.bundleDefinitionId) {
-          await this.#reserveBundleItem(item, reservationContext);
-          continue;
-        }
-
-        const { model, selectedAssetId } = await this.#resolveReservationItemTarget(
-          item,
-          reservationCommand,
-          transaction
-        );
-
-        const trackingType = model.trackingType || TRACKING_TYPE.SERIALIZED;
-        if (trackingType === TRACKING_TYPE.BULK || kind === TRACKING_TYPE.BULK) {
-          await this.#reserveBulkItem(item, model, reservationContext);
-          continue;
-        }
-
-        await this.#reserveSerializedItems(item, model, selectedAssetId, reservationContext);
+        await this.#reserveItemByKindOrTrackingType(item, reservationCommand, reservationContext);
       }
 
       await this.#recordLoanEvent(
@@ -470,36 +550,47 @@ class LoanService {
     });
   }
 
+  async #assertHandoverAssetCompatibility({ assetId, item, loan, transaction }) {
+    const { Asset } = this.models;
+    const asset = await Asset.findByPk(assetId, { transaction });
+    if (!asset) {
+      throw new Error('Asset not found');
+    }
+    if (asset.lendingLocationId !== loan.lendingLocationId) {
+      throw new Error('Asset does not belong to lending location');
+    }
+    if (asset.assetModelId !== item.assetModelId) {
+      throw new Error('Asset does not match reserved model');
+    }
+    return asset;
+  }
+
   async #transitionItemsForHandOver(items, handOverCommand, loan, transaction) {
-    const { Asset, AssetModel } = this.models;
+    const { AssetModel } = this.models;
     const itemInputMap = this.#buildLoanItemInputMap(handOverCommand.items);
 
     // Keep loan item status invariants in sync.
     for (const item of items) {
-      const itemInput = itemInputMap.get(item.id) || null;
+      const itemPatch = itemInputMap.get(item.id) || null;
       const model = item.assetModelId ? await AssetModel.findByPk(item.assetModelId, { transaction }) : null;
       const trackingType = model ? (model.trackingType || TRACKING_TYPE.SERIALIZED) : TRACKING_TYPE.SERIALIZED;
       const requiresAsset =
         item.itemType === LOAN_ITEM_TYPE.SERIALIZED ||
         (item.itemType === LOAN_ITEM_TYPE.BUNDLE_COMPONENT && trackingType === TRACKING_TYPE.SERIALIZED);
 
-      let assetId = itemInput && itemInput.assetId ? itemInput.assetId : item.assetId;
+      let assetId = itemPatch && itemPatch.assetId ? itemPatch.assetId : item.assetId;
       if (requiresAsset) {
         if (!assetId) {
           throw new Error('Asset is required for handover');
         }
-        const asset = await Asset.findByPk(assetId, { transaction });
-        if (!asset) {
-          throw new Error('Asset not found');
-        }
-        if (asset.lendingLocationId !== loan.lendingLocationId) {
-          throw new Error('Asset does not belong to lending location');
-        }
-        if (asset.assetModelId !== item.assetModelId) {
-          throw new Error('Asset does not match reserved model');
-        }
+        await this.#assertHandoverAssetCompatibility({ assetId, item, loan, transaction });
       } else {
         assetId = null;
+      }
+
+      let conditionOnHandover = item.conditionOnHandover;
+      if (itemPatch && itemPatch.conditionOnHandover) {
+        conditionOnHandover = itemPatch.conditionOnHandover;
       }
 
       await item.update(
@@ -507,10 +598,7 @@ class LoanService {
           assetId,
           status: LOAN_ITEM_STATUS.HANDED_OVER,
           handedOverAt: handOverCommand.handedOverAt,
-          conditionOnHandover:
-            itemInput && itemInput.conditionOnHandover
-              ? itemInput.conditionOnHandover
-              : item.conditionOnHandover,
+          conditionOnHandover,
         },
         { transaction }
       );
@@ -521,18 +609,21 @@ class LoanService {
     const itemInputMap = this.#buildLoanItemInputMap(returnCommand.items);
     // Keep loan item status invariants in sync.
     for (const item of items) {
-      const itemInput = itemInputMap.get(item.id) || {};
+      const itemPatch = itemInputMap.get(item.id) || {};
       await item.update(
         {
           status: LOAN_ITEM_STATUS.RETURNED,
           returnedAt: returnCommand.returnedAt,
-          conditionOnReturn: itemInput.conditionOnReturn || item.conditionOnReturn,
+          conditionOnReturn: itemPatch.conditionOnReturn || item.conditionOnReturn,
         },
         { transaction }
       );
 
       if (updateAssetStatus && item.asset) {
-        const isActive = itemInput.assetStatus === 'inactive' ? false : true;
+        let isActive = true;
+        if (itemPatch.assetStatus === 'inactive') {
+          isActive = false;
+        }
         await item.asset.update({ isActive }, { transaction });
       }
     }
@@ -595,36 +686,21 @@ class LoanService {
   }
 
   async returnLoan(loanId, data) {
-    const { Loan, LoanItem, sequelize } = this.models;
+    const { sequelize } = this.models;
     const returnCommand = this.#buildReturnCommand(loanId, data);
     // All state changes inside this block are transactional; emit side effects only after commit.
-    return sequelize.transaction(async (transaction) => {
-      const loan = await this.#loadLoanForTransition(
-        Loan,
+    return sequelize.transaction((transaction) =>
+      this.#executeReturnPipeline(
         loanId,
-        TRANSITION_ALLOWED_STATUSES.RETURN,
-        'Loan cannot be returned',
+        returnCommand,
+        {
+          partialReturn: false,
+          updateAssetStatus: false,
+          requireItemIds: false,
+        },
         transaction
-      );
-
-      await assertOpenAt(this.models, loan.lendingLocationId, returnCommand.returnedAt, 'return');
-
-      const items = await this.#loadLoanItemsOrThrow(
-        LoanItem,
-        { where: { loanId } },
-        transaction,
-        'Loan has no items'
-      );
-
-      await this.#transitionItemsForReturn(items, returnCommand, transaction, false);
-
-      await this.#releaseBulkItems(items, loan.lendingLocationId, transaction);
-
-      await this.#finalizeLoanAsReturned(loan, returnCommand, transaction);
-      await this.#recordReturnedEvent(loan.id, returnCommand, transaction);
-
-      return loan;
-    });
+      )
+    );
   }
 
   async addLoanItems(loanId, data) {
@@ -893,53 +969,23 @@ class LoanService {
       await this.inventoryStockService.increaseAvailable(item.assetModelId, lendingLocationId, qty, { transaction });
     }
   }
+
   async returnLoanItems(loanId, data) {
-    const { Loan, LoanItem, Asset, sequelize } = this.models;
+    const { sequelize } = this.models;
     const returnCommand = this.#buildReturnCommand(loanId, data);
     // All state changes inside this block are transactional; emit side effects only after commit.
-    return sequelize.transaction(async (transaction) => {
-      const loan = await this.#loadLoanForTransition(
-        Loan,
+    return sequelize.transaction((transaction) =>
+      this.#executeReturnPipeline(
         loanId,
-        TRANSITION_ALLOWED_STATUSES.RETURN,
-        'Loan cannot be returned',
-        transaction
-      );
-
-      const selectedItemIds = returnCommand.itemIds;
-      if (!selectedItemIds.length) {
-        throw new Error('At least one item is required');
-      }
-
-      const items = await this.#loadLoanItemsOrThrow(
-        LoanItem,
+        returnCommand,
         {
-          where: { loanId, id: selectedItemIds },
-          include: [{ model: Asset, as: 'asset' }],
+          partialReturn: true,
+          updateAssetStatus: true,
+          requireItemIds: true,
         },
-        transaction,
-        'Loan items not found'
-      );
-
-      await this.#transitionItemsForReturn(items, returnCommand, transaction, true);
-
-      await this.#releaseBulkItems(items, loan.lendingLocationId, transaction);
-
-      const remaining = await LoanItem.count({
-        where: {
-          loanId,
-          status: { [Op.in]: OPEN_LOAN_ITEM_STATUSES },
-        },
-        transaction,
-      });
-      if (remaining === 0) {
-        await this.#finalizeLoanAsReturned(loan, returnCommand, transaction);
-      }
-
-      await this.#recordReturnedEvent(loan.id, returnCommand, transaction);
-
-      return loan;
-    });
+        transaction
+      )
+    );
   }
 
 }
