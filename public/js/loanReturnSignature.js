@@ -2,6 +2,7 @@
   const form = document.getElementById('returnItemsForm');
   const canvas = document.getElementById('returnSignatureCanvas');
   const hiddenInput = document.getElementById('returnSignatureBase64');
+  const signedAtInput = document.getElementById('returnSignedAt');
   const clearButton = document.getElementById('returnSignatureClear');
   const selectAll = document.getElementById('returnSelectAll');
   const rowCheckboxes = Array.from(document.querySelectorAll('.return-item-checkbox'));
@@ -78,6 +79,12 @@
     return true;
   }
 
+  function refreshSignedAt() {
+    if (signedAtInput) {
+      signedAtInput.value = new Date().toISOString();
+    }
+  }
+
   function syncHeaderCheckbox() {
     if (!selectAll) {
       return;
@@ -143,8 +150,11 @@
   });
 
   syncHeaderCheckbox();
+  refreshSignedAt();
 
   form.addEventListener('submit', function (evt) {
+    refreshSignedAt();
+
     const selectedCount = rowCheckboxes.filter(function (checkbox) {
       return checkbox.checked;
     }).length;

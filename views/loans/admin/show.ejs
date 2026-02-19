@@ -253,10 +253,41 @@
               <tbody>
                 <% if (Array.isArray(loan.loanSignatures) && loan.loanSignatures.length) { %>
                   <% loan.loanSignatures.forEach(function (signature) { %>
+                    <%
+                      const signedAtDate = signature && signature.signedAt ? new Date(signature.signedAt) : null;
+                      const createdAtDate = signature && signature.createdAt ? new Date(signature.createdAt) : null;
+                      const signedAtIsValid = signedAtDate && !Number.isNaN(signedAtDate.getTime());
+                      const createdAtIsValid = createdAtDate && !Number.isNaN(createdAtDate.getTime());
+                      const signedAtIsUtcMidnight = signedAtIsValid
+                        && signedAtDate.getUTCHours() === 0
+                        && signedAtDate.getUTCMinutes() === 0
+                        && signedAtDate.getUTCSeconds() === 0;
+                      const signedAtIsLocalMidnight = signedAtIsValid
+                        && signedAtDate.getHours() === 0
+                        && signedAtDate.getMinutes() === 0
+                        && signedAtDate.getSeconds() === 0;
+                      const createdAtSameUtcDate = signedAtIsValid && createdAtIsValid
+                        && signedAtDate.toISOString().slice(0, 10) === createdAtDate.toISOString().slice(0, 10);
+                      const createdAtSameLocalDate = signedAtIsValid && createdAtIsValid
+                        && signedAtDate.getFullYear() === createdAtDate.getFullYear()
+                        && signedAtDate.getMonth() === createdAtDate.getMonth()
+                        && signedAtDate.getDate() === createdAtDate.getDate();
+                      const signedAtDriftFromCreateMs = signedAtIsValid && createdAtIsValid
+                        ? Math.abs(createdAtDate.getTime() - signedAtDate.getTime())
+                        : 0;
+                      const signedAtLooksDateOnly = (
+                        (signedAtIsUtcMidnight && createdAtSameUtcDate)
+                        || (signedAtIsLocalMidnight && createdAtSameLocalDate)
+                      )
+                        && signedAtDriftFromCreateMs >= (30 * 60 * 1000);
+                      const signatureDisplayDate = signedAtLooksDateOnly
+                        ? createdAtDate
+                        : (signature.signedAt || signature.createdAt);
+                    %>
                     <tr>
                       <td><%= signature.signatureType || '-' %></td>
                       <td><%= signature.signedByName || '-' %></td>
-                      <td><%= safeFormatDateTime(signature.signedAt || signature.createdAt) %></td>
+                      <td><%= safeFormatDateTime(signatureDisplayDate) %></td>
                       <% if (canViewSignatureMeta) { %>
                         <td>
                           <details>

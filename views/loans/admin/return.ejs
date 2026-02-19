@@ -5,7 +5,7 @@
   const currentUser = (typeof user !== 'undefined' && user) ? user : null;
   const returnSignerName = currentUser ? ([currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || currentUser.username) : '';
   const now = new Date();
-  const signedAtValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const signedAtValue = now.toISOString();
 %>
 <section class="admin-loan-return">
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
@@ -55,7 +55,7 @@
     <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
     <input type="hidden" name="signatureBase64" id="returnSignatureBase64" value="">
     <input type="hidden" name="signedByName" value="<%= returnSignerName %>">
-    <input type="hidden" name="signedAt" value="<%= signedAtValue %>">
+    <input type="hidden" name="signedAt" id="returnSignedAt" value="<%= signedAtValue %>">
     <div class="table-responsive">
       <table class="table table-hover align-middle mb-0">
         <thead class="table-light">

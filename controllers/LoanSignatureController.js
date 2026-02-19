@@ -8,6 +8,25 @@ class LoanSignatureController {
     this.signatureService = new SignatureService(models);
   }
 
+  resolveSignedAt(rawSignedAt) {
+    const now = new Date();
+    if (!rawSignedAt) {
+      return now;
+    }
+    const raw = String(rawSignedAt).trim();
+    if (!raw) {
+      return now;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return now;
+    }
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      return now;
+    }
+    return parsed;
+  }
+
   resolveLoanBasePath(req, loan) {
     const canManage = services.authzService.hasPermission({
       userRoles: req.userRoles || [],
@@ -45,7 +64,7 @@ class LoanSignatureController {
         userId: req.user ? req.user.id : null,
         signatureType: req.body.signatureType,
         signedByName: req.body.signedByName,
-        signedAt: req.body.signedAt || new Date(),
+        signedAt: this.resolveSignedAt(req.body.signedAt),
         base64: req.body.signatureBase64,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],

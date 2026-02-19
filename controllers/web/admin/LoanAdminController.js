@@ -26,6 +26,25 @@ class LoanAdminController {
     this.signatureService = new SignatureService(models);
   }
 
+  resolveSignedAt(rawSignedAt) {
+    const now = new Date();
+    if (!rawSignedAt) {
+      return now;
+    }
+    const raw = String(rawSignedAt).trim();
+    if (!raw) {
+      return now;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      return now;
+    }
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      return now;
+    }
+    return parsed;
+  }
+
   resolveSignedByName(req) {
     return (req.body.signedByName && String(req.body.signedByName).trim())
       || [req.user.firstName, req.user.lastName].filter(Boolean).join(' ')
@@ -185,7 +204,7 @@ class LoanAdminController {
         userId: req.user.id,
         signatureType: 'return',
         signedByName,
-        signedAt: req.body.signedAt || new Date(),
+        signedAt: this.resolveSignedAt(req.body.signedAt),
         base64: signatureBase64,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],

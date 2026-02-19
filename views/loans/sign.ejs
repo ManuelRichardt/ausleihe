@@ -5,9 +5,11 @@
   const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : '';
   const currentUser = (typeof user !== 'undefined' && user) ? user : null;
   const defaultName = currentUser ? [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || currentUser.username : '';
-  const submittedDate = (typeof formData !== 'undefined' && formData && formData.signedAt) ? formData.signedAt : '';
-  const nowDate = new Date();
-  const signedAtDefault = submittedDate || `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}-${String(nowDate.getDate()).padStart(2, '0')}`;
+  const submittedSignedAt = (typeof formData !== 'undefined' && formData && formData.signedAt) ? formData.signedAt : '';
+  const signedAtSource = submittedSignedAt || new Date();
+  const signedAtDate = signedAtSource instanceof Date ? signedAtSource : new Date(signedAtSource);
+  const safeSignedAtDate = Number.isNaN(signedAtDate.getTime()) ? new Date() : signedAtDate;
+  const signedAtDefault = `${safeSignedAtDate.getFullYear()}-${String(safeSignedAtDate.getMonth() + 1).padStart(2, '0')}-${String(safeSignedAtDate.getDate()).padStart(2, '0')}T${String(safeSignedAtDate.getHours()).padStart(2, '0')}:${String(safeSignedAtDate.getMinutes()).padStart(2, '0')}`;
 %>
 <section class="loan-sign">
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
@@ -38,7 +40,13 @@
           }) %>
         </div>
         <div class="col-md-6">
-          <%- include('../partials/forms/date', { name: 'signedAt', label: 'Datum', value: signedAtDefault }) %>
+          <%- include('../partials/forms/field', {
+            as: 'input',
+            type: 'datetime-local',
+            name: 'signedAt',
+            label: 'Zeitpunkt',
+            value: signedAtDefault
+          }) %>
         </div>
         <div class="col-12">
           <%- include('../partials/forms/input', { name: 'signedByName', label: 'Name', value: ((typeof formData !== 'undefined' && formData && formData.signedByName) ? formData.signedByName : '') || defaultName, required: true }) %>
