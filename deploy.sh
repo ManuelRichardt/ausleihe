@@ -66,7 +66,7 @@ if [ "$MODE" == "--dev" ]; then
       -subj "/C=DE/ST=State/L=City/O=Dev/CN=localhost"
     CERT_PATH="/etc/nginx/ssl/cert.crt"
     KEY_PATH="/etc/nginx/ssl/cert.key"
-    SERVER_NAME="localhost"
+    SERVER_NAME="_"
 else
     echo "Modus PROD: Fordere Zertifikat via EAB an..."
     sudo certbot certonly --standalone --non-interactive --agree-tos \
@@ -98,7 +98,7 @@ server {
     ssl_certificate_key $KEY_PATH;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -120,7 +120,25 @@ cd "$APP_DIR"
 # npm install auf dem Host ist nicht nötig: der Docker-Build installiert Node-Dependencies.
 "${DOCKER_COMPOSE_CMD[@]}" up -d --build
 
-# 7. Nginx starten (nach App-Start)
+# 7. App-Verfügbarkeit prüfen, bevor Nginx gestartet wird
+echo "Warte auf App-Start auf http://127.0.0.1:3000 ..."
+APP_READY=0
+for i in $(seq 1 30); do
+    if curl -fsS http://127.0.0.1:3000/ > /dev/null 2>&1; then
+        APP_READY=1
+        break
+    fi
+    sleep 2
+done
+
+if [ "$APP_READY" -ne 1 ]; then
+    echo "Fehler: App ist auf Port 3000 nicht erreichbar."
+    "${DOCKER_COMPOSE_CMD[@]}" ps || true
+    "${DOCKER_COMPOSE_CMD[@]}" logs --tail=100 app || true
+    exit 1
+fi
+
+# 8. Nginx starten (nach erfolgreichem App-Start)
 sudo systemctl start nginx
 
 echo "Setup abgeschlossen im Modus ${MODE#--}!"
