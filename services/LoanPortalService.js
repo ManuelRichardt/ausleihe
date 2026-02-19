@@ -60,6 +60,46 @@ class LoanPortalService {
   }
 
   async listForAdmin(lendingLocationId, filter = {}) {
+    if (filter.status === 'today_returns') {
+      const { Op } = this.models.Sequelize;
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
+      return this.models.Loan.findAll({
+        where: {
+          lendingLocationId,
+          status: { [Op.in]: ['handed_over', 'overdue'] },
+          reservedUntil: {
+            [Op.gte]: todayStart,
+            [Op.lte]: todayEnd,
+          },
+        },
+        include: this.#includes({ includeUser: true }),
+        order: [['reservedFrom', 'DESC']],
+      });
+    }
+
+    if (filter.status === 'overdue') {
+      const { Op } = this.models.Sequelize;
+      const now = new Date();
+      return this.models.Loan.findAll({
+        where: {
+          lendingLocationId,
+          [Op.or]: [
+            { status: 'overdue' },
+            {
+              status: 'handed_over',
+              reservedUntil: { [Op.lt]: now },
+            },
+          ],
+        },
+        include: this.#includes({ includeUser: true }),
+        order: [['reservedFrom', 'DESC']],
+      });
+    }
+
     return this.loanService.getAll(
       {
         lendingLocationId,

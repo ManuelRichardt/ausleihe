@@ -18,6 +18,7 @@ class LoanAdminController {
       const statusTitles = {
         reserved: 'Offene Ausleihen',
         handed_over: 'Aktive Ausleihen',
+        today_returns: 'Heute fällige Rückgaben',
         overdue: 'Überfällige Ausleihen',
         returned: 'Zurückgegebene Ausleihen',
       };
