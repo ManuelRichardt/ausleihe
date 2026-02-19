@@ -168,8 +168,7 @@ class AssetInstanceService {
     return Asset.count({ where, include, ...countOptions });
   }
 
-  buildSearchQuery(filter = {}) {
-    const { AssetModel, Manufacturer, sequelize } = this.models;
+  buildBaseSearchWhere(filter = {}) {
     const where = {};
     if (filter.lendingLocationId) {
       where.lendingLocationId = filter.lendingLocationId;
@@ -181,17 +180,22 @@ class AssetInstanceService {
       where.storageLocationId = filter.storageLocationId;
     }
     applyIsActiveFilter(where, filter);
+    return where;
+  }
 
+  buildSearchInclude(filter = {}) {
     const include = [
       {
-        model: AssetModel,
+        model: this.models.AssetModel,
         as: 'model',
-        include: [{ model: Manufacturer, as: 'manufacturer' }, { model: this.models.AssetCategory, as: 'category' }],
+        include: [
+          { model: this.models.Manufacturer, as: 'manufacturer' },
+          { model: this.models.AssetCategory, as: 'category' },
+        ],
       },
       { model: this.models.LendingLocation, as: 'lendingLocation' },
       { model: this.models.StorageLocation, as: 'storageLocation' },
     ];
-
     if (filter.categoryId) {
       include[0].where = include[0].where || {};
       include[0].where.categoryId = filter.categoryId;
@@ -200,11 +204,16 @@ class AssetInstanceService {
       include[0].include[0].where = { id: filter.manufacturerId };
       include[0].include[0].required = true;
     }
+    return include;
+  }
 
-    const orParts = [];
+  buildSearchPredicates(filter = {}) {
+    const { sequelize } = this.models;
+    const searchPredicates = [];
     if (filter.query) {
       const likeValue = `%${String(filter.query).toLowerCase()}%`;
-      orParts.push(
+      // sequelize.col uses raw DB snake_case column names here.
+      searchPredicates.push(
         sequelize.where(sequelize.fn('LOWER', sequelize.col('inventory_number')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('serial_number')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('model.name')), { [Op.like]: likeValue }),
@@ -212,49 +221,59 @@ class AssetInstanceService {
         sequelize.where(sequelize.fn('LOWER', sequelize.col('model.technical_description')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('model.manufacturer.name')), { [Op.like]: likeValue })
       );
-    } else {
-      if (filter.inventoryNumber) {
-        where[Op.and] = where[Op.and] || [];
-        where[Op.and].push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('inventory_number')), {
-            [Op.eq]: String(filter.inventoryNumber).toLowerCase(),
-          })
-        );
-      }
-      if (filter.serialNumber) {
-        where[Op.and] = where[Op.and] || [];
-        where[Op.and].push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('serial_number')), {
-            [Op.eq]: String(filter.serialNumber).toLowerCase(),
-          })
-        );
-      }
-      if (filter.name) {
-        orParts.push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('model.name')), {
-            [Op.like]: `%${String(filter.name).toLowerCase()}%`,
-          })
-        );
-      }
-      if (filter.description) {
-        const likeValue = `%${String(filter.description).toLowerCase()}%`;
-        orParts.push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('model.description')), { [Op.like]: likeValue }),
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('model.technical_description')), { [Op.like]: likeValue })
-        );
-      }
-      if (filter.manufacturer) {
-        orParts.push(
-          sequelize.where(sequelize.fn('LOWER', sequelize.col('model.manufacturer.name')), {
-            [Op.like]: `%${String(filter.manufacturer).toLowerCase()}%`,
-          })
-        );
-      }
+      return searchPredicates;
     }
 
-    if (orParts.length) {
+    if (filter.name) {
+      searchPredicates.push(
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('model.name')), {
+          [Op.like]: `%${String(filter.name).toLowerCase()}%`,
+        })
+      );
+    }
+    if (filter.description) {
+      const likeValue = `%${String(filter.description).toLowerCase()}%`;
+      searchPredicates.push(
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('model.description')), { [Op.like]: likeValue }),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('model.technical_description')), { [Op.like]: likeValue })
+      );
+    }
+    if (filter.manufacturer) {
+      searchPredicates.push(
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('model.manufacturer.name')), {
+          [Op.like]: `%${String(filter.manufacturer).toLowerCase()}%`,
+        })
+      );
+    }
+    return searchPredicates;
+  }
+
+  buildSearchQuery(filter = {}) {
+    const where = this.buildBaseSearchWhere(filter);
+    const include = this.buildSearchInclude(filter);
+    const { sequelize } = this.models;
+    const searchPredicates = this.buildSearchPredicates(filter);
+
+    if (filter.inventoryNumber && !filter.query) {
       where[Op.and] = where[Op.and] || [];
-      where[Op.and].push({ [Op.or]: orParts });
+      where[Op.and].push(
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('inventory_number')), {
+          [Op.eq]: String(filter.inventoryNumber).toLowerCase(),
+        })
+      );
+    }
+    if (filter.serialNumber && !filter.query) {
+      where[Op.and] = where[Op.and] || [];
+      where[Op.and].push(
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('serial_number')), {
+          [Op.eq]: String(filter.serialNumber).toLowerCase(),
+        })
+      );
+    }
+
+    if (searchPredicates.length) {
+      where[Op.and] = where[Op.and] || [];
+      where[Op.and].push({ [Op.or]: searchPredicates });
     }
 
     return { where, include, paranoid: filter.includeDeleted ? false : undefined };
@@ -354,51 +373,97 @@ class AssetInstanceService {
     return this.getById(id);
   }
 
-  async #setCustomFieldValues(asset, values, ctx) {
-    const { CustomFieldDefinition, CustomFieldValue, transaction } = ctx;
-    const definitions = await CustomFieldDefinition.findAll({
-      where: {
-        isActive: true,
-      },
+  #assertCustomFieldDefinitionApplies(definition, asset) {
+    if (definition.scope === 'asset_model' && definition.assetModelId !== asset.assetModelId) {
+      throw new Error('CustomFieldDefinition does not apply to asset model');
+    }
+    if (
+      definition.scope === 'lending_location' &&
+      definition.lendingLocationId !== asset.lendingLocationId
+    ) {
+      throw new Error('CustomFieldDefinition does not apply to lending location');
+    }
+  }
+
+  async #loadActiveCustomFieldDefinitions(CustomFieldDefinition, transaction) {
+    return CustomFieldDefinition.findAll({
+      where: { isActive: true },
       transaction,
     });
+  }
+
+  async #loadExistingCustomFieldValueMap(CustomFieldValue, assetId, transaction) {
+    const existingRows = await CustomFieldValue.findAll({
+      where: { assetInstanceId: assetId },
+      transaction,
+    });
+    // Custom field writes are upserted by (assetInstanceId, customFieldDefinitionId).
+    return new Map(existingRows.map((row) => [row.customFieldDefinitionId, row]));
+  }
+
+  #buildCustomFieldValuePayload(definitionId, assetId, normalizedValue) {
+    return {
+      customFieldDefinitionId: definitionId,
+      assetInstanceId: assetId,
+      valueString: normalizedValue.valueString,
+      valueNumber: normalizedValue.valueNumber,
+      valueBoolean: normalizedValue.valueBoolean,
+      valueDate: normalizedValue.valueDate,
+    };
+  }
+
+  async #setCustomFieldValues(asset, values, ctx) {
+    const { CustomFieldDefinition, CustomFieldValue, transaction } = ctx;
+    const definitions = await this.#loadActiveCustomFieldDefinitions(
+      CustomFieldDefinition,
+      transaction
+    );
     const defMap = new Map(definitions.map((def) => [def.id, def]));
-    for (const item of values) {
-      const definition = defMap.get(item.customFieldDefinitionId);
+    const existingByDefinitionId = await this.#loadExistingCustomFieldValueMap(
+      CustomFieldValue,
+      asset.id,
+      transaction
+    );
+    for (const customFieldInput of values) {
+      const definition = defMap.get(customFieldInput.customFieldDefinitionId);
       if (!definition) {
         throw new Error('CustomFieldDefinition not found');
       }
-      if (definition.scope === 'asset_model' && definition.assetModelId !== asset.assetModelId) {
-        throw new Error('CustomFieldDefinition does not apply to asset model');
-      }
-      if (
-        definition.scope === 'lending_location' &&
-        definition.lendingLocationId !== asset.lendingLocationId
-      ) {
-        throw new Error('CustomFieldDefinition does not apply to lending location');
-      }
-      const payload = this.#normalizeValue(definition, item.value);
-      if (definition.required && payload.isNull) {
+      this.#assertCustomFieldDefinitionApplies(definition, asset);
+      const normalizedValue = this.#normalizeValue(definition, customFieldInput.value);
+      if (definition.required && normalizedValue.isNull) {
         throw new Error('CustomFieldValue is required');
       }
-      const existing = await CustomFieldValue.findOne({
-        where: { customFieldDefinitionId: definition.id, assetInstanceId: asset.id },
-        transaction,
-      });
-      const data = {
-        customFieldDefinitionId: definition.id,
-        assetInstanceId: asset.id,
-        valueString: payload.valueString,
-        valueNumber: payload.valueNumber,
-        valueBoolean: payload.valueBoolean,
-        valueDate: payload.valueDate,
-      };
+      const existing = existingByDefinitionId.get(definition.id) || null;
+      const payload = this.#buildCustomFieldValuePayload(
+        definition.id,
+        asset.id,
+        normalizedValue
+      );
       if (existing) {
-        await existing.update(data, { transaction });
+        await existing.update(payload, { transaction });
       } else {
-        await CustomFieldValue.create(data, { transaction });
+        await CustomFieldValue.create(payload, { transaction });
       }
     }
+  }
+
+  #resolveEnumAllowedValues(enumValues) {
+    if (Array.isArray(enumValues)) {
+      return enumValues;
+    }
+    if (typeof enumValues !== 'string') {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(enumValues);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (err) {
+      // fallback below
+    }
+    return enumValues.split(',').map((entry) => entry.trim()).filter(Boolean);
   }
 
   #normalizeValue(definition, value) {
@@ -412,6 +477,7 @@ class AssetInstanceService {
         valueDate: null,
       };
     }
+    // This normalizer expects typed inputs; callers must pre-parse form strings before passing values.
     switch (definition.type) {
       case 'string':
       case 'text':
@@ -461,14 +527,15 @@ class AssetInstanceService {
           valueDate: isoDate,
         };
       }
-      case 'enum':
-        if (!Array.isArray(definition.enumValues) || definition.enumValues.length === 0) {
+      case 'enum': {
+        const allowedValues = this.#resolveEnumAllowedValues(definition.enumValues);
+        if (!allowedValues.length) {
           throw new Error('Enum values are not configured');
         }
         if (typeof effectiveValue !== 'string') {
           throw new Error('Value must be a string');
         }
-        if (!definition.enumValues.includes(effectiveValue)) {
+        if (!allowedValues.includes(effectiveValue)) {
           throw new Error('Value is not in enumValues');
         }
         return {
@@ -478,6 +545,7 @@ class AssetInstanceService {
           valueBoolean: null,
           valueDate: null,
         };
+      }
       default:
         throw new Error('Unsupported custom field type');
     }

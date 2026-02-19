@@ -1,5 +1,33 @@
 const { parse } = require('csv-parse/sync');
 const { Op } = require('sequelize');
+const {
+  TRACKING_TYPE,
+} = require('../constants/domain');
+const { parseBooleanToken } = require('../utils/valueParsing');
+const { DEFAULT_ITEM_QUANTITY, parsePositiveQuantity } = require('../utils/quantity');
+
+const CSV_HEADERS = Object.freeze({
+  MANUFACTURER: ['Manufacturer'],
+  MODEL: ['Model'],
+  CATEGORY: ['Category'],
+  TRACKING_TYPE: ['TrackingType'],
+  INVENTORY_NUMBER: ['InventoryNumber'],
+  SERIAL_NUMBER: ['SerialNumber'],
+  DESCRIPTION: ['Description'],
+  TECHNICAL_DESCRIPTION: ['TechnicalDescription'],
+  IMAGE_URL: ['ImageURL', 'ImageUrl'],
+  IS_ACTIVE: ['IsActive'],
+  STATUS: ['Status'],
+  CONDITION: ['Condition'],
+  QUANTITY_TOTAL: ['QuantityTotal'],
+  QUANTITY_AVAILABLE: ['QuantityAvailable'],
+  BUNDLE_NAME: ['BundleName'],
+  BUNDLE_DESCRIPTION: ['BundleDescription'],
+  BUNDLE_COMPONENTS: ['BundleComponents'],
+});
+
+const BUNDLE_OPTIONAL_TRUE_TOKENS = Object.freeze(['1', 'true', 'yes', 'ja', 'optional']);
+const BUNDLE_OPTIONAL_FALSE_TOKENS = Object.freeze(['0', 'false', 'no', 'nein', 'required']);
 
 class CsvImportService {
   constructor(models) {
@@ -71,25 +99,25 @@ class CsvImportService {
   }
 
   parseTrackingType(row) {
-    const raw = this.readColumn(row, 'TrackingType');
+    const raw = this.readColumn(row, ...CSV_HEADERS.TRACKING_TYPE);
     const normalized = String(raw || '').trim().toLowerCase();
-    if (['serialized', 'bulk', 'bundle'].includes(normalized)) {
+    if (Object.values(TRACKING_TYPE).includes(normalized)) {
       return normalized;
     }
 
-    const bundleComponents = String(this.readColumn(row, 'BundleComponents') || '').trim();
-    const quantityTotal = this.readColumn(row, 'QuantityTotal');
-    const quantityAvailable = this.readColumn(row, 'QuantityAvailable');
+    const bundleComponents = String(this.readColumn(row, ...CSV_HEADERS.BUNDLE_COMPONENTS) || '').trim();
+    const quantityTotal = this.readColumn(row, ...CSV_HEADERS.QUANTITY_TOTAL);
+    const quantityAvailable = this.readColumn(row, ...CSV_HEADERS.QUANTITY_AVAILABLE);
     if (bundleComponents) {
-      return 'bundle';
+      return TRACKING_TYPE.BUNDLE;
     }
     if (
       (quantityTotal !== undefined && String(quantityTotal).trim() !== '') ||
       (quantityAvailable !== undefined && String(quantityAvailable).trim() !== '')
     ) {
-      return 'bulk';
+      return TRACKING_TYPE.BULK;
     }
-    return 'serialized';
+    return TRACKING_TYPE.SERIALIZED;
   }
 
   parseInteger(value, fallback = 0) {
@@ -120,13 +148,17 @@ class CsvImportService {
         if (part.includes('|')) {
           const segments = part.split('|').map((segment) => segment.trim());
           componentName = segments[0] || '';
-          quantity = Math.max(this.parseInteger(segments[1], 1), 1);
+          quantity = parsePositiveQuantity(segments[1], DEFAULT_ITEM_QUANTITY);
           const optionalRaw = String(segments[2] || '').trim().toLowerCase();
-          isOptional = ['1', 'true', 'yes', 'ja', 'optional'].includes(optionalRaw);
+          isOptional = parseBooleanToken(optionalRaw, {
+            trueTokens: BUNDLE_OPTIONAL_TRUE_TOKENS,
+            falseTokens: BUNDLE_OPTIONAL_FALSE_TOKENS,
+            defaultValue: false,
+          });
         } else if (part.includes('*')) {
           const segments = part.split('*').map((segment) => segment.trim());
           componentName = segments[0] || '';
-          quantity = Math.max(this.parseInteger(segments[1], 1), 1);
+          quantity = parsePositiveQuantity(segments[1], DEFAULT_ITEM_QUANTITY);
         } else {
           componentName = part;
         }
@@ -151,7 +183,11 @@ class CsvImportService {
   }
 
   validateHeaders(headers) {
-    const required = ['Manufacturer', 'Model', 'Category'];
+    const required = [
+      CSV_HEADERS.MANUFACTURER[0],
+      CSV_HEADERS.MODEL[0],
+      CSV_HEADERS.CATEGORY[0],
+    ];
     const missing = required.filter((key) => !headers.includes(key));
     if (missing.length) {
       throw new Error(`Missing required headers: ${missing.join(', ')}`);
@@ -206,43 +242,47 @@ class CsvImportService {
         if (typeof effectiveValue === 'boolean') {
           return { isNull: false, valueBoolean: effectiveValue };
         }
-        const normalized = String(effectiveValue).trim().toLowerCase();
-        if (['true', '1', 'yes', 'ja'].includes(normalized)) {
+        const parsedBoolean = parseBooleanToken(effectiveValue, {
+          trueTokens: ['true', '1', 'yes', 'ja'],
+          falseTokens: ['false', '0', 'no', 'nein'],
+          defaultValue: undefined,
+        });
+        if (parsedBoolean === true) {
           return { isNull: false, valueBoolean: true };
         }
-        if (['false', '0', 'no', 'nein'].includes(normalized)) {
+        if (parsedBoolean === false) {
           return { isNull: false, valueBoolean: false };
         }
         throw new Error(`${definition.label || definition.key} muss true/false sein`);
       }
       case 'date': {
-        const parsed = new Date(effectiveValue);
-        if (Number.isNaN(parsed.getTime())) {
+        const parsedDate = new Date(effectiveValue);
+        if (Number.isNaN(parsedDate.getTime())) {
           throw new Error(`${definition.label || definition.key} muss ein Datum sein`);
         }
-        const isoDate = parsed.toISOString().slice(0, 10);
+        const isoDate = parsedDate.toISOString().slice(0, 10);
         return { isNull: false, valueDate: isoDate };
       }
       case 'enum': {
-        let allowed = [];
+        let allowedEnumValues = [];
         if (Array.isArray(definition.enumValues)) {
-          allowed = definition.enumValues;
+          allowedEnumValues = definition.enumValues;
         } else if (typeof definition.enumValues === 'string') {
           try {
-            const parsed = JSON.parse(definition.enumValues);
-            if (Array.isArray(parsed)) {
-              allowed = parsed;
+            const parsedEnumValues = JSON.parse(definition.enumValues);
+            if (Array.isArray(parsedEnumValues)) {
+              allowedEnumValues = parsedEnumValues;
             }
           } catch (err) {
-            allowed = definition.enumValues.split(',').map((value) => value.trim()).filter(Boolean);
+            allowedEnumValues = definition.enumValues.split(',').map((value) => value.trim()).filter(Boolean);
           }
         }
-        if (!allowed.length) {
+        if (!allowedEnumValues.length) {
           throw new Error(`${definition.label || definition.key} hat keine Enum-Werte`);
         }
         const value = String(effectiveValue);
-        if (!allowed.includes(value)) {
-          throw new Error(`${definition.label || definition.key} muss einer der Werte ${allowed.join(', ')} sein`);
+        if (!allowedEnumValues.includes(value)) {
+          throw new Error(`${definition.label || definition.key} muss einer der Werte ${allowedEnumValues.join(', ')} sein`);
         }
         return { isNull: false, valueString: value };
       }
@@ -325,7 +365,7 @@ class CsvImportService {
   }, transaction) {
     const normalizedTrackingType = ['serialized', 'bulk', 'bundle'].includes(String(trackingType || '').trim().toLowerCase())
       ? String(trackingType).trim().toLowerCase()
-      : 'serialized';
+      : TRACKING_TYPE.SERIALIZED;
     let model = await this.models.AssetModel.findOne({
       where: { name, manufacturerId, lendingLocationId },
       transaction,
@@ -417,20 +457,280 @@ class CsvImportService {
   }
 
   parseBoolean(value) {
-    if (typeof value === 'boolean') {
-      return value;
+    return parseBooleanToken(value, { defaultValue: undefined });
+  }
+
+  buildRowContext({ row, rowNumber, lendingLocationId }) {
+    return {
+      row,
+      rowNumber,
+      lendingLocationId,
+      manufacturerName: String(this.readColumn(row, ...CSV_HEADERS.MANUFACTURER) || '').trim(),
+      modelName: String(this.readColumn(row, ...CSV_HEADERS.MODEL) || '').trim(),
+      categoryName: String(this.readColumn(row, ...CSV_HEADERS.CATEGORY) || '').trim(),
+      trackingType: this.parseTrackingType(row),
+      inventoryNumber: String(this.readColumn(row, ...CSV_HEADERS.INVENTORY_NUMBER) || '').trim(),
+      serialNumber: String(this.readColumn(row, ...CSV_HEADERS.SERIAL_NUMBER) || '').trim(),
+    };
+  }
+
+  validateRowContext(rowContext) {
+    const errors = [];
+    if (!rowContext.manufacturerName) {
+      errors.push('Manufacturer fehlt');
     }
-    if (value === undefined || value === null) {
-      return undefined;
+    if (!rowContext.modelName) {
+      errors.push('Model fehlt');
     }
-    const normalized = String(value).trim().toLowerCase();
-    if (['true', '1', 'yes', 'ja', 'active'].includes(normalized)) {
-      return true;
+    if (!rowContext.categoryName) {
+      errors.push('Category fehlt');
     }
-    if (['false', '0', 'no', 'nein', 'inactive'].includes(normalized)) {
-      return false;
+    return errors;
+  }
+
+  async upsertDependencies(rowContext, transaction) {
+    const manufacturer = await this.createOrFindManufacturer(
+      { name: rowContext.manufacturerName, lendingLocationId: rowContext.lendingLocationId },
+      transaction
+    );
+    const category = await this.createOrFindCategory(
+      { name: rowContext.categoryName, lendingLocationId: rowContext.lendingLocationId },
+      transaction
+    );
+    const model = await this.createOrFindModel(
+      {
+        name: rowContext.modelName,
+        manufacturerId: manufacturer.id,
+        categoryId: category.id,
+        lendingLocationId: rowContext.lendingLocationId,
+        description: this.readColumn(rowContext.row, ...CSV_HEADERS.DESCRIPTION),
+        technicalDescription: this.readColumn(rowContext.row, ...CSV_HEADERS.TECHNICAL_DESCRIPTION),
+        imageUrl: this.readColumn(rowContext.row, ...CSV_HEADERS.IMAGE_URL),
+        isActive: this.parseBoolean(this.readColumn(rowContext.row, ...CSV_HEADERS.IS_ACTIVE)),
+        trackingType: rowContext.trackingType,
+      },
+      transaction
+    );
+    return { manufacturer, category, model };
+  }
+
+  async importBulkRow(rowContext, model, transaction, importExecutionContext) {
+    const quantityTotal = Math.max(
+      this.parseInteger(this.readColumn(rowContext.row, ...CSV_HEADERS.QUANTITY_TOTAL), 0),
+      0
+    );
+    const quantityAvailable = Math.max(
+      this.parseInteger(this.readColumn(rowContext.row, ...CSV_HEADERS.QUANTITY_AVAILABLE), quantityTotal),
+      0
+    );
+    await this.models.InventoryStock.findOrCreate({
+      where: {
+        assetModelId: model.id,
+        lendingLocationId: rowContext.lendingLocationId,
+      },
+      defaults: {
+        assetModelId: model.id,
+        lendingLocationId: rowContext.lendingLocationId,
+        quantityTotal: 0,
+        quantityAvailable: 0,
+      },
+      transaction,
+    });
+    const stock = await this.models.InventoryStock.findOne({
+      where: { assetModelId: model.id, lendingLocationId: rowContext.lendingLocationId },
+      transaction,
+    });
+    await stock.update(
+      {
+        quantityTotal,
+        quantityAvailable: Math.min(quantityAvailable, quantityTotal),
+      },
+      { transaction }
+    );
+    importExecutionContext.results.updated.push({
+      row: rowContext.rowNumber,
+      modelId: model.id,
+      type: TRACKING_TYPE.BULK,
+    });
+  }
+
+  queueBundleRow(rowContext, model, importExecutionContext) {
+    importExecutionContext.bundleResolutionQueue.push({
+      row: rowContext.rowNumber,
+      modelId: model.id,
+      lendingLocationId: rowContext.lendingLocationId,
+      bundleName: String(
+        this.readColumn(rowContext.row, ...CSV_HEADERS.BUNDLE_NAME) || model.name || ''
+      ).trim(),
+      bundleDescription: String(
+        this.readColumn(rowContext.row, ...CSV_HEADERS.BUNDLE_DESCRIPTION) || model.description || ''
+      ).trim(),
+      bundleComponentsRaw: this.readColumn(rowContext.row, ...CSV_HEADERS.BUNDLE_COMPONENTS),
+    });
+    importExecutionContext.results.updated.push({
+      row: rowContext.rowNumber,
+      modelId: model.id,
+      type: TRACKING_TYPE.BUNDLE,
+    });
+  }
+
+  async importSerializedRow(rowContext, model, transaction, importExecutionContext) {
+    if (!rowContext.inventoryNumber && !rowContext.serialNumber) {
+      importExecutionContext.results.updated.push({
+        row: rowContext.rowNumber,
+        modelId: model.id,
+        type: TRACKING_TYPE.SERIALIZED,
+      });
+      return;
     }
-    return undefined;
+
+    const assetStatus = this.parseBoolean(this.readColumn(rowContext.row, ...CSV_HEADERS.STATUS));
+    const assetActive = assetStatus !== undefined
+      ? assetStatus
+      : this.parseBoolean(this.readColumn(rowContext.row, ...CSV_HEADERS.IS_ACTIVE));
+
+    const { asset, created } = await this.createOrUpdateAssetInstance(
+      {
+        assetModelId: model.id,
+        lendingLocationId: rowContext.lendingLocationId,
+        inventoryNumber: rowContext.inventoryNumber,
+        serialNumber: rowContext.serialNumber,
+        condition: this.readColumn(rowContext.row, ...CSV_HEADERS.CONDITION),
+        isActive: assetActive,
+      },
+      transaction
+    );
+
+    if (created) {
+      importExecutionContext.results.created.push(asset.id);
+    } else {
+      importExecutionContext.results.updated.push(asset.id);
+    }
+  }
+
+  async upsertBundleDefinition(pendingBundleRow, transaction) {
+    const existingBundle = await this.models.BundleDefinition.findOne({
+      where: {
+        assetModelId: pendingBundleRow.modelId,
+        lendingLocationId: pendingBundleRow.lendingLocationId,
+      },
+      transaction,
+    });
+
+    const bundleDefinition = existingBundle
+      ? existingBundle
+      : await this.models.BundleDefinition.create(
+        {
+          assetModelId: pendingBundleRow.modelId,
+          lendingLocationId: pendingBundleRow.lendingLocationId,
+          name: pendingBundleRow.bundleName || `Bundle ${pendingBundleRow.modelId}`,
+          description: pendingBundleRow.bundleDescription || null,
+        },
+        { transaction }
+      );
+
+    if (existingBundle) {
+      await bundleDefinition.update(
+        {
+          name: pendingBundleRow.bundleName || bundleDefinition.name,
+          description: pendingBundleRow.bundleDescription || null,
+        },
+        { transaction }
+      );
+    }
+    return bundleDefinition;
+  }
+
+  async replaceBundleItems(bundleDefinition, pendingBundleRow, transaction) {
+    const parsedComponents = this.parseBundleComponents(pendingBundleRow.bundleComponentsRaw);
+    await this.models.BundleItem.destroy({
+      where: { bundleDefinitionId: bundleDefinition.id },
+      transaction,
+    });
+
+    for (const componentEntry of parsedComponents) {
+      // Bundle component names are resolved within the same lending location scope.
+      const componentModel = await this.models.AssetModel.findOne({
+        where: {
+          name: componentEntry.componentName,
+          lendingLocationId: pendingBundleRow.lendingLocationId,
+        },
+        transaction,
+      });
+      if (!componentModel) {
+        throw new Error(`Komponente nicht gefunden: ${componentEntry.componentName}`);
+      }
+      await this.models.BundleItem.create(
+        {
+          bundleDefinitionId: bundleDefinition.id,
+          componentAssetModelId: componentModel.id,
+          quantity: componentEntry.quantity,
+          isOptional: componentEntry.isOptional,
+        },
+        { transaction }
+      );
+    }
+  }
+
+  async importBundleRowsSecondPass(importExecutionContext, transaction) {
+    // Second pass resolves references that may point to rows imported later in the same file.
+    for (const pendingBundleRow of importExecutionContext.bundleResolutionQueue) {
+      try {
+        const bundleDefinition = await this.upsertBundleDefinition(pendingBundleRow, transaction);
+        await this.replaceBundleItems(bundleDefinition, pendingBundleRow, transaction);
+      } catch (err) {
+        importExecutionContext.results.errors.push({
+          row: pendingBundleRow.row,
+          errors: [err.message || 'Bundle Import fehlgeschlagen'],
+        });
+      }
+    }
+  }
+
+  async importRow(rowContext, transaction, importExecutionContext) {
+    const rowErrors = this.validateRowContext(rowContext);
+    if (rowErrors.length) {
+      const err = new Error('Row validation failed');
+      err.details = rowErrors;
+      throw err;
+    }
+
+    const { model } = await this.upsertDependencies(rowContext, transaction);
+
+    const assetTrackingType = rowContext.trackingType;
+    if (assetTrackingType === TRACKING_TYPE.BULK) {
+      await this.importBulkRow(rowContext, model, transaction, importExecutionContext);
+      return;
+    }
+    if (assetTrackingType === TRACKING_TYPE.BUNDLE) {
+      this.queueBundleRow(rowContext, model, importExecutionContext);
+      return;
+    }
+    await this.importSerializedRow(rowContext, model, transaction, importExecutionContext);
+  }
+
+  async importRowSafely(executionContext) {
+    const { transaction, rowNumber, row, importExecutionContext } = executionContext;
+    // Row numbers are 1-based to match spreadsheet line numbers shown to users.
+    try {
+      const rowContext = this.buildRowContext({
+        row,
+        rowNumber,
+        lendingLocationId: importExecutionContext.lendingLocationId,
+      });
+      await this.importRow(rowContext, transaction, importExecutionContext);
+    } catch (err) {
+      const errors = err && err.details ? err.details : [err.message || 'Import fehlgeschlagen'];
+      importExecutionContext.results.errors.push({ row: rowNumber, errors });
+    }
+  }
+
+  createImportExecutionContext(options) {
+    return {
+      lendingLocationId: options.lendingLocationId,
+      results: { created: [], updated: [], errors: [] },
+      bundleResolutionQueue: [],
+    };
   }
 
   async importAssets(buffer, options = {}) {
@@ -438,8 +738,8 @@ class CsvImportService {
     const headers = rows.length ? Object.keys(rows[0]) : [];
     this.validateHeaders(headers);
 
-    const results = { created: [], updated: [], errors: [] };
-    const { lendingLocationId } = options;
+    const importExecutionContext = this.createImportExecutionContext(options);
+    const { lendingLocationId } = importExecutionContext;
 
     if (!lendingLocationId) {
       throw new Error('LendingLocationId is required');
@@ -449,210 +749,20 @@ class CsvImportService {
       throw new Error('LendingLocation not found');
     }
 
-    const pendingBundleRows = [];
-
     await this.models.sequelize.transaction(async (transaction) => {
       for (let index = 0; index < rows.length; index += 1) {
-        try {
-          const row = rows[index];
-          const rowErrors = [];
-
-          const manufacturerName = String(this.readColumn(row, 'Manufacturer') || '').trim();
-          const modelName = String(this.readColumn(row, 'Model') || '').trim();
-          const categoryName = String(this.readColumn(row, 'Category') || '').trim();
-          const trackingType = this.parseTrackingType(row);
-          const inventoryNumber = String(this.readColumn(row, 'InventoryNumber') || '').trim();
-          const serialNumber = String(this.readColumn(row, 'SerialNumber') || '').trim();
-
-          if (!manufacturerName) {
-            rowErrors.push('Manufacturer fehlt');
-          }
-          if (!modelName) {
-            rowErrors.push('Model fehlt');
-          }
-          if (!categoryName) {
-            rowErrors.push('Category fehlt');
-          }
-
-          if (rowErrors.length) {
-            const err = new Error('Row validation failed');
-            err.details = rowErrors;
-            throw err;
-          }
-
-          const manufacturer = await this.createOrFindManufacturer(
-            { name: manufacturerName, lendingLocationId },
-            transaction
-          );
-          const category = await this.createOrFindCategory(
-            { name: categoryName, lendingLocationId },
-            transaction
-          );
-
-          const model = await this.createOrFindModel(
-            {
-              name: modelName,
-              manufacturerId: manufacturer.id,
-              categoryId: category.id,
-              lendingLocationId,
-              description: this.readColumn(row, 'Description'),
-              technicalDescription: this.readColumn(row, 'TechnicalDescription'),
-              imageUrl: this.readColumn(row, 'ImageURL', 'ImageUrl'),
-              isActive: this.parseBoolean(this.readColumn(row, 'IsActive')),
-              trackingType,
-            },
-            transaction
-          );
-
-          if (trackingType === 'bulk') {
-            const quantityTotal = Math.max(this.parseInteger(this.readColumn(row, 'QuantityTotal'), 0), 0);
-            const quantityAvailable = Math.max(
-              this.parseInteger(this.readColumn(row, 'QuantityAvailable'), quantityTotal),
-              0
-            );
-            await this.models.InventoryStock.findOrCreate({
-              where: {
-                assetModelId: model.id,
-                lendingLocationId,
-              },
-              defaults: {
-                assetModelId: model.id,
-                lendingLocationId,
-                quantityTotal: 0,
-                quantityAvailable: 0,
-              },
-              transaction,
-            });
-            const stock = await this.models.InventoryStock.findOne({
-              where: { assetModelId: model.id, lendingLocationId },
-              transaction,
-            });
-            await stock.update(
-              {
-                quantityTotal,
-                quantityAvailable: Math.min(quantityAvailable, quantityTotal),
-              },
-              { transaction }
-            );
-            results.updated.push({ row: index + 1, modelId: model.id, type: 'bulk' });
-            continue;
-          }
-
-          if (trackingType === 'bundle') {
-            pendingBundleRows.push({
-              row: index + 1,
-              modelId: model.id,
-              lendingLocationId,
-              bundleName: String(this.readColumn(row, 'BundleName') || model.name || '').trim(),
-              bundleDescription: String(this.readColumn(row, 'BundleDescription') || model.description || '').trim(),
-              bundleComponentsRaw: this.readColumn(row, 'BundleComponents'),
-            });
-            results.updated.push({ row: index + 1, modelId: model.id, type: 'bundle' });
-            continue;
-          }
-
-          if (!inventoryNumber && !serialNumber) {
-            results.updated.push({ row: index + 1, modelId: model.id, type: 'serialized' });
-            continue;
-          }
-
-          const assetStatus = this.parseBoolean(this.readColumn(row, 'Status'));
-          const assetActive = assetStatus !== undefined
-            ? assetStatus
-            : this.parseBoolean(this.readColumn(row, 'IsActive'));
-
-          const { asset, created } = await this.createOrUpdateAssetInstance(
-            {
-              assetModelId: model.id,
-              lendingLocationId,
-              inventoryNumber,
-              serialNumber,
-              condition: this.readColumn(row, 'Condition'),
-              isActive: assetActive,
-            },
-            transaction
-          );
-
-          if (created) {
-            results.created.push(asset.id);
-          } else {
-            results.updated.push(asset.id);
-          }
-        } catch (err) {
-          const errors = err && err.details ? err.details : [err.message || 'Import fehlgeschlagen'];
-          results.errors.push({ row: index + 1, errors });
-        }
+        await this.importRowSafely({
+          transaction,
+          rowNumber: index + 1,
+          row: rows[index],
+          importExecutionContext,
+        });
       }
 
-      for (const pending of pendingBundleRows) {
-        try {
-          const existingBundle = await this.models.BundleDefinition.findOne({
-            where: {
-              assetModelId: pending.modelId,
-              lendingLocationId: pending.lendingLocationId,
-            },
-            transaction,
-          });
-
-          const bundleDefinition = existingBundle
-            ? existingBundle
-            : await this.models.BundleDefinition.create(
-              {
-                assetModelId: pending.modelId,
-                lendingLocationId: pending.lendingLocationId,
-                name: pending.bundleName || `Bundle ${pending.modelId}`,
-                description: pending.bundleDescription || null,
-              },
-              { transaction }
-            );
-
-          if (existingBundle) {
-            await bundleDefinition.update(
-              {
-                name: pending.bundleName || bundleDefinition.name,
-                description: pending.bundleDescription || null,
-              },
-              { transaction }
-            );
-          }
-
-          const parsedComponents = this.parseBundleComponents(pending.bundleComponentsRaw);
-          await this.models.BundleItem.destroy({
-            where: { bundleDefinitionId: bundleDefinition.id },
-            transaction,
-          });
-
-          for (const componentEntry of parsedComponents) {
-            const componentModel = await this.models.AssetModel.findOne({
-              where: {
-                name: componentEntry.componentName,
-                lendingLocationId: pending.lendingLocationId,
-              },
-              transaction,
-            });
-            if (!componentModel) {
-              throw new Error(`Komponente nicht gefunden: ${componentEntry.componentName}`);
-            }
-            await this.models.BundleItem.create(
-              {
-                bundleDefinitionId: bundleDefinition.id,
-                componentAssetModelId: componentModel.id,
-                quantity: componentEntry.quantity,
-                isOptional: componentEntry.isOptional,
-              },
-              { transaction }
-            );
-          }
-        } catch (err) {
-          results.errors.push({
-            row: pending.row,
-            errors: [err.message || 'Bundle Import fehlgeschlagen'],
-          });
-        }
-      }
+      await this.importBundleRowsSecondPass(importExecutionContext, transaction);
     });
 
-    return results;
+    return importExecutionContext.results;
   }
 }
 

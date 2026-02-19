@@ -6,34 +6,18 @@ const {
   parseIncludeDeleted,
   buildPagination,
 } = require('../_controllerUtils');
+const { ROLE_SCOPE } = require('../../../constants/domain');
+const { getActorContext } = require('../../../helpers/requestContext.helper');
 
 class UserAdminController {
   getRoleScopeMap(roles) {
     const map = new Map();
     (roles || []).forEach((role) => {
       if (role && role.id) {
-        map.set(role.id, role.scope || 'global');
+        map.set(role.id, role.scope || ROLE_SCOPE.GLOBAL);
       }
     });
     return map;
-  }
-
-  extractRoleAssignments(body, roleScopeMap) {
-    const roleIds = Array.isArray(body.roleIds) ? body.roleIds : body.roleIds ? [body.roleIds] : [];
-    const assignments = roleIds.map((roleId) => {
-      const lendingLocationId = body[`roleLocation_${roleId}`] || null;
-      return { roleId, lendingLocationId: lendingLocationId || null };
-    });
-
-    const errors = [];
-    assignments.forEach((assignment) => {
-      const scope = roleScopeMap.get(assignment.roleId);
-      if (scope === 'ausleihe' && !assignment.lendingLocationId) {
-        errors.push('Für ausleihe-spezifische Rollen muss eine Ausleihe gewählt werden.');
-      }
-    });
-
-    return { assignments, errors };
   }
 
   buildGlobalRoleIds(body) {
@@ -50,6 +34,97 @@ class UserAdminController {
       }
     });
     return map;
+  }
+
+  buildRoleSelection(body, lendingLocations) {
+    return {
+      globalRoleIds: this.buildGlobalRoleIds(body),
+      locationRoleMap: this.buildLocationRoleMap(body, lendingLocations),
+    };
+  }
+
+  validateRoleSelection(roleSelection, roleScopeMap) {
+    const { globalRoleIds, locationRoleMap } = roleSelection;
+    // Role selection must match role scope; invalid scope combinations are rejected before persistence.
+    const hasLocationScopedRoleInGlobalSelector = globalRoleIds.some(
+      (roleId) => roleScopeMap.get(roleId) === ROLE_SCOPE.LENDING_LOCATION
+    );
+    const hasGlobalRoleInLocationSelector = Array.from(locationRoleMap.values()).some(
+      (roleId) => roleScopeMap.get(roleId) !== ROLE_SCOPE.LENDING_LOCATION
+    );
+    return {
+      hasLocationScopedRoleInGlobalSelector,
+      hasGlobalRoleInLocationSelector,
+      hasErrors: hasLocationScopedRoleInGlobalSelector || hasGlobalRoleInLocationSelector,
+    };
+  }
+
+  buildRoleDiff(existingRoles, roleSelection) {
+    const existingGlobalRoleIds = new Set(
+      existingRoles.filter((role) => !role.lendingLocationId).map((role) => role.roleId)
+    );
+    const existingScopedRoles = existingRoles.filter((role) => role.lendingLocationId);
+    const desiredScopedRoleKeys = new Set(
+      Array.from(roleSelection.locationRoleMap.entries()).map(([locationId, roleId]) => `${locationId}:${roleId}`)
+    );
+
+    const rolesToAddGlobal = roleSelection.globalRoleIds.filter((roleId) => !existingGlobalRoleIds.has(roleId));
+    const rolesToRemoveGlobal = Array.from(existingGlobalRoleIds).filter(
+      (roleId) => !roleSelection.globalRoleIds.includes(roleId)
+    );
+    const scopedRolesToAdd = Array.from(roleSelection.locationRoleMap.entries())
+      .filter(([locationId, roleId]) =>
+        !existingScopedRoles.some(
+          (existingRole) => existingRole.lendingLocationId === locationId && existingRole.roleId === roleId
+        )
+      )
+      .map(([locationId, roleId]) => ({ lendingLocationId: locationId, roleId }));
+    const scopedRolesToRemove = existingScopedRoles.filter((existingRole) => {
+      const key = `${existingRole.lendingLocationId}:${existingRole.roleId}`;
+      return !desiredScopedRoleKeys.has(key);
+    });
+
+    return {
+      rolesToAddGlobal,
+      rolesToRemoveGlobal,
+      scopedRolesToAdd,
+      scopedRolesToRemove,
+    };
+  }
+
+  async applyRoleDiff(userId, roleDiff, actorContext) {
+    for (const roleId of roleDiff.rolesToAddGlobal) {
+      await services.userService.assignRole({ userId, roleId }, actorContext);
+    }
+    for (const roleId of roleDiff.rolesToRemoveGlobal) {
+      await services.userService.revokeRole(
+        { userId, roleId, lendingLocationId: null },
+        actorContext
+      );
+    }
+    for (const scopedRole of roleDiff.scopedRolesToAdd) {
+      await services.userService.assignRole(
+        { userId, roleId: scopedRole.roleId, lendingLocationId: scopedRole.lendingLocationId },
+        actorContext
+      );
+    }
+    for (const scopedRole of roleDiff.scopedRolesToRemove) {
+      await services.userService.revokeRole(
+        {
+          userId,
+          roleId: scopedRole.roleId,
+          lendingLocationId: scopedRole.lendingLocationId,
+        },
+        actorContext
+      );
+    }
+  }
+
+  async syncRolesForUser(userId, roleSelection, actorContext) {
+    const existingRoles = await services.userService.listUserRoles(userId);
+    const roleDiff = this.buildRoleDiff(existingRoles, roleSelection);
+    // Role sync is diff-based: add missing assignments, then revoke stale assignments.
+    await this.applyRoleDiff(userId, roleDiff, actorContext);
   }
 
   async index(req, res, next) {
@@ -161,16 +236,17 @@ class UserAdminController {
         return res.redirect(`/admin/users/${userId}`);
       }
       const role = await services.roleService.getById(roleId);
-      const lendingLocationId = role.scope === 'ausleihe' ? (req.body.lendingLocationId || null) : null;
-      if (role.scope === 'ausleihe' && !lendingLocationId) {
+      const scopedLendingLocationId =
+        role.scope === ROLE_SCOPE.LENDING_LOCATION ? (req.body.lendingLocationId || null) : null;
+      if (role.scope === ROLE_SCOPE.LENDING_LOCATION && !scopedLendingLocationId) {
         if (typeof req.flash === 'function') {
           req.flash('error', 'Bitte eine Ausleihe auswählen.');
         }
         return res.redirect(`/admin/users/${userId}`);
       }
       await services.userService.assignRole(
-        { userId, roleId, lendingLocationId: lendingLocationId || null },
-        { actorId: req.user ? req.user.id : null }
+        { userId, roleId, lendingLocationId: scopedLendingLocationId || null },
+        getActorContext(req)
       );
       if (typeof req.flash === 'function') {
         req.flash('success', 'Rolle zugewiesen');
@@ -232,15 +308,10 @@ class UserAdminController {
       const allRoles = await services.roleService.getAll();
       const lendingLocations = await services.lendingLocationService.getAll();
       const roleScopeMap = this.getRoleScopeMap(allRoles);
-      const globalRoleIds = this.buildGlobalRoleIds(req.body);
-      const locationRoleMap = this.buildLocationRoleMap(req.body, lendingLocations);
+      const roleSelection = this.buildRoleSelection(req.body, lendingLocations);
+      const roleValidation = this.validateRoleSelection(roleSelection, roleScopeMap);
 
-      const invalidGlobal = globalRoleIds.find((roleId) => roleScopeMap.get(roleId) === 'ausleihe');
-      const invalidLocation = Array.from(locationRoleMap.values()).find(
-        (roleId) => roleScopeMap.get(roleId) !== 'ausleihe'
-      );
-
-      if (invalidGlobal || invalidLocation) {
+      if (roleValidation.hasErrors) {
         return renderPage(res, 'admin/users/new', req, {
           breadcrumbs: [
             { label: 'Admin', href: '/admin/assets' },
@@ -254,19 +325,7 @@ class UserAdminController {
         });
       }
 
-      for (const roleId of globalRoleIds) {
-        await services.userService.assignRole(
-          { userId: user.id, roleId },
-          { actorId: req.user ? req.user.id : null }
-        );
-      }
-
-      for (const [locationId, roleId] of locationRoleMap.entries()) {
-        await services.userService.assignRole(
-          { userId: user.id, roleId, lendingLocationId: locationId },
-          { actorId: req.user ? req.user.id : null }
-        );
-      }
+      await this.syncRolesForUser(user.id, roleSelection, getActorContext(req));
 
       if (typeof req.flash === 'function') {
         req.flash('success', 'Benutzer angelegt');
@@ -321,15 +380,10 @@ class UserAdminController {
       const allRoles = await services.roleService.getAll();
       const lendingLocations = await services.lendingLocationService.getAll();
       const roleScopeMap = this.getRoleScopeMap(allRoles);
-      const globalRoleIds = this.buildGlobalRoleIds(req.body);
-      const locationRoleMap = this.buildLocationRoleMap(req.body, lendingLocations);
+      const roleSelection = this.buildRoleSelection(req.body, lendingLocations);
+      const roleValidation = this.validateRoleSelection(roleSelection, roleScopeMap);
 
-      const invalidGlobal = globalRoleIds.find((roleId) => roleScopeMap.get(roleId) === 'ausleihe');
-      const invalidLocation = Array.from(locationRoleMap.values()).find(
-        (roleId) => roleScopeMap.get(roleId) !== 'ausleihe'
-      );
-
-      if (invalidGlobal || invalidLocation) {
+      if (roleValidation.hasErrors) {
         const user = await services.userService.getById(userId);
         const userRoles = await services.userService.listUserRoles(userId);
         return renderPage(res, 'admin/users/edit', req, {
@@ -348,55 +402,7 @@ class UserAdminController {
         });
       }
 
-      const existingRoles = await services.userService.listUserRoles(userId);
-      const existingGlobalRoleIds = new Set(
-        existingRoles.filter((role) => !role.lendingLocationId).map((role) => role.roleId)
-      );
-
-      for (const roleId of globalRoleIds) {
-        if (!existingGlobalRoleIds.has(roleId)) {
-          await services.userService.assignRole(
-            { userId, roleId },
-            { actorId: req.user ? req.user.id : null }
-          );
-        }
-      }
-
-      for (const roleId of existingGlobalRoleIds) {
-        if (!globalRoleIds.includes(roleId)) {
-          await services.userService.revokeRole(
-            { userId, roleId, lendingLocationId: null },
-            { actorId: req.user ? req.user.id : null }
-          );
-        }
-      }
-
-      const existingLocationRoles = existingRoles.filter((role) => role.lendingLocationId);
-      const desiredLocationKeys = new Set(
-        Array.from(locationRoleMap.entries()).map(([locationId, roleId]) => `${locationId}:${roleId}`)
-      );
-
-      for (const [locationId, roleId] of locationRoleMap.entries()) {
-        const hasRole = existingLocationRoles.some(
-          (role) => role.lendingLocationId === locationId && role.roleId === roleId
-        );
-        if (!hasRole) {
-          await services.userService.assignRole(
-            { userId, roleId, lendingLocationId: locationId },
-            { actorId: req.user ? req.user.id : null }
-          );
-        }
-      }
-
-      for (const role of existingLocationRoles) {
-        const key = `${role.lendingLocationId}:${role.roleId}`;
-        if (!desiredLocationKeys.has(key)) {
-          await services.userService.revokeRole(
-            { userId, roleId: role.roleId, lendingLocationId: role.lendingLocationId },
-            { actorId: req.user ? req.user.id : null }
-          );
-        }
-      }
+      await this.syncRolesForUser(userId, roleSelection, getActorContext(req));
 
       if (typeof req.flash === 'function') {
         req.flash('success', 'Benutzer gespeichert');
@@ -419,22 +425,163 @@ class UserAdminController {
     }
   }
 
+  getSelectedUserIds(body) {
+    return Array.isArray(body.userIds) ? body.userIds : body.userIds ? [body.userIds] : [];
+  }
+
+  normalizeBodyArray(value) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    if (value) {
+      return [value];
+    }
+    return [];
+  }
+
+  throwOnBulkFailures(failures, prefix) {
+    if (!failures.length) {
+      return;
+    }
+    throw new Error(`${prefix}: ${failures[0].message}`);
+  }
+
+  collectBulkFailure(failures, userId, err) {
+    failures.push({ userId, message: err && err.message ? err.message : 'Unbekannter Fehler' });
+  }
+
+  isIgnorableBulkRevokeError(err) {
+    return Boolean(err && err.message && err.message.toLowerCase().includes('userrole not found'));
+  }
+
+  getRoleAssignmentsForBulk(body) {
+    const roleId = body.roleId;
+    const lendingLocationId = body.lendingLocationId || null;
+    const bulkRoleIds = this.normalizeBodyArray(body.bulkRoleIds);
+    const bulkRoleLocationIds = this.normalizeBodyArray(body.bulkRoleLocationIds);
+
+    if (bulkRoleIds.length > 0) {
+      return bulkRoleIds
+        .map((id, index) => ({
+          roleId: id,
+          lendingLocationId: bulkRoleLocationIds[index] || null,
+        }))
+        .filter((assignment) => assignment.roleId);
+    }
+    if (roleId) {
+      return [{ roleId, lendingLocationId: lendingLocationId || null }];
+    }
+    return [];
+  }
+
+  getRoleRemovalsForBulk(body) {
+    const roleId = body.roleId;
+    const lendingLocationId = body.lendingLocationId || null;
+    const removeRoleIds = this.normalizeBodyArray(body.bulkRemoveRoleIds);
+    const removeRoleLocationIds = this.normalizeBodyArray(body.bulkRemoveRoleLocationIds);
+
+    if (removeRoleIds.length > 0) {
+      return removeRoleIds
+        .map((id, index) => ({
+          roleId: id,
+          lendingLocationId: removeRoleLocationIds[index] || null,
+        }))
+        .filter((assignment) => assignment.roleId);
+    }
+    if (roleId) {
+      return [{ roleId, lendingLocationId: lendingLocationId || null }];
+    }
+    return [];
+  }
+
+  async handleBulkAssignRole(req, userIds) {
+    const assignments = this.getRoleAssignmentsForBulk(req.body);
+    if (!assignments.length) {
+      throw new Error('Bitte eine Rolle auswählen.');
+    }
+
+    const allRoles = await services.roleService.getAll();
+    const roleScopeMap = this.getRoleScopeMap(allRoles);
+    const invalidAssignment = assignments.find(
+      (assignment) =>
+        roleScopeMap.get(assignment.roleId) === ROLE_SCOPE.LENDING_LOCATION &&
+        !assignment.lendingLocationId
+    );
+    if (invalidAssignment) {
+      throw new Error('Bitte eine Ausleihe auswählen.');
+    }
+
+    const failures = [];
+    const actorContext = getActorContext(req);
+    for (const userId of userIds) {
+      try {
+        for (const assignment of assignments) {
+          const scope = roleScopeMap.get(assignment.roleId);
+          await services.userService.assignRole(
+            {
+              userId,
+              roleId: assignment.roleId,
+              lendingLocationId: scope === ROLE_SCOPE.LENDING_LOCATION ? (assignment.lendingLocationId || null) : null,
+            },
+            actorContext
+          );
+        }
+      } catch (err) {
+        this.collectBulkFailure(failures, userId, err);
+      }
+    }
+    this.throwOnBulkFailures(failures, 'Rollen-Zuweisung fehlgeschlagen');
+  }
+
+  async handleBulkRemoveRole(req, userIds) {
+    const removals = this.getRoleRemovalsForBulk(req.body);
+    if (!removals.length) {
+      throw new Error('Bitte eine Rolle auswählen.');
+    }
+
+    const failures = [];
+    const actorContext = getActorContext(req);
+    for (const userId of userIds) {
+      try {
+        for (const removal of removals) {
+          if (removal.lendingLocationId) {
+            await services.userService.revokeRole(
+              { userId, roleId: removal.roleId, lendingLocationId: removal.lendingLocationId },
+              actorContext
+            );
+          } else {
+            await services.userService.revokeRoleEverywhere(
+              { userId, roleId: removal.roleId },
+              actorContext
+            );
+          }
+        }
+      } catch (err) {
+        if (this.isIgnorableBulkRevokeError(err)) {
+          continue;
+        }
+        this.collectBulkFailure(failures, userId, err);
+      }
+    }
+    this.throwOnBulkFailures(failures, 'Rollen-Entfernung fehlgeschlagen');
+  }
+
+  async handleBulkDeleteUsers(userIds) {
+    const failures = [];
+    for (const userId of userIds) {
+      try {
+        await services.userService.deleteUser(userId);
+      } catch (err) {
+        this.collectBulkFailure(failures, userId, err);
+      }
+    }
+    this.throwOnBulkFailures(failures, 'Löschen fehlgeschlagen');
+  }
+
   async bulk(req, res, next) {
     try {
-      const userIds = Array.isArray(req.body.userIds) ? req.body.userIds : req.body.userIds ? [req.body.userIds] : [];
+      const userIds = this.getSelectedUserIds(req.body);
       const action = req.body.action;
-      const roleId = req.body.roleId;
-      const lendingLocationId = req.body.lendingLocationId || null;
-      const bulkRoleIds = Array.isArray(req.body.bulkRoleIds)
-        ? req.body.bulkRoleIds
-        : req.body.bulkRoleIds
-          ? [req.body.bulkRoleIds]
-          : [];
-      const bulkRoleLocationIds = Array.isArray(req.body.bulkRoleLocationIds)
-        ? req.body.bulkRoleLocationIds
-        : req.body.bulkRoleLocationIds
-          ? [req.body.bulkRoleLocationIds]
-          : [];
 
       if (!userIds.length) {
         if (typeof req.flash === 'function') {
@@ -443,148 +590,29 @@ class UserAdminController {
         return res.redirect('/admin/users');
       }
 
-      if (action === 'assign_role') {
-        const assignments =
-          bulkRoleIds.length > 0
-            ? bulkRoleIds
-                .map((id, index) => ({
-                  roleId: id,
-                  lendingLocationId: bulkRoleLocationIds[index] || null,
-                }))
-                .filter((assignment) => assignment.roleId)
-            : roleId
-              ? [{ roleId, lendingLocationId: lendingLocationId || null }]
-              : [];
-
-        if (!assignments.length) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', 'Bitte eine Rolle auswählen.');
-          }
-          return res.redirect('/admin/users');
-        }
-        const allRoles = await services.roleService.getAll();
-        const roleScopeMap = this.getRoleScopeMap(allRoles);
-        const invalidAssignment = assignments.find(
-          (assignment) =>
-            roleScopeMap.get(assignment.roleId) === 'ausleihe' && !assignment.lendingLocationId
-        );
-        if (invalidAssignment) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', 'Bitte eine Ausleihe auswählen.');
-          }
-          return res.redirect('/admin/users');
-        }
-        const failures = [];
-        for (const userId of userIds) {
-          try {
-            for (const assignment of assignments) {
-              const scope = roleScopeMap.get(assignment.roleId);
-              await services.userService.assignRole(
-                {
-                  userId,
-                  roleId: assignment.roleId,
-                  lendingLocationId: scope === 'ausleihe' ? (assignment.lendingLocationId || null) : null,
-                },
-                { actorId: req.user ? req.user.id : null }
-              );
-            }
-          } catch (err) {
-            failures.push({ userId, message: err.message });
-          }
-        }
-        if (failures.length) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', `Rollen-Zuweisung fehlgeschlagen: ${failures[0].message}`);
-          }
-          return res.redirect('/admin/users');
-        }
-      } else if (action === 'remove_role') {
-        const removeRoleIds = Array.isArray(req.body.bulkRemoveRoleIds)
-          ? req.body.bulkRemoveRoleIds
-          : req.body.bulkRemoveRoleIds
-            ? [req.body.bulkRemoveRoleIds]
-            : [];
-        const removeRoleLocationIds = Array.isArray(req.body.bulkRemoveRoleLocationIds)
-          ? req.body.bulkRemoveRoleLocationIds
-          : req.body.bulkRemoveRoleLocationIds
-            ? [req.body.bulkRemoveRoleLocationIds]
-            : [];
-
-        const removals =
-          removeRoleIds.length > 0
-            ? removeRoleIds
-                .map((id, index) => ({
-                  roleId: id,
-                  lendingLocationId: removeRoleLocationIds[index] || null,
-                }))
-                .filter((assignment) => assignment.roleId)
-            : roleId
-              ? [{ roleId, lendingLocationId: lendingLocationId || null }]
-              : [];
-
-        if (!removals.length) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', 'Bitte eine Rolle auswählen.');
-          }
-          return res.redirect('/admin/users');
-        }
-        const failures = [];
-        for (const userId of userIds) {
-          try {
-            for (const removal of removals) {
-              if (removal.lendingLocationId) {
-                await services.userService.revokeRole(
-                  { userId, roleId: removal.roleId, lendingLocationId: removal.lendingLocationId },
-                  { actorId: req.user ? req.user.id : null }
-                );
-              } else {
-                await services.userService.revokeRoleEverywhere(
-                  { userId, roleId: removal.roleId },
-                  { actorId: req.user ? req.user.id : null }
-                );
-              }
-            }
-          } catch (err) {
-            if (err && err.message && err.message.toLowerCase().includes('userrole not found')) {
-              continue;
-            }
-            failures.push({ userId, message: err.message });
-          }
-        }
-        if (failures.length) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', `Rollen-Entfernung fehlgeschlagen: ${failures[0].message}`);
-          }
-          return res.redirect('/admin/users');
-        }
-      } else if (action === 'delete') {
-        const failures = [];
-        for (const userId of userIds) {
-          try {
-            await services.userService.deleteUser(userId);
-          } catch (err) {
-            failures.push({ userId, message: err.message });
-          }
-        }
-        if (failures.length) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', `Löschen fehlgeschlagen: ${failures[0].message}`);
-          }
-          return res.redirect('/admin/users');
-        }
-      } else {
+      const actionHandlers = {
+        assign_role: () => this.handleBulkAssignRole(req, userIds),
+        remove_role: () => this.handleBulkRemoveRole(req, userIds),
+        delete: () => this.handleBulkDeleteUsers(userIds),
+      };
+      const handler = actionHandlers[action];
+      if (!handler) {
         if (typeof req.flash === 'function') {
           req.flash('error', 'Ungültige Bulk-Aktion.');
         }
         return res.redirect('/admin/users');
       }
+      await handler();
 
       if (typeof req.flash === 'function') {
         req.flash('success', 'Bulk-Aktion ausgeführt');
       }
       return res.redirect('/admin/users');
     } catch (err) {
-      return handleError(res, next, req, err);
+      if (typeof req.flash === 'function') {
+        req.flash('error', err.message || 'Bulk-Aktion fehlgeschlagen');
+      }
+      return res.redirect('/admin/users');
     }
   }
 }

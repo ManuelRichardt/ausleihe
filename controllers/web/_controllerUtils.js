@@ -1,5 +1,6 @@
 const { createServices } = require('../../services');
 const models = require('../../models');
+const { parseBooleanToken } = require('../../utils/valueParsing');
 
 const services = Object.assign(createServices(), { models });
 
@@ -52,8 +53,13 @@ function buildPagination(page, limit, total) {
 }
 
 function parseIncludeDeleted(req) {
+  // Soft-deleted rows are only loaded when this flag is set (paranoid: false on downstream queries).
   const value = req && req.query ? req.query.includeDeleted : undefined;
-  return value === '1' || value === 'true' || value === 'yes';
+  return parseBooleanToken(value, {
+    trueTokens: ['1', 'true', 'yes'],
+    falseTokens: ['0', 'false', 'no'],
+    defaultValue: false,
+  });
 }
 
 function getFlashMessages(req) {

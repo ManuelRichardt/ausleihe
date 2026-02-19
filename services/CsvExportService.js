@@ -1,76 +1,44 @@
 const { stringify } = require('csv-stringify/sync');
+const { parseBooleanToken, toActiveStatusLabel } = require('../utils/valueParsing');
+const { DEFAULT_ITEM_QUANTITY, parsePositiveQuantity } = require('../utils/quantity');
+
+const EXPORT_COLUMN_SCHEMAS = Object.freeze({
+  ASSET_MODEL: [
+    { key: 'manufacturer', header: 'Manufacturer' },
+    { key: 'model', header: 'Model' },
+    { key: 'category', header: 'Category' },
+    { key: 'description', header: 'Description' },
+    { key: 'technicalDescription', header: 'TechnicalDescription' },
+    { key: 'imageUrl', header: 'ImageUrl' },
+    { key: 'isActive', header: 'IsActive' },
+  ],
+  INVENTORY_COMBINED: [
+    { key: 'manufacturer', header: 'Manufacturer' },
+    { key: 'model', header: 'Model' },
+    { key: 'category', header: 'Category' },
+    { key: 'description', header: 'Description' },
+    { key: 'technicalDescription', header: 'TechnicalDescription' },
+    { key: 'imageUrl', header: 'ImageURL' },
+    { key: 'trackingType', header: 'TrackingType' },
+    { key: 'isActive', header: 'IsActive' },
+    { key: 'inventoryNumber', header: 'InventoryNumber' },
+    { key: 'serialNumber', header: 'SerialNumber' },
+    { key: 'status', header: 'Status' },
+    { key: 'condition', header: 'Condition' },
+    { key: 'lendingLocation', header: 'LendingLocation' },
+    { key: 'quantityTotal', header: 'QuantityTotal' },
+    { key: 'quantityAvailable', header: 'QuantityAvailable' },
+    { key: 'bundleName', header: 'BundleName' },
+    { key: 'bundleDescription', header: 'BundleDescription' },
+    { key: 'bundleComponents', header: 'BundleComponents' },
+  ],
+});
+
+const GLOBAL_BUNDLE_LOCATION_KEY = 'global';
 
 class CsvExportService {
   constructor(models) {
     this.models = models;
-  }
-
-  buildAssetExportQuery(filters = {}) {
-    const where = {};
-    const modelWhere = {};
-    if (filters.lendingLocationId) {
-      where.lendingLocationId = filters.lendingLocationId;
-    }
-    if (filters.status) {
-      where.condition = filters.status;
-    }
-    if (filters.categoryId) {
-      modelWhere.categoryId = filters.categoryId;
-    }
-    return {
-      where,
-      include: [
-        {
-          model: this.models.AssetModel,
-          as: 'model',
-          where: modelWhere,
-          required: Object.keys(modelWhere).length > 0,
-          include: [
-            { model: this.models.Manufacturer, as: 'manufacturer' },
-            { model: this.models.AssetCategory, as: 'category' },
-          ],
-        },
-        { model: this.models.LendingLocation, as: 'lendingLocation' },
-        { model: this.models.CustomFieldValue, as: 'customFieldValues', include: [{ model: this.models.CustomFieldDefinition, as: 'definition' }] },
-      ],
-    };
-  }
-
-  async flattenCustomFields(instances) {
-    const fieldKeys = new Map();
-    instances.forEach((asset) => {
-      const values = asset.customFieldValues || [];
-      values.forEach((value) => {
-        const def = value.definition;
-        if (def && def.key) {
-          fieldKeys.set(def.key, def.label || def.key);
-        }
-      });
-    });
-    return Array.from(fieldKeys.entries()).map(([key, label]) => ({ key, label }));
-  }
-
-  buildCustomFieldValueMap(asset) {
-    const values = asset.customFieldValues || [];
-    const map = {};
-    values.forEach((value) => {
-      const def = value.definition;
-      if (!def || !def.key) {
-        return;
-      }
-      if (value.valueString !== null && value.valueString !== undefined) {
-        map[def.key] = value.valueString;
-      } else if (value.valueNumber !== null && value.valueNumber !== undefined) {
-        map[def.key] = value.valueNumber;
-      } else if (typeof value.valueBoolean === 'boolean') {
-        map[def.key] = value.valueBoolean;
-      } else if (value.valueDate !== null && value.valueDate !== undefined) {
-        map[def.key] = value.valueDate;
-      } else {
-        map[def.key] = '';
-      }
-    });
-    return map;
   }
 
   generateCsvBuffer(headers, records) {
@@ -109,56 +77,8 @@ class CsvExportService {
     return workbook.xlsx.writeBuffer();
   }
 
-  buildAssetExportHeaders(customFields) {
-    const headers = [
-      { key: 'manufacturer', header: 'Manufacturer' },
-      { key: 'model', header: 'Model' },
-      { key: 'category', header: 'Category' },
-      { key: 'description', header: 'Description' },
-      { key: 'inventoryNumber', header: 'InventoryNumber' },
-      { key: 'serialNumber', header: 'SerialNumber' },
-      { key: 'status', header: 'Status' },
-      { key: 'condition', header: 'Condition' },
-      { key: 'lendingLocation', header: 'LendingLocation' },
-    ];
-    customFields.forEach((field) => {
-      headers.push({ key: `custom_${field.key}`, header: `Custom:${field.label}` });
-    });
-    return headers;
-  }
-
-  buildAssetRecords(instances, customFields) {
-    return instances.map((asset) => {
-      const customMap = this.buildCustomFieldValueMap(asset);
-      const model = asset.model;
-      const record = {
-        manufacturer: model && model.manufacturer ? model.manufacturer.name : '',
-        model: model ? model.name : '',
-        category: model && model.category ? model.category.name : '',
-        description: model && model.description ? model.description : '',
-        inventoryNumber: asset.inventoryNumber,
-        serialNumber: asset.serialNumber || '',
-        status: asset.isActive ? 'active' : 'inactive',
-        condition: asset.condition || '',
-        lendingLocation: asset.lendingLocation ? asset.lendingLocation.name : '',
-      };
-      customFields.forEach((field) => {
-        record[`custom_${field.key}`] = customMap[field.key] || '';
-      });
-      return record;
-    });
-  }
-
   buildModelExportHeaders() {
-    return [
-      { key: 'manufacturer', header: 'Manufacturer' },
-      { key: 'model', header: 'Model' },
-      { key: 'category', header: 'Category' },
-      { key: 'description', header: 'Description' },
-      { key: 'technicalDescription', header: 'TechnicalDescription' },
-      { key: 'imageUrl', header: 'ImageUrl' },
-      { key: 'isActive', header: 'IsActive' },
-    ];
+    return [...EXPORT_COLUMN_SCHEMAS.ASSET_MODEL];
   }
 
   buildModelRecords(models) {
@@ -174,37 +94,71 @@ class CsvExportService {
   }
 
   parseActiveFilter(statusValue) {
-    const normalized = String(statusValue || '').trim().toLowerCase();
-    if (['active', 'true', '1', 'yes', 'ja'].includes(normalized)) {
-      return true;
+    return parseBooleanToken(statusValue, {
+      trueTokens: ['active', 'true', '1', 'yes', 'ja'],
+      falseTokens: ['inactive', 'blocked', 'false', '0', 'no', 'nein'],
+      defaultValue: undefined,
+    });
+  }
+
+  buildStockKey(assetModelId, lendingLocationId) {
+    return `${assetModelId}:${lendingLocationId}`;
+  }
+
+  buildBundleKey(assetModelId, lendingLocationId) {
+    const locationKey = lendingLocationId || GLOBAL_BUNDLE_LOCATION_KEY;
+    return `${assetModelId}:${locationKey}`;
+  }
+
+  buildBulkCombinedRecord(baseRecord, model, stockByKey) {
+    const stock = stockByKey.get(this.buildStockKey(model.id, model.lendingLocationId)) || null;
+    return {
+      ...baseRecord,
+      status: toActiveStatusLabel(baseRecord.isActive === 'true'),
+      quantityTotal: stock ? String(stock.quantityTotal) : '0',
+      quantityAvailable: stock ? String(stock.quantityAvailable) : '0',
+    };
+  }
+
+  buildBundleCombinedRecord(baseRecord, model, bundleByKey) {
+    const bundle =
+      bundleByKey.get(this.buildBundleKey(model.id, model.lendingLocationId)) ||
+      bundleByKey.get(this.buildBundleKey(model.id, GLOBAL_BUNDLE_LOCATION_KEY)) ||
+      null;
+    return {
+      ...baseRecord,
+      status: toActiveStatusLabel(baseRecord.isActive === 'true'),
+      bundleName: bundle && bundle.name ? bundle.name : model.name,
+      bundleDescription: bundle && bundle.description ? bundle.description : (model.description || ''),
+      bundleComponents: this.serializeBundleItems(bundle),
+    };
+  }
+
+  buildSerializedCombinedRecords(baseRecord, model, assetActiveFilter) {
+    const assets = Array.isArray(model.assets) ? model.assets : [];
+    const filteredAssets = assetActiveFilter === undefined
+      ? assets
+      : assets.filter((asset) => Boolean(asset.isActive) === assetActiveFilter);
+
+    if (!filteredAssets.length) {
+      if (assetActiveFilter !== undefined) {
+        return [];
+      }
+      return [baseRecord];
     }
-    if (['inactive', 'blocked', 'false', '0', 'no', 'nein'].includes(normalized)) {
-      return false;
-    }
-    return undefined;
+
+    return filteredAssets.map((asset) => ({
+      ...baseRecord,
+      isActive: asset.isActive ? 'true' : 'false',
+      inventoryNumber: asset.inventoryNumber || '',
+      serialNumber: asset.serialNumber || '',
+      status: toActiveStatusLabel(asset.isActive),
+      condition: asset.condition || '',
+    }));
   }
 
   buildCombinedHeaders() {
-    return [
-      { key: 'manufacturer', header: 'Manufacturer' },
-      { key: 'model', header: 'Model' },
-      { key: 'category', header: 'Category' },
-      { key: 'description', header: 'Description' },
-      { key: 'technicalDescription', header: 'TechnicalDescription' },
-      { key: 'imageUrl', header: 'ImageURL' },
-      { key: 'trackingType', header: 'TrackingType' },
-      { key: 'isActive', header: 'IsActive' },
-      { key: 'inventoryNumber', header: 'InventoryNumber' },
-      { key: 'serialNumber', header: 'SerialNumber' },
-      { key: 'status', header: 'Status' },
-      { key: 'condition', header: 'Condition' },
-      { key: 'lendingLocation', header: 'LendingLocation' },
-      { key: 'quantityTotal', header: 'QuantityTotal' },
-      { key: 'quantityAvailable', header: 'QuantityAvailable' },
-      { key: 'bundleName', header: 'BundleName' },
-      { key: 'bundleDescription', header: 'BundleDescription' },
-      { key: 'bundleComponents', header: 'BundleComponents' },
-    ];
+    return [...EXPORT_COLUMN_SCHEMAS.INVENTORY_COMBINED];
   }
 
   serializeBundleItems(bundleDefinition) {
@@ -214,7 +168,7 @@ class CsvExportService {
     return bundleDefinition.items
       .map((item) => {
         const componentName = item.componentModel ? item.componentModel.name : '';
-        const quantity = Math.max(parseInt(item.quantity || '1', 10), 1);
+        const quantity = parsePositiveQuantity(item.quantity, DEFAULT_ITEM_QUANTITY);
         const optionalFlag = item.isOptional ? 'optional' : 'required';
         return `${componentName}|${quantity}|${optionalFlag}`;
       })
@@ -233,7 +187,7 @@ class CsvExportService {
       isActive: model && model.isActive ? 'true' : 'false',
       inventoryNumber: '',
       serialNumber: '',
-      status: model && model.isActive ? 'active' : 'inactive',
+      status: toActiveStatusLabel(Boolean(model && model.isActive)),
       condition: '',
       lendingLocation: model && model.lendingLocation ? model.lendingLocation.name : '',
       quantityTotal: '',
@@ -244,20 +198,22 @@ class CsvExportService {
     };
   }
 
-  async buildCombinedRecords(filters = {}) {
+  async loadCombinedSourceData(combinedFilters = {}) {
     const modelWhere = {};
-    if (filters.lendingLocationId) {
-      modelWhere.lendingLocationId = filters.lendingLocationId;
+    if (combinedFilters.lendingLocationId) {
+      modelWhere.lendingLocationId = combinedFilters.lendingLocationId;
     }
-    if (filters.categoryId) {
-      modelWhere.categoryId = filters.categoryId;
+    if (combinedFilters.categoryId) {
+      modelWhere.categoryId = combinedFilters.categoryId;
     }
-    const modelActiveFilter = this.parseActiveFilter(filters.modelStatus);
-    if (modelActiveFilter !== undefined) {
-      modelWhere.isActive = modelActiveFilter;
+    const modelActivityFilter = this.parseActiveFilter(combinedFilters.modelStatus);
+    // Model status filter and asset status filter are intentionally independent.
+    const assetActivityFilter = this.parseActiveFilter(combinedFilters.status);
+    if (modelActivityFilter !== undefined) {
+      modelWhere.isActive = modelActivityFilter;
     }
 
-    const models = await this.models.AssetModel.findAll({
+    const assetModels = await this.models.AssetModel.findAll({
       where: modelWhere,
       include: [
         { model: this.models.Manufacturer, as: 'manufacturer' },
@@ -272,7 +228,7 @@ class CsvExportService {
       order: [['name', 'ASC']],
     });
 
-    const modelIds = models.map((entry) => entry.id);
+    const modelIds = assetModels.map((entry) => entry.id);
     const stockRows = modelIds.length
       ? await this.models.InventoryStock.findAll({
         where: { assetModelId: modelIds },
@@ -293,82 +249,64 @@ class CsvExportService {
 
     const stockByKey = new Map();
     stockRows.forEach((stock) => {
-      stockByKey.set(`${stock.assetModelId}:${stock.lendingLocationId}`, stock);
+      stockByKey.set(this.buildStockKey(stock.assetModelId, stock.lendingLocationId), stock);
     });
 
     const bundleByKey = new Map();
     bundleRows.forEach((bundle) => {
-      const locationKey = bundle.lendingLocationId || 'global';
-      bundleByKey.set(`${bundle.assetModelId}:${locationKey}`, bundle);
+      bundleByKey.set(
+        this.buildBundleKey(bundle.assetModelId, bundle.lendingLocationId),
+        bundle
+      );
     });
 
-    const assetActiveFilter = this.parseActiveFilter(filters.status);
+    return { assetModels, stockByKey, bundleByKey, assetActivityFilter };
+  }
+
+  shapeCombinedRecords(combinedSourceData) {
+    const { assetModels, stockByKey, bundleByKey, assetActivityFilter } = combinedSourceData;
     const records = [];
-    models.forEach((model) => {
+    assetModels.forEach((model) => {
       const trackingType = model.trackingType || 'serialized';
-      const base = this.buildCombinedBaseRecord(model);
+      const baseRecord = this.buildCombinedBaseRecord(model);
 
       if (trackingType === 'bulk') {
-        const stock = stockByKey.get(`${model.id}:${model.lendingLocationId}`) || null;
-        records.push({
-          ...base,
-          status: base.isActive === 'true' ? 'active' : 'inactive',
-          quantityTotal: stock ? String(stock.quantityTotal) : '0',
-          quantityAvailable: stock ? String(stock.quantityAvailable) : '0',
-        });
+        records.push(this.buildBulkCombinedRecord(baseRecord, model, stockByKey));
         return;
       }
 
       if (trackingType === 'bundle') {
-        const bundle =
-          bundleByKey.get(`${model.id}:${model.lendingLocationId}`) ||
-          bundleByKey.get(`${model.id}:global`) ||
-          null;
-        records.push({
-          ...base,
-          status: base.isActive === 'true' ? 'active' : 'inactive',
-          bundleName: bundle && bundle.name ? bundle.name : model.name,
-          bundleDescription: bundle && bundle.description ? bundle.description : (model.description || ''),
-          bundleComponents: this.serializeBundleItems(bundle),
-        });
+        records.push(this.buildBundleCombinedRecord(baseRecord, model, bundleByKey));
         return;
       }
 
-      const assets = Array.isArray(model.assets) ? model.assets : [];
-      const filteredAssets = assetActiveFilter === undefined
-        ? assets
-        : assets.filter((asset) => Boolean(asset.isActive) === assetActiveFilter);
-
-      if (!filteredAssets.length) {
-        if (assetActiveFilter !== undefined) {
-          return;
-        }
-        records.push(base);
-        return;
-      }
-
-      filteredAssets.forEach((asset) => {
-        records.push({
-          ...base,
-          isActive: asset.isActive ? 'true' : 'false',
-          inventoryNumber: asset.inventoryNumber || '',
-          serialNumber: asset.serialNumber || '',
-          status: asset.isActive ? 'active' : 'inactive',
-          condition: asset.condition || '',
-        });
-      });
+      records.push(...this.buildSerializedCombinedRecords(baseRecord, model, assetActivityFilter));
     });
-
     return records;
   }
 
-  async exportAssets(filters = {}, format = 'csv') {
-    const headers = this.buildCombinedHeaders();
-    const records = await this.buildCombinedRecords(filters);
+  async buildCombinedRecords(combinedFilters = {}) {
+    const sourceData = await this.loadCombinedSourceData(combinedFilters);
+    return this.shapeCombinedRecords(sourceData);
+  }
+
+  async buildInventoryCombinedDataset(filters = {}) {
+    return {
+      headers: this.buildCombinedHeaders(),
+      records: await this.buildCombinedRecords(filters),
+    };
+  }
+
+  async exportInventoryCombinedByFormat(filters = {}, format = 'csv', sheetName = 'Export') {
+    const dataset = await this.buildInventoryCombinedDataset(filters);
     if (format === 'xlsx') {
-      return this.generateExcelBuffer(headers, records, 'Inventory');
+      return this.generateExcelBuffer(dataset.headers, dataset.records, sheetName);
     }
-    return this.generateCsvBuffer(headers, records);
+    return this.generateCsvBuffer(dataset.headers, dataset.records);
+  }
+
+  async exportAssets(filters = {}, format = 'csv') {
+    return this.exportInventoryCombinedByFormat(filters, format, 'Inventory');
   }
 
   async exportModels(filters = {}, format = 'csv') {
@@ -376,7 +314,7 @@ class CsvExportService {
     if (filters.categoryId) {
       where.categoryId = filters.categoryId;
     }
-    const models = await this.models.AssetModel.findAll({
+    const assetModels = await this.models.AssetModel.findAll({
       where,
       include: [
         { model: this.models.Manufacturer, as: 'manufacturer' },
@@ -385,7 +323,7 @@ class CsvExportService {
     });
 
     const headers = this.buildModelExportHeaders();
-    const records = this.buildModelRecords(models);
+    const records = this.buildModelRecords(assetModels);
 
     if (format === 'xlsx') {
       return this.generateExcelBuffer(headers, records, 'Asset Models');
@@ -394,12 +332,7 @@ class CsvExportService {
   }
 
   async exportCombined(filters = {}, format = 'csv') {
-    const headers = this.buildCombinedHeaders();
-    const records = await this.buildCombinedRecords(filters);
-    if (format === 'xlsx') {
-      return this.generateExcelBuffer(headers, records, 'Export');
-    }
-    return this.generateCsvBuffer(headers, records);
+    return this.exportInventoryCombinedByFormat(filters, format, 'Export');
   }
 
 }

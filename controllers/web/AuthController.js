@@ -1,4 +1,5 @@
 const { services, renderPage, renderError, handleError } = require('./_controllerUtils');
+const { buildAuditMetadata } = require('../../helpers/requestContext.helper');
 
 class AuthController {
   getSafeReturnTo(value) {
@@ -12,11 +13,116 @@ class AuthController {
     return '/dashboard';
   }
 
-  async safeAudit(data) {
+  async logAuditSafely(data) {
     try {
       await services.auditLogService.logAction(data);
     } catch (err) {
       return;
+    }
+  }
+
+  async completeLogin(req, res, user, provider, returnTo, successMessage) {
+    await services.userService.ensureStudentRole(user.id);
+    await services.authSessionService.login(req, user);
+    await this.logAuditSafely({
+      userId: user.id,
+      action: 'login.success',
+      entity: 'User',
+      entityId: user.id,
+      metadata: this.createLoginAuditPayload(req, provider),
+    });
+    if (successMessage && typeof req.flash === 'function') {
+      req.flash('success', successMessage);
+    }
+    return res.redirect(returnTo);
+  }
+
+  async logLoginFailureAndFlash(req, provider, message, extraAuditMetadata = {}) {
+    await this.logAuditSafely({
+      userId: null,
+      action: 'login.failed',
+      entity: 'User',
+      entityId: null,
+      metadata: this.createLoginAuditPayload(req, provider, extraAuditMetadata),
+    });
+    if (typeof req.flash === 'function') {
+      req.flash('error', message);
+    }
+  }
+
+  redirectIfPasswordMissing(req, res, password) {
+    if (password) {
+      return false;
+    }
+    if (typeof req.flash === 'function') {
+      req.flash('error', 'Passwort ist erforderlich.');
+    }
+    res.redirect('/login');
+    return true;
+  }
+
+  getEnabledProviderStates() {
+    return Promise.all([
+      services.configService.isEnabled('saml'),
+      services.configService.isEnabled('ldap'),
+    ]).then(([samlEnabled, ldapEnabled]) => ({ samlEnabled, ldapEnabled }));
+  }
+
+  createLoginAuditPayload(req, provider, extra = {}) {
+    return {
+      provider,
+      ...buildAuditMetadata(req, extra),
+    };
+  }
+
+  async loginViaSaml(req, res, returnTo) {
+    if (req.session) {
+      req.session.authReturnTo = returnTo;
+    }
+    try {
+      const redirectUrl = await services.samlAuthService.loginStart();
+      return res.redirect(redirectUrl);
+    } catch (err) {
+      if (typeof req.flash === 'function') {
+        req.flash('error', 'Shibboleth ist aktuell nicht verfügbar.');
+      }
+      return res.redirect('/login');
+    }
+  }
+
+  async loginViaLdap(req, res, params) {
+    const { username, password, returnTo } = params;
+    if (this.redirectIfPasswordMissing(req, res, password)) {
+      return;
+    }
+    try {
+      const profile = await services.ldapAuthService.authenticate({ username, password });
+      const user = await services.ldapProvisioningService.provision(profile);
+      return this.completeLogin(req, res, user, 'ldap', returnTo);
+    } catch (err) {
+      await this.logLoginFailureAndFlash(req, 'ldap', 'LDAP Login fehlgeschlagen.');
+      return res.redirect('/login');
+    }
+  }
+
+  async loginViaLocal(req, res, params) {
+    const { username, password, returnTo } = params;
+    if (this.redirectIfPasswordMissing(req, res, password)) {
+      return;
+    }
+
+    try {
+      const user = await services.localAuthService.authenticate(username, password);
+      return this.completeLogin(req, res, user, 'local', returnTo, 'Logged in');
+    } catch (err) {
+      const message =
+        err && err.code === 'LOCAL_USER_NOT_FOUND'
+          ? 'Kein lokales Konto gefunden. Bitte Shibboleth oder LDAP verwenden.'
+          : 'Ungültige Zugangsdaten';
+      await this.logLoginFailureAndFlash(req, 'local', message, { username });
+      const nextParam = req.body.next || req.query.next;
+      const redirectTo = nextParam ? `/login?next=${encodeURIComponent(nextParam)}` : '/login';
+      return res.redirect(redirectTo);
     }
   }
 
@@ -42,136 +148,21 @@ class AuthController {
   async localLogin(req, res, next) {
     try {
       const { username, password } = req.body;
-      const localUser = await services.userService.findByUsername(username);
-      const samlEnabled = await services.configService.isEnabled('saml');
-      const ldapEnabled = await services.configService.isEnabled('ldap');
+      const returnTo = this.getSafeReturnTo(req.body.next || req.query.next);
+      const existingUser = await services.userService.findByUsername(username);
+      const { samlEnabled, ldapEnabled } = await this.getEnabledProviderStates();
 
-      if (localUser && localUser.externalProvider === 'saml') {
-        const returnTo = this.getSafeReturnTo(req.body.next || req.query.next);
-        if (req.session) {
-          req.session.authReturnTo = returnTo;
-        }
-        try {
-          const redirectUrl = await services.samlAuthService.loginStart();
-          return res.redirect(redirectUrl);
-        } catch (err) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', 'Shibboleth ist aktuell nicht verfügbar.');
-          }
-          return res.redirect('/login');
-        }
+      // External provider routing takes precedence over local fallback.
+      if (existingUser && existingUser.externalProvider === 'saml') {
+        return this.loginViaSaml(req, res, returnTo);
       }
-
-      if ((localUser && localUser.externalProvider === 'ldap') || (!localUser && ldapEnabled)) {
-        if (!password) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', 'Passwort ist erforderlich.');
-          }
-          return res.redirect('/login');
-        }
-        try {
-          const profile = await services.ldapAuthService.authenticate({ username, password });
-          const user = await services.ldapProvisioningService.provision(profile);
-          await services.userService.ensureStudentRole(user.id);
-          await services.authSessionService.login(req, user);
-          await this.safeAudit({
-            userId: user.id,
-            action: 'login.success',
-            entity: 'User',
-            entityId: user.id,
-            metadata: {
-              provider: 'ldap',
-              ipAddress: req.ip,
-              userAgent: req.headers['user-agent'],
-            },
-          });
-          const returnTo = this.getSafeReturnTo(req.body.next || req.query.next);
-          return res.redirect(returnTo);
-        } catch (err) {
-          await this.safeAudit({
-            userId: null,
-            action: 'login.failed',
-            entity: 'User',
-            entityId: null,
-            metadata: {
-              provider: 'ldap',
-              ipAddress: req.ip,
-              userAgent: req.headers['user-agent'],
-            },
-          });
-          if (typeof req.flash === 'function') {
-            req.flash('error', 'LDAP Login fehlgeschlagen.');
-          }
-          return res.redirect('/login');
-        }
+      if ((existingUser && existingUser.externalProvider === 'ldap') || (!existingUser && ldapEnabled)) {
+        return this.loginViaLdap(req, res, { username, password, returnTo });
       }
-
-      if (!localUser && samlEnabled) {
-        const returnTo = this.getSafeReturnTo(req.body.next || req.query.next);
-        if (req.session) {
-          req.session.authReturnTo = returnTo;
-        }
-        try {
-          const redirectUrl = await services.samlAuthService.loginStart();
-          return res.redirect(redirectUrl);
-        } catch (err) {
-          if (typeof req.flash === 'function') {
-            req.flash('error', 'Shibboleth ist aktuell nicht verfügbar.');
-          }
-          return res.redirect('/login');
-        }
+      if (!existingUser && samlEnabled) {
+        return this.loginViaSaml(req, res, returnTo);
       }
-
-      if (!password) {
-        if (typeof req.flash === 'function') {
-          req.flash('error', 'Passwort ist erforderlich.');
-        }
-        return res.redirect('/login');
-      }
-      try {
-        const user = await services.localAuthService.authenticate(username, password);
-        await services.userService.ensureStudentRole(user.id);
-        await services.authSessionService.login(req, user);
-        await this.safeAudit({
-          userId: user.id,
-          action: 'login.success',
-          entity: 'User',
-          entityId: user.id,
-          metadata: {
-            provider: 'local',
-            ipAddress: req.ip,
-            userAgent: req.headers['user-agent'],
-          },
-        });
-        if (typeof req.flash === 'function') {
-          req.flash('success', 'Logged in');
-        }
-        const returnTo = this.getSafeReturnTo(req.body.next || req.query.next);
-        return res.redirect(returnTo);
-      } catch (err) {
-        const message =
-          err && err.code === 'LOCAL_USER_NOT_FOUND'
-            ? 'Kein lokales Konto gefunden. Bitte Shibboleth oder LDAP verwenden.'
-            : 'Ungültige Zugangsdaten';
-        await this.safeAudit({
-          userId: null,
-          action: 'login.failed',
-          entity: 'User',
-          entityId: null,
-          metadata: {
-            provider: 'local',
-            username,
-            ipAddress: req.ip,
-            userAgent: req.headers['user-agent'],
-          },
-        });
-        if (typeof req.flash === 'function') {
-          req.flash('error', message);
-        }
-        const nextParam = req.body.next || req.query.next;
-        const redirectTo = nextParam ? `/login?next=${encodeURIComponent(nextParam)}` : '/login';
-        return res.redirect(redirectTo);
-      }
+      return this.loginViaLocal(req, res, { username, password, returnTo });
     } catch (err) {
       return handleError(res, next, req, err);
     }
@@ -200,39 +191,13 @@ class AuthController {
       const extract = await services.samlAuthService.loginCallback(req);
       const normalized = services.samlProvisioningService.normalizeProfile(extract);
       const user = await services.samlProvisioningService.provision(normalized);
-      await services.userService.ensureStudentRole(user.id);
-      await services.authSessionService.login(req, user);
-      await this.safeAudit({
-        userId: user.id,
-        action: 'login.success',
-        entity: 'User',
-        entityId: user.id,
-        metadata: {
-          provider: 'saml',
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'],
-        },
-      });
       const returnTo = this.getSafeReturnTo(req.session && req.session.authReturnTo);
       if (req.session) {
         delete req.session.authReturnTo;
       }
-      return res.redirect(returnTo);
+      return this.completeLogin(req, res, user, 'saml', returnTo);
     } catch (err) {
-      await this.safeAudit({
-        userId: null,
-        action: 'login.failed',
-        entity: 'User',
-        entityId: null,
-        metadata: {
-          provider: 'saml',
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'],
-        },
-      });
-      if (typeof req.flash === 'function') {
-        req.flash('error', 'Shibboleth Login fehlgeschlagen.');
-      }
+      await this.logLoginFailureAndFlash(req, 'saml', 'Shibboleth Login fehlgeschlagen.');
       return res.redirect('/login');
     }
   }
@@ -252,36 +217,10 @@ class AuthController {
       const { username, password } = req.body;
       const profile = await services.ldapAuthService.authenticate({ username, password });
       const user = await services.ldapProvisioningService.provision(profile);
-      await services.userService.ensureStudentRole(user.id);
-      await services.authSessionService.login(req, user);
-      await this.safeAudit({
-        userId: user.id,
-        action: 'login.success',
-        entity: 'User',
-        entityId: user.id,
-        metadata: {
-          provider: 'ldap',
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'],
-        },
-      });
       const returnTo = this.getSafeReturnTo(req.body.next || req.query.next);
-      return res.redirect(returnTo);
+      return this.completeLogin(req, res, user, 'ldap', returnTo);
     } catch (err) {
-      await this.safeAudit({
-        userId: null,
-        action: 'login.failed',
-        entity: 'User',
-        entityId: null,
-        metadata: {
-          provider: 'ldap',
-          ipAddress: req.ip,
-          userAgent: req.headers['user-agent'],
-        },
-      });
-      if (typeof req.flash === 'function') {
-        req.flash('error', 'LDAP Login fehlgeschlagen.');
-      }
+      await this.logLoginFailureAndFlash(req, 'ldap', 'LDAP Login fehlgeschlagen.');
       return res.redirect('/login');
     }
   }

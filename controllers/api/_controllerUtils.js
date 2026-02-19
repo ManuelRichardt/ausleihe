@@ -1,13 +1,21 @@
 const crypto = require('crypto');
+const { parseBooleanToken } = require('../../utils/valueParsing');
 
 const idempotencyStore = new Map();
 const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000;
+const STATUS = Object.freeze({
+  PRECONDITION_FAILED: 412,
+});
+const ERROR_CODE = Object.freeze({
+  PRECONDITION_FAILED: 'PRECONDITION_FAILED',
+});
 
 function parseBoolean(value) {
-  if (value === undefined) {
-    return undefined;
-  }
-  return value === true || value === 'true';
+  return parseBooleanToken(value, {
+    trueTokens: ['true', '1', 'yes'],
+    falseTokens: ['false', '0', 'no'],
+    defaultValue: undefined,
+  });
 }
 
 function parseListOptions(req) {
@@ -28,6 +36,7 @@ function computeEtag(payload) {
 }
 
 function cleanupIdempotency(now) {
+  // Idempotency cache is process-local; multi-instance deployments need shared storage.
   for (const [key, entry] of idempotencyStore.entries()) {
     if (now - entry.timestamp > IDEMPOTENCY_TTL_MS) {
       idempotencyStore.delete(key);
@@ -35,38 +44,54 @@ function cleanupIdempotency(now) {
   }
 }
 
+async function ensureIfMatch(req, options) {
+  if (!options.ifMatch || !req.headers['if-match']) {
+    return;
+  }
+  const current = await options.ifMatch(req);
+  const currentTag = computeEtag({ data: current, error: null });
+  if (req.headers['if-match'] !== currentTag) {
+    const err = new Error('Precondition Failed');
+    err.status = STATUS.PRECONDITION_FAILED;
+    err.code = ERROR_CODE.PRECONDITION_FAILED;
+    throw err;
+  }
+}
+
+function readIdempotencyCache(req) {
+  const key = req.headers['idempotency-key'];
+  if (!key) {
+    return null;
+  }
+  const cacheKey = `${req.method}:${req.originalUrl}:${key}`;
+  return { key: cacheKey, entry: idempotencyStore.get(cacheKey) };
+}
+
+function writeIdempotencyCache(cacheKey, body, now) {
+  const etag = computeEtag(body);
+  idempotencyStore.set(cacheKey, { timestamp: now, body, etag });
+  return etag;
+}
+
 function handle(serviceCall, options = {}) {
   return async (req, res, next) => {
     try {
       const now = Date.now();
       cleanupIdempotency(now);
-
-      if (options.ifMatch && req.headers['if-match']) {
-        const current = await options.ifMatch(req);
-        const currentTag = computeEtag({ data: current, error: null });
-        if (req.headers['if-match'] !== currentTag) {
-          const err = new Error('Precondition Failed');
-          err.status = 412;
-          err.code = 'PRECONDITION_FAILED';
-          throw err;
-        }
-      }
+      await ensureIfMatch(req, options);
 
       if (options.idempotent) {
-        const key = req.headers['idempotency-key'];
-        if (key) {
-          const cacheKey = `${req.method}:${req.originalUrl}:${key}`;
-          const cached = idempotencyStore.get(cacheKey);
-          if (cached) {
-            res.set('ETag', cached.etag || undefined);
-            res.json(cached.body);
+        const cachedPayload = readIdempotencyCache(req);
+        if (cachedPayload) {
+          if (cachedPayload.entry) {
+            res.set('ETag', cachedPayload.entry.etag || undefined);
+            res.json(cachedPayload.entry.body);
             return;
           }
           const result = await serviceCall(req);
           const data = result === undefined ? { success: true } : result;
           const body = { data, error: null };
-          const etag = computeEtag(body);
-          idempotencyStore.set(cacheKey, { timestamp: now, body, etag });
+          const etag = writeIdempotencyCache(cachedPayload.key, body, now);
           res.set('ETag', etag);
           res.json(body);
           return;

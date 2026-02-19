@@ -8,6 +8,7 @@ const helmet = require('helmet');
 const session = require('express-session');
 const flash = require('connect-flash');
 const sanitize = require('./middleware/sanitize');
+const defaultLocals = require('./middleware/defaultLocals');
 const { csrfProtectionMiddleware } = require('./config/csrf');
 const buildSessionConfig = require('./config/session');
 const { createServices } = require('./services');
@@ -18,10 +19,7 @@ const apiV1Router = require('./routes/api/v1');
 const db = require('./models');
 
 const app = express();
-const enableHsts = String(process.env.ENABLE_HSTS || '').toLowerCase() === 'true';
 const services = createServices(db);
-let privacyCleanupTimer = null;
-let privacyCleanupRunning = false;
 
 function getPrivacyCleanupIntervalMs() {
   const raw = parseInt(process.env.PRIVACY_CLEANUP_INTERVAL_MINUTES || '60', 10);
@@ -29,33 +27,93 @@ function getPrivacyCleanupIntervalMs() {
   return minutes * 60 * 1000;
 }
 
-function startPrivacyCleanupJob() {
-  if (privacyCleanupTimer || process.env.NODE_ENV === 'test') {
-    return;
-  }
-  const runCleanup = async () => {
-    if (privacyCleanupRunning) {
+function initializeAppLifecycle(runtimeServices) {
+  const runtimeState = {
+    lifecyclePhase: 'startup',
+    privacyCleanupTimer: null,
+    isPrivacyCleanupInFlight: false,
+    arePrivacyCleanupHooksRegistered: false,
+  };
+
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const stopPrivacyCleanupJob = () => {
+    if (!runtimeState.privacyCleanupTimer) {
       return;
     }
-    privacyCleanupRunning = true;
+    clearInterval(runtimeState.privacyCleanupTimer);
+    runtimeState.privacyCleanupTimer = null;
+  };
+
+  const waitForInFlightCleanup = async (timeoutMs = 10000) => {
+    const startedAt = Date.now();
+    while (runtimeState.isPrivacyCleanupInFlight && Date.now() - startedAt < timeoutMs) {
+      await wait(100);
+    }
+  };
+
+  const runCleanup = async () => {
+    if (runtimeState.isPrivacyCleanupInFlight || runtimeState.lifecyclePhase === 'shutdown') {
+      return;
+    }
+    runtimeState.isPrivacyCleanupInFlight = true;
     try {
-      await services.privacyService.runAutomaticCleanup();
+      await runtimeServices.privacyService.runAutomaticCleanup();
     } catch (err) {
       if (process.env.NODE_ENV !== 'test') {
         // eslint-disable-next-line no-console
         console.error('Privacy cleanup failed:', err.message || err);
       }
     } finally {
-      privacyCleanupRunning = false;
+      runtimeState.isPrivacyCleanupInFlight = false;
     }
   };
 
-  runCleanup();
-  privacyCleanupTimer = setInterval(runCleanup, getPrivacyCleanupIntervalMs());
-  if (typeof privacyCleanupTimer.unref === 'function') {
-    privacyCleanupTimer.unref();
-  }
+  const startPrivacyCleanupJob = () => {
+    if (runtimeState.privacyCleanupTimer || process.env.NODE_ENV === 'test') {
+      return;
+    }
+    runtimeState.lifecyclePhase = 'active';
+    void runCleanup();
+    runtimeState.privacyCleanupTimer = setInterval(runCleanup, getPrivacyCleanupIntervalMs());
+    if (typeof runtimeState.privacyCleanupTimer.unref === 'function') {
+      runtimeState.privacyCleanupTimer.unref();
+    }
+  };
+
+  const shutdownLifecycle = async (signal) => {
+    if (runtimeState.lifecyclePhase === 'shutdown') {
+      return;
+    }
+    runtimeState.lifecyclePhase = 'shutdown';
+    stopPrivacyCleanupJob();
+    await waitForInFlightCleanup();
+    if (signal && process.env.NODE_ENV !== 'test') {
+      process.exit(0);
+    }
+  };
+
+  const registerShutdownHooks = () => {
+    if (runtimeState.arePrivacyCleanupHooksRegistered) {
+      return;
+    }
+    // Graceful shutdown waits for in-flight cleanup before process exit.
+    const onSignal = (signal) => {
+      void shutdownLifecycle(signal);
+    };
+    process.once('SIGTERM', () => onSignal('SIGTERM'));
+    process.once('SIGINT', () => onSignal('SIGINT'));
+    runtimeState.arePrivacyCleanupHooksRegistered = true;
+  };
+
+  return {
+    startPrivacyCleanupJob,
+    registerShutdownHooks,
+  };
 }
+
+const appLifecycle = initializeAppLifecycle(services);
+appLifecycle.registerShutdownHooks();
 
 app.set('trust proxy', 1);
 
@@ -79,15 +137,8 @@ app.use(
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         frameAncestors: ["'none'"],
-      },
+      }
     },
-    hsts: enableHsts
-      ? {
-          maxAge: 15552000,
-          includeSubDomains: true,
-          preload: true,
-        }
-      : false,
     referrerPolicy: { policy: 'no-referrer' },
   })
 );
@@ -100,51 +151,7 @@ app.use(session(buildSessionConfig()));
 app.use(flash());
 app.use(sanitize);
 app.use(csrfProtectionMiddleware({ ignorePaths: ['/auth/saml/callback'] }));
-app.use((req, res, next) => {
-  const formatTimeHHMM = (value) => {
-    if (value === undefined || value === null || value === '') {
-      return '';
-    }
-    if (value instanceof Date) {
-      const hh = String(value.getHours()).padStart(2, '0');
-      const mm = String(value.getMinutes()).padStart(2, '0');
-      return `${hh}:${mm}`;
-    }
-    const text = String(value).trim();
-    const hhmmMatch = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
-    if (hhmmMatch) {
-      const hh = String(Number(hhmmMatch[1])).padStart(2, '0');
-      return `${hh}:${hhmmMatch[2]}`;
-    }
-    if (text.includes('T')) {
-      const parsed = new Date(text);
-      if (!Number.isNaN(parsed.getTime())) {
-        const hh = String(parsed.getHours()).padStart(2, '0');
-        const mm = String(parsed.getMinutes()).padStart(2, '0');
-        return `${hh}:${mm}`;
-      }
-    }
-    return text;
-  };
-
-  res.locals.user = res.locals.user || null;
-  res.locals.permissions = res.locals.permissions || { list: [], map: {} };
-  res.locals.breadcrumbs = res.locals.breadcrumbs || [];
-  res.locals.flashMessages = res.locals.flashMessages || {};
-  res.locals.lendingLocation = res.locals.lendingLocation || null;
-  res.locals.csrfToken = res.locals.csrfToken || '';
-  res.locals.formData = res.locals.formData || {};
-  res.locals.errors = res.locals.errors || {};
-  res.locals.pageTitle = res.locals.pageTitle || 'Ausleihsystem';
-  res.locals.navigation = res.locals.navigation || [];
-  res.locals.currentUser = res.locals.currentUser || res.locals.user || null;
-  res.locals.activeLendingLocation = res.locals.activeLendingLocation || res.locals.lendingLocation || null;
-  res.locals.can = res.locals.can || (() => false);
-  res.locals.canAny = res.locals.canAny || (() => false);
-  res.locals.canAll = res.locals.canAll || (() => false);
-  res.locals.formatTimeHHMM = res.locals.formatTimeHHMM || formatTimeHHMM;
-  next();
-});
+app.use(defaultLocals);
 
 app.use('/', webRouter);
 app.use('/api/v1', apiV1Router);
@@ -156,7 +163,7 @@ app.use('/api/v1', apiV1Router);
     if (process.env.DB_SYNC === 'true') {
       await db.sequelize.sync();
     }
-    startPrivacyCleanupJob();
+    appLifecycle.startPrivacyCleanupJob();
   } catch (err) {
     if (process.env.NODE_ENV !== 'test') {
       // eslint-disable-next-line no-console

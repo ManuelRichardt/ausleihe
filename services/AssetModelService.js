@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { parseBooleanToken } = require('../utils/valueParsing');
 const {
   pickDefined,
   applyIsActiveFilter,
@@ -44,17 +45,13 @@ class AssetModelService {
   }
 
   parseBoolean(value, label) {
-    if (value === true || value === false) {
-      return value;
-    }
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (['1', 'true', 'yes', 'ja', 'on'].includes(normalized)) {
-        return true;
-      }
-      if (['0', 'false', 'no', 'nein', 'off'].includes(normalized)) {
-        return false;
-      }
+    const parsed = parseBooleanToken(value, {
+      trueTokens: ['1', 'true', 'yes', 'ja', 'on'],
+      falseTokens: ['0', 'false', 'no', 'nein', 'off'],
+      defaultValue: undefined,
+    });
+    if (parsed !== undefined) {
+      return parsed;
     }
     const err = new Error(`Feld "${label}" muss Ja/Nein sein`);
     err.status = 422;

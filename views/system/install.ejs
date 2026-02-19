@@ -12,44 +12,11 @@
           <h1 class="h4 mb-0">Installation</h1>
         </div>
         <div class="card-body">
+          <div class="alert alert-info" role="alert">
+            Die Datenbankverbindung wird aus der <code>.env</code> und <code>docker-compose.yml</code> übernommen.
+          </div>
           <form method="post" action="/install">
             <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
-
-            <h2 class="h6 mt-2">Datenbank</h2>
-            <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label" for="dbHost">Host</label>
-                <input class="form-control <%= safeErrors.dbHost ? 'is-invalid' : '' %>" id="dbHost" name="dbHost" value="<%= safeForm.dbHost || 'localhost' %>">
-                <% if (safeErrors.dbHost) { %><div class="invalid-feedback"><%= safeErrors.dbHost %></div><% } %>
-              </div>
-              <div class="col-md-3">
-                <label class="form-label" for="dbPort">Port</label>
-                <input class="form-control" id="dbPort" name="dbPort" value="<%= safeForm.dbPort || '3306' %>">
-              </div>
-              <div class="col-md-3">
-                <label class="form-label" for="dbDialect">Dialect</label>
-                <select class="form-select" id="dbDialect" name="dbDialect">
-                  <option value="mariadb" <%= (safeForm.dbDialect || 'mariadb') === 'mariadb' ? 'selected' : '' %>>mariadb</option>
-                  <option value="mysql" <%= safeForm.dbDialect === 'mysql' ? 'selected' : '' %>>mysql</option>
-                </select>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label" for="dbName">Datenbankname</label>
-                <input class="form-control <%= safeErrors.dbName ? 'is-invalid' : '' %>" id="dbName" name="dbName" value="<%= safeForm.dbName || '' %>">
-                <% if (safeErrors.dbName) { %><div class="invalid-feedback"><%= safeErrors.dbName %></div><% } %>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label" for="dbUser">DB Benutzer</label>
-                <input class="form-control <%= safeErrors.dbUser ? 'is-invalid' : '' %>" id="dbUser" name="dbUser" value="<%= safeForm.dbUser || '' %>">
-                <% if (safeErrors.dbUser) { %><div class="invalid-feedback"><%= safeErrors.dbUser %></div><% } %>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label" for="dbPassword">DB Passwort</label>
-                <input class="form-control" id="dbPassword" name="dbPassword" type="password" value="<%= safeForm.dbPassword || '' %>">
-              </div>
-            </div>
-
-            <hr class="my-4">
 
             <h2 class="h6">Initialer Admin</h2>
             <div class="row g-3">

@@ -2,6 +2,18 @@ const fs = require('fs/promises');
 const path = require('path');
 const { Op } = require('sequelize');
 const { buildListOptions } = require('./_serviceUtils');
+const {
+  LOAN_STATUS,
+  PRIVACY_REQUEST_STATUS,
+  PRIVACY_AUDIT_ACTION,
+} = require('../constants/domain');
+
+const EXTERNAL_AUTH_PROVIDERS = Object.freeze(['saml', 'ldap']);
+const ACTIVE_LOAN_STATUSES = Object.freeze([
+  LOAN_STATUS.RESERVED,
+  LOAN_STATUS.HANDED_OVER,
+  LOAN_STATUS.OVERDUE,
+]);
 
 class PrivacyService {
   constructor(models) {
@@ -95,6 +107,33 @@ class PrivacyService {
     });
   }
 
+  #buildPrivacyAuditContext(input = {}) {
+    return {
+      actorId: input.actorId || null,
+      reason: input.reason || null,
+      metadata: input.metadata || {},
+    };
+  }
+
+  async #logPrivacyAudit(action, entity, entityId, auditContext, transaction) {
+    if (!auditContext.actorId) {
+      return;
+    }
+    await this.models.AuditLog.create(
+      {
+        userId: auditContext.actorId,
+        action,
+        entity,
+        entityId,
+        metadata: {
+          ...(auditContext.metadata || {}),
+          reason: auditContext.reason || undefined,
+        },
+      },
+      { transaction }
+    );
+  }
+
   async createDeletionRequest(data = {}) {
     if (!data.userId) {
       throw new Error('Benutzer ist erforderlich.');
@@ -106,7 +145,7 @@ class PrivacyService {
     const existingOpen = await this.models.PrivacyDeletionRequest.findOne({
       where: {
         userId: data.userId,
-        status: { [Op.in]: ['open', 'in_progress'] },
+        status: { [Op.in]: [PRIVACY_REQUEST_STATUS.OPEN, PRIVACY_REQUEST_STATUS.IN_PROGRESS] },
       },
     });
     if (existingOpen) {
@@ -115,21 +154,21 @@ class PrivacyService {
     const request = await this.models.PrivacyDeletionRequest.create({
       userId: data.userId,
       requestedByUserId: data.requestedByUserId || null,
-      status: 'open',
+      status: PRIVACY_REQUEST_STATUS.OPEN,
       requestNote: data.requestNote || null,
       metadata: data.metadata || null,
     });
-    if (data.requestedByUserId) {
-      await this.models.AuditLog.create({
-        userId: data.requestedByUserId,
-        action: 'privacy.deletion_request.created',
-        entity: 'PrivacyDeletionRequest',
-        entityId: request.id,
-        metadata: {
-          targetUserId: data.userId,
-        },
-      });
-    }
+    const privacyAuditContext = this.#buildPrivacyAuditContext({
+      actorId: data.requestedByUserId || null,
+      reason: 'deletion_request_created',
+      metadata: { targetUserId: data.userId },
+    });
+    await this.#logPrivacyAudit(
+      PRIVACY_AUDIT_ACTION.DELETION_REQUEST_CREATED,
+      'PrivacyDeletionRequest',
+      request.id,
+      privacyAuditContext
+    );
     return request;
   }
 
@@ -138,32 +177,32 @@ class PrivacyService {
     if (!request) {
       throw new Error('Löschanfrage nicht gefunden.');
     }
-    if (['completed', 'rejected'].includes(request.status)) {
+    if ([PRIVACY_REQUEST_STATUS.COMPLETED, PRIVACY_REQUEST_STATUS.REJECTED].includes(request.status)) {
       throw new Error('Löschanfrage wurde bereits abgeschlossen.');
     }
     await request.update({
-      status: 'rejected',
+      status: PRIVACY_REQUEST_STATUS.REJECTED,
       processNote: data.processNote || null,
       processedByUserId: data.processedByUserId || null,
       processedAt: new Date(),
     });
-    if (data.processedByUserId) {
-      await this.models.AuditLog.create({
-        userId: data.processedByUserId,
-        action: 'privacy.deletion_request.rejected',
-        entity: 'PrivacyDeletionRequest',
-        entityId: request.id,
-        metadata: {
-          targetUserId: request.userId,
-        },
-      });
-    }
+    const privacyAuditContext = this.#buildPrivacyAuditContext({
+      actorId: data.processedByUserId || null,
+      reason: 'deletion_request_rejected',
+      metadata: { targetUserId: request.userId },
+    });
+    await this.#logPrivacyAudit(
+      PRIVACY_AUDIT_ACTION.DELETION_REQUEST_REJECTED,
+      'PrivacyDeletionRequest',
+      request.id,
+      privacyAuditContext
+    );
     return request;
   }
 
   async processDeletionRequest(id, data = {}) {
     const { sequelize } = this.models;
-    const txResult = await sequelize.transaction(async (transaction) => {
+    const cleanupResult = await sequelize.transaction(async (transaction) => {
       const request = await this.models.PrivacyDeletionRequest.findByPk(id, {
         transaction,
         lock: transaction.LOCK.UPDATE,
@@ -171,17 +210,17 @@ class PrivacyService {
       if (!request) {
         throw new Error('Löschanfrage nicht gefunden.');
       }
-      if (request.status === 'completed') {
+      if (request.status === PRIVACY_REQUEST_STATUS.COMPLETED) {
         throw new Error('Löschanfrage wurde bereits verarbeitet.');
       }
-      if (request.status === 'rejected') {
+      if (request.status === PRIVACY_REQUEST_STATUS.REJECTED) {
         throw new Error('Löschanfrage wurde abgelehnt.');
       }
 
       const activeLoanCount = await this.models.Loan.count({
         where: {
           userId: request.userId,
-          status: { [Op.in]: ['reserved', 'handed_over', 'overdue'] },
+          status: { [Op.in]: ACTIVE_LOAN_STATUSES },
         },
         transaction,
       });
@@ -189,18 +228,22 @@ class PrivacyService {
         throw new Error('Benutzer hat noch aktive Ausleihen oder Reservierungen.');
       }
 
+      const privacyAuditContext = this.#buildPrivacyAuditContext({
+        actorId: data.processedByUserId || null,
+        reason: 'deletion_request',
+        metadata: { targetUserId: request.userId },
+      });
       const anonymizeResult = await this.anonymizeAndDeleteUser(
         request.userId,
         {
           transaction,
-          actorId: data.processedByUserId || null,
-          reason: 'deletion_request',
+          auditContext: privacyAuditContext,
         }
       );
 
       await request.update(
         {
-          status: 'completed',
+          status: PRIVACY_REQUEST_STATUS.COMPLETED,
           processNote: data.processNote || null,
           processedByUserId: data.processedByUserId || null,
           processedAt: new Date(),
@@ -214,8 +257,9 @@ class PrivacyService {
       };
     });
 
-    await this.removeSignatureFiles(txResult.filePaths);
-    return txResult.request;
+    // File deletions are intentionally outside DB transaction to avoid partial rollback on filesystem errors.
+    await this.removeSignatureFiles(cleanupResult.filePaths);
+    return cleanupResult.request;
   }
 
   async runAutomaticCleanup() {
@@ -275,7 +319,7 @@ class PrivacyService {
 
     const loans = await this.models.Loan.findAll({
       where: {
-        status: 'returned',
+        status: LOAN_STATUS.RETURNED,
         returnedAt: { [Op.lte]: cutoff },
       },
       attributes: ['id'],
@@ -286,54 +330,7 @@ class PrivacyService {
     const filesToDelete = [];
 
     for (const loan of loans) {
-      const result = await this.models.sequelize.transaction(async (transaction) => {
-        const signatures = await this.models.LoanSignature.findAll({
-          where: { loanId: loan.id },
-          transaction,
-        });
-        const signatureIds = signatures.map((entry) => entry.id);
-        const filePaths = signatures.map((entry) => entry.filePath).filter(Boolean);
-
-        if (signatureIds.length) {
-          await this.models.LoanSignature.destroy({
-            where: { id: signatureIds },
-            transaction,
-          });
-        }
-
-        await this.models.LoanEvent.destroy({
-          where: { loanId: loan.id },
-          transaction,
-        });
-
-        await this.models.LoanItem.destroy({
-          where: {
-            loanId: loan.id,
-            parentLoanItemId: { [Op.not]: null },
-          },
-          force: true,
-          transaction,
-        });
-        await this.models.LoanItem.destroy({
-          where: {
-            loanId: loan.id,
-            parentLoanItemId: null,
-          },
-          force: true,
-          transaction,
-        });
-
-        await this.models.Loan.destroy({
-          where: { id: loan.id },
-          force: true,
-          transaction,
-        });
-
-        return {
-          deletedSignatures: signatureIds.length,
-          filePaths,
-        };
-      });
+      const result = await this.purgeReturnedLoan(loan.id);
 
       deletedLoans += 1;
       deletedSignatures += result.deletedSignatures;
@@ -349,32 +346,75 @@ class PrivacyService {
     };
   }
 
+  async purgeReturnedLoan(loanId) {
+    return this.models.sequelize.transaction(async (transaction) => {
+      const signatures = await this.models.LoanSignature.findAll({
+        where: { loanId },
+        transaction,
+      });
+      const signatureIds = signatures.map((entry) => entry.id);
+      const filePaths = signatures.map((entry) => entry.filePath).filter(Boolean);
+
+      if (signatureIds.length) {
+        await this.models.LoanSignature.destroy({
+          where: { id: signatureIds },
+          transaction,
+        });
+      }
+
+      await this.models.LoanEvent.destroy({
+        where: { loanId },
+        transaction,
+      });
+
+      await this.models.LoanItem.destroy({
+        where: {
+          loanId,
+          parentLoanItemId: { [Op.not]: null },
+        },
+        force: true,
+        transaction,
+      });
+      await this.models.LoanItem.destroy({
+        where: {
+          loanId,
+          parentLoanItemId: null,
+        },
+        force: true,
+        transaction,
+      });
+
+      await this.models.Loan.destroy({
+        where: { id: loanId },
+        force: true,
+        transaction,
+      });
+
+      return {
+        deletedSignatures: signatureIds.length,
+        filePaths,
+      };
+    });
+  }
+
+  async isEligibleForExternalCleanup(userId) {
+    const { activeLoanCount, returnedLoanCount } = await this.#getLoanStateCountsForUser(userId);
+    // Eligibility requires zero active and zero returned loans before anonymization.
+    return activeLoanCount === 0 && returnedLoanCount === 0;
+  }
+
   async deleteStaleExternalUsers() {
     const candidates = await this.models.User.findAll({
       where: {
-        externalProvider: { [Op.in]: ['saml', 'ldap'] },
+        externalProvider: { [Op.in]: EXTERNAL_AUTH_PROVIDERS },
       },
       attributes: ['id'],
     });
 
     let deletedUsers = 0;
     for (const user of candidates) {
-      const activeLoanCount = await this.models.Loan.count({
-        where: {
-          userId: user.id,
-          status: { [Op.in]: ['reserved', 'handed_over', 'overdue'] },
-        },
-      });
-      if (activeLoanCount > 0) {
-        continue;
-      }
-      const returnedLoanCount = await this.models.Loan.count({
-        where: {
-          userId: user.id,
-          status: 'returned',
-        },
-      });
-      if (returnedLoanCount > 0) {
+      const isEligible = await this.isEligibleForExternalCleanup(user.id);
+      if (!isEligible) {
         continue;
       }
       await this.anonymizeAndDeleteUser(user.id, {
@@ -386,7 +426,29 @@ class PrivacyService {
     return { deletedUsers };
   }
 
+  async #countLoansByStatuses(userId, statuses) {
+    return this.models.Loan.count({
+      where: {
+        userId,
+        status: { [Op.in]: statuses },
+      },
+    });
+  }
+
+  async #getLoanStateCountsForUser(userId) {
+    const [activeLoanCount, returnedLoanCount] = await Promise.all([
+      this.#countLoansByStatuses(userId, ACTIVE_LOAN_STATUSES),
+      this.#countLoansByStatuses(userId, [LOAN_STATUS.RETURNED]),
+    ]);
+    return { activeLoanCount, returnedLoanCount };
+  }
+
   async anonymizeAndDeleteUser(userId, options = {}) {
+    const privacyAuditContext = options.auditContext || this.#buildPrivacyAuditContext({
+      actorId: options.actorId || null,
+      reason: options.reason || 'manual',
+      metadata: options.metadata || {},
+    });
     const run = async (transaction) => {
       const user = await this.models.User.scope('withPassword').findByPk(userId, {
         paranoid: false,
@@ -396,30 +458,19 @@ class PrivacyService {
         return { filePaths: [] };
       }
 
-      const signatureRows = await this.#collectUserRelatedSignatures(user.id, transaction);
-      const signatureIds = signatureRows.map((entry) => entry.id);
-      const filePaths = signatureRows.map((entry) => entry.filePath).filter(Boolean);
-
-      if (signatureIds.length) {
-        await this.models.LoanSignature.destroy({
-          where: { id: signatureIds },
-          transaction,
-        });
-      }
+      const filePaths = await this.#deleteUserSignatureRows(user.id, transaction);
 
       await this.models.UserRole.destroy({
         where: { userId: user.id },
         transaction,
       });
 
-      const sanitizedId = String(user.id || '').replace(/-/g, '');
-      const anonymizedUsername = `deleted_${sanitizedId.slice(0, 24)}`;
-      const anonymizedEmail = `deleted+${sanitizedId}@anon.invalid`;
+      const anonymizedIdentity = this.#buildAnonymizedUserIdentity(user.id);
 
       await user.update(
         {
-          username: anonymizedUsername,
-          email: anonymizedEmail,
+          username: anonymizedIdentity.username,
+          email: anonymizedIdentity.email,
           firstName: null,
           lastName: null,
           password: null,
@@ -435,20 +486,13 @@ class PrivacyService {
         await user.destroy({ transaction });
       }
 
-      if (options.actorId) {
-        await this.models.AuditLog.create(
-          {
-            userId: options.actorId,
-            action: 'privacy.user_deleted',
-            entity: 'User',
-            entityId: user.id,
-            metadata: {
-              reason: options.reason || 'manual',
-            },
-          },
-          { transaction }
-        );
-      }
+      await this.#logPrivacyAudit(
+        PRIVACY_AUDIT_ACTION.USER_DELETED,
+        'User',
+        user.id,
+        privacyAuditContext,
+        transaction
+      );
 
       return { filePaths };
     };
@@ -458,8 +502,17 @@ class PrivacyService {
     }
 
     const result = await this.models.sequelize.transaction(async (transaction) => run(transaction));
+    // File deletions are intentionally outside DB transaction to avoid partial rollback on filesystem errors.
     await this.removeSignatureFiles(result.filePaths);
     return result;
+  }
+
+  #buildAnonymizedUserIdentity(userId) {
+    const sanitizedId = String(userId || '').replace(/-/g, '');
+    return {
+      username: `deleted_${sanitizedId.slice(0, 24)}`,
+      email: `deleted+${sanitizedId}@anon.invalid`,
+    };
   }
 
   async #collectUserRelatedSignatures(userId, transaction) {
@@ -484,6 +537,18 @@ class PrivacyService {
     });
   }
 
+  async #deleteUserSignatureRows(userId, transaction) {
+    const signatureRows = await this.#collectUserRelatedSignatures(userId, transaction);
+    const signatureIds = signatureRows.map((entry) => entry.id);
+    if (signatureIds.length) {
+      await this.models.LoanSignature.destroy({
+        where: { id: signatureIds },
+        transaction,
+      });
+    }
+    return signatureRows.map((entry) => entry.filePath).filter(Boolean);
+  }
+
   async removeSignatureFiles(filePaths) {
     const uniquePaths = Array.from(new Set((filePaths || []).filter(Boolean)));
     for (const source of uniquePaths) {
@@ -493,6 +558,7 @@ class PrivacyService {
       } else {
         resolved = path.resolve(this.projectRoot, source);
       }
+      // Guard against accidental deletion outside the uploads directory.
       const insideUploads =
         resolved === this.uploadRoot ||
         resolved.startsWith(`${this.uploadRoot}${path.sep}`);

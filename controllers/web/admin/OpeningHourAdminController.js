@@ -6,6 +6,7 @@ const {
   parseIncludeDeleted,
   buildPagination,
 } = require('../_controllerUtils');
+const { assertOwnedByLendingLocation } = require('../../../helpers/lendingLocationGuard.helper');
 
 function normalizeTab(tab) {
   const allowed = new Set(['regular', 'special', 'exceptions']);
@@ -26,10 +27,52 @@ function normalizeScope(scope, activeTab) {
 }
 
 class OpeningHourAdminController {
+  assertOpeningHourOwnership(openingHour, lendingLocationId) {
+    assertOwnedByLendingLocation(openingHour, lendingLocationId, 'OpeningHour');
+  }
+
+  assertOpeningExceptionOwnership(openingException, lendingLocationId) {
+    assertOwnedByLendingLocation(openingException, lendingLocationId, 'OpeningException');
+  }
+
+  buildOpeningHourPayload(req) {
+    return {
+      lendingLocationId: req.lendingLocationId,
+      dayOfWeek: req.body.dayOfWeek,
+      openTime: req.body.openTime,
+      closeTime: req.body.closeTime,
+      pickupOpenTime: req.body.pickupOpenTime,
+      pickupCloseTime: req.body.pickupCloseTime,
+      returnOpenTime: req.body.returnOpenTime,
+      returnCloseTime: req.body.returnCloseTime,
+      isClosed: req.body.isClosed === 'true',
+      validFrom: req.body.validFrom,
+      validTo: req.body.validTo,
+      isSpecial: req.body.isSpecial === 'true',
+    };
+  }
+
+  buildOpeningExceptionPayload(req) {
+    return {
+      lendingLocationId: req.lendingLocationId,
+      dateFrom: req.body.dateFrom || req.body.date,
+      dateTo: req.body.dateTo,
+      openTime: req.body.openTime,
+      closeTime: req.body.closeTime,
+      pickupOpenTime: req.body.pickupOpenTime,
+      pickupCloseTime: req.body.pickupCloseTime,
+      returnOpenTime: req.body.returnOpenTime,
+      returnCloseTime: req.body.returnCloseTime,
+      isClosed: req.body.isClosed === 'true',
+      reason: req.body.reason || null,
+    };
+  }
+
   async index(req, res, next) {
     try {
       const activeTab = normalizeTab(req.query.tab);
       const includeDeleted = parseIncludeDeleted(req);
+      // Tab selection controls dataset and pagination source; keep exceptions and regular hours isolated.
 
       if (activeTab === 'exceptions') {
         return this.renderExceptionsIndex(req, res, next, { includeDeleted, activeTab });
@@ -138,19 +181,15 @@ class OpeningHourAdminController {
 
   async show(req, res, next) {
     try {
-      const hour = await services.openingHourService.getById(req.params.id);
-      if (req.lendingLocationId && hour.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningHour not found');
-        err.status = 404;
-        throw err;
-      }
+      const openingHour = await services.openingHourService.getById(req.params.id);
+      this.assertOpeningHourOwnership(openingHour, req.lendingLocationId);
       return renderPage(res, 'admin/opening-hours/show', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
           { label: 'Opening Hours', href: '/admin/opening-hours' },
-          { label: hour.dayOfWeek, href: `/admin/opening-hours/${hour.id}` },
+          { label: openingHour.dayOfWeek, href: `/admin/opening-hours/${openingHour.id}` },
         ],
-        hour,
+        hour: openingHour,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -175,25 +214,11 @@ class OpeningHourAdminController {
 
   async create(req, res, next) {
     try {
-      const isSpecial = req.body.isSpecial === 'true';
-      const hour = await services.openingHourService.createOpeningHour({
-        lendingLocationId: req.lendingLocationId,
-        dayOfWeek: req.body.dayOfWeek,
-        openTime: req.body.openTime,
-        closeTime: req.body.closeTime,
-        pickupOpenTime: req.body.pickupOpenTime,
-        pickupCloseTime: req.body.pickupCloseTime,
-        returnOpenTime: req.body.returnOpenTime,
-        returnCloseTime: req.body.returnCloseTime,
-        isClosed: req.body.isClosed === 'true',
-        validFrom: req.body.validFrom,
-        validTo: req.body.validTo,
-        isSpecial,
-      });
+      const openingHour = await services.openingHourService.createOpeningHour(this.buildOpeningHourPayload(req));
       if (typeof req.flash === 'function') {
         req.flash('success', 'Öffnungszeit angelegt');
       }
-      return res.redirect(`/admin/opening-hours/${hour.id}`);
+      return res.redirect(`/admin/opening-hours/${openingHour.id}`);
     } catch (err) {
       return handleError(res, next, req, err);
     }
@@ -201,22 +226,18 @@ class OpeningHourAdminController {
 
   async edit(req, res, next) {
     try {
-      const hour = res.locals.viewData && res.locals.viewData.hour
+      const openingHour = res.locals.viewData && res.locals.viewData.hour
         ? res.locals.viewData.hour
         : await services.openingHourService.getById(req.params.id);
-      if (req.lendingLocationId && hour.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningHour not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertOpeningHourOwnership(openingHour, req.lendingLocationId);
       return renderPage(res, 'admin/opening-hours/edit', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
           { label: 'Opening Hours', href: '/admin/opening-hours' },
-          { label: hour.dayOfWeek, href: `/admin/opening-hours/${hour.id}` },
-          { label: 'Edit', href: `/admin/opening-hours/${hour.id}/edit` },
+          { label: openingHour.dayOfWeek, href: `/admin/opening-hours/${openingHour.id}` },
+          { label: 'Edit', href: `/admin/opening-hours/${openingHour.id}/edit` },
         ],
-        hour,
+        hour: openingHour,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -225,31 +246,15 @@ class OpeningHourAdminController {
 
   async update(req, res, next) {
     try {
-      const hour = res.locals.viewData && res.locals.viewData.hour
+      const openingHour = res.locals.viewData && res.locals.viewData.hour
         ? res.locals.viewData.hour
         : await services.openingHourService.getById(req.params.id);
-      if (req.lendingLocationId && hour.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningHour not found');
-        err.status = 404;
-        throw err;
-      }
-      await services.openingHourService.updateOpeningHour(hour.id, {
-        dayOfWeek: req.body.dayOfWeek,
-        openTime: req.body.openTime,
-        closeTime: req.body.closeTime,
-        pickupOpenTime: req.body.pickupOpenTime,
-        pickupCloseTime: req.body.pickupCloseTime,
-        returnOpenTime: req.body.returnOpenTime,
-        returnCloseTime: req.body.returnCloseTime,
-        isClosed: req.body.isClosed === 'true',
-        validFrom: req.body.validFrom,
-        validTo: req.body.validTo,
-        isSpecial: req.body.isSpecial === 'true',
-      });
+      this.assertOpeningHourOwnership(openingHour, req.lendingLocationId);
+      await services.openingHourService.updateOpeningHour(openingHour.id, this.buildOpeningHourPayload(req));
       if (typeof req.flash === 'function') {
         req.flash('success', 'Öffnungszeit gespeichert');
       }
-      return res.redirect(`/admin/opening-hours/${hour.id}`);
+      return res.redirect(`/admin/opening-hours/${openingHour.id}`);
     } catch (err) {
       return handleError(res, next, req, err);
     }
@@ -257,13 +262,9 @@ class OpeningHourAdminController {
 
   async remove(req, res, next) {
     try {
-      const hour = await services.openingHourService.getById(req.params.id);
-      if (req.lendingLocationId && hour.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningHour not found');
-        err.status = 404;
-        throw err;
-      }
-      await services.openingHourService.deleteOpeningHour(hour.id);
+      const openingHour = await services.openingHourService.getById(req.params.id);
+      this.assertOpeningHourOwnership(openingHour, req.lendingLocationId);
+      await services.openingHourService.deleteOpeningHour(openingHour.id);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Öffnungszeit gelöscht');
       }
@@ -276,13 +277,9 @@ class OpeningHourAdminController {
   async restore(req, res, next) {
     try {
       const includeDeleted = parseIncludeDeleted(req) || req.body.includeDeleted === '1';
-      const hour = await services.openingHourService.getById(req.params.id, { includeDeleted: true });
-      if (req.lendingLocationId && hour.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningHour not found');
-        err.status = 404;
-        throw err;
-      }
-      await services.openingHourService.restoreOpeningHour(hour.id);
+      const openingHour = await services.openingHourService.getById(req.params.id, { includeDeleted: true });
+      this.assertOpeningHourOwnership(openingHour, req.lendingLocationId);
+      await services.openingHourService.restoreOpeningHour(openingHour.id);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Öffnungszeit wiederhergestellt');
       }
@@ -308,19 +305,7 @@ class OpeningHourAdminController {
 
   async createException(req, res, next) {
     try {
-      await services.openingExceptionService.createException({
-        lendingLocationId: req.lendingLocationId,
-        dateFrom: req.body.dateFrom || req.body.date,
-        dateTo: req.body.dateTo,
-        openTime: req.body.openTime,
-        closeTime: req.body.closeTime,
-        pickupOpenTime: req.body.pickupOpenTime,
-        pickupCloseTime: req.body.pickupCloseTime,
-        returnOpenTime: req.body.returnOpenTime,
-        returnCloseTime: req.body.returnCloseTime,
-        isClosed: req.body.isClosed === 'true',
-        reason: req.body.reason || null,
-      });
+      await services.openingExceptionService.createException(this.buildOpeningExceptionPayload(req));
       if (typeof req.flash === 'function') {
         req.flash('success', 'Ausnahme angelegt');
       }
@@ -333,11 +318,7 @@ class OpeningHourAdminController {
   async showException(req, res, next) {
     try {
       const exception = await services.openingExceptionService.getById(req.params.id);
-      if (req.lendingLocationId && exception.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningException not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertOpeningExceptionOwnership(exception, req.lendingLocationId);
       return renderPage(res, 'admin/opening-hours/exceptions/show', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -356,11 +337,7 @@ class OpeningHourAdminController {
       const exception = res.locals.viewData && res.locals.viewData.exception
         ? res.locals.viewData.exception
         : await services.openingExceptionService.getById(req.params.id);
-      if (req.lendingLocationId && exception.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningException not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertOpeningExceptionOwnership(exception, req.lendingLocationId);
       return renderPage(res, 'admin/opening-hours/exceptions/edit', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -380,23 +357,11 @@ class OpeningHourAdminController {
       const exception = res.locals.viewData && res.locals.viewData.exception
         ? res.locals.viewData.exception
         : await services.openingExceptionService.getById(req.params.id);
-      if (req.lendingLocationId && exception.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningException not found');
-        err.status = 404;
-        throw err;
-      }
-      const updatedException = await services.openingExceptionService.updateException(exception.id, {
-        dateFrom: req.body.dateFrom || req.body.date,
-        dateTo: req.body.dateTo,
-        openTime: req.body.openTime,
-        closeTime: req.body.closeTime,
-        pickupOpenTime: req.body.pickupOpenTime,
-        pickupCloseTime: req.body.pickupCloseTime,
-        returnOpenTime: req.body.returnOpenTime,
-        returnCloseTime: req.body.returnCloseTime,
-        isClosed: req.body.isClosed === 'true',
-        reason: req.body.reason || null,
-      });
+      this.assertOpeningExceptionOwnership(exception, req.lendingLocationId);
+      const updatedException = await services.openingExceptionService.updateException(
+        exception.id,
+        this.buildOpeningExceptionPayload(req)
+      );
       if (typeof req.flash === 'function') {
         req.flash('success', 'Ausnahme gespeichert');
       }
@@ -409,11 +374,7 @@ class OpeningHourAdminController {
   async removeException(req, res, next) {
     try {
       const exception = await services.openingExceptionService.getById(req.params.id);
-      if (req.lendingLocationId && exception.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningException not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertOpeningExceptionOwnership(exception, req.lendingLocationId);
       await services.openingExceptionService.deleteException(exception.id);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Ausnahme gelöscht');
@@ -428,11 +389,7 @@ class OpeningHourAdminController {
     try {
       const includeDeleted = parseIncludeDeleted(req) || req.body.includeDeleted === '1';
       const exception = await services.openingExceptionService.getById(req.params.id, { includeDeleted: true });
-      if (req.lendingLocationId && exception.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('OpeningException not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertOpeningExceptionOwnership(exception, req.lendingLocationId);
       await services.openingExceptionService.restoreException(exception.id);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Ausnahme wiederhergestellt');

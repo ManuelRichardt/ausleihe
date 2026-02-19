@@ -6,8 +6,62 @@ const {
   parseIncludeDeleted,
   buildPagination,
 } = require('../_controllerUtils');
+const { TRACKING_TYPE } = require('../../../constants/domain');
+const { assertOwnedByLendingLocation } = require('../../../helpers/lendingLocationGuard.helper');
+const { parseBooleanToken } = require('../../../utils/valueParsing');
 
 class AssetModelAdminController {
+  assertModelOwnership(model, lendingLocationId) {
+    assertOwnedByLendingLocation(model, lendingLocationId, 'AssetModel');
+  }
+
+  async buildFormDependencies(req) {
+    const manufacturers = await services.manufacturerService.getAll({
+      lendingLocationId: req.lendingLocationId,
+      isActive: true,
+    });
+    const categories = await services.assetCategoryService.getAll({
+      lendingLocationId: req.lendingLocationId,
+      isActive: true,
+    });
+    const customFieldDefinitions = await services.assetModelService.getGlobalCustomFieldDefinitions({
+      onlyActive: true,
+    });
+    const componentModelsAll = await services.assetModelService.getAll(
+      {
+        lendingLocationId: req.lendingLocationId,
+        isActive: true,
+      },
+      { order: [['name', 'ASC']] }
+    );
+    const componentModels = componentModelsAll.filter(
+      (entry) => (entry.trackingType || TRACKING_TYPE.SERIALIZED) !== TRACKING_TYPE.BUNDLE
+    );
+    return { manufacturers, categories, customFieldDefinitions, componentModels };
+  }
+
+  async loadAssetModelFormContext(req) {
+    const dependencies = await this.buildFormDependencies(req);
+    if (!req.params.id) {
+      return {
+        ...dependencies,
+        model: null,
+        stock: null,
+        bundleDefinition: null,
+      };
+    }
+    const model = await services.assetModelService.getById(req.params.id);
+    this.assertModelOwnership(model, req.lendingLocationId);
+    const stock = await services.inventoryStockService.getStock(model.id, model.lendingLocationId);
+    const bundleDefinition = await services.bundleService.getByAssetModel(model.id, model.lendingLocationId);
+    return {
+      ...dependencies,
+      model,
+      stock,
+      bundleDefinition,
+    };
+  }
+
   async index(req, res, next) {
     try {
       const { page, limit, offset, order, sortBy, sortOrder } = parseListQuery(
@@ -68,11 +122,7 @@ class AssetModelAdminController {
   async show(req, res, next) {
     try {
       const model = await services.assetModelService.getById(req.params.id);
-      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('AssetModel not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertModelOwnership(model, req.lendingLocationId);
       const customFieldDefinitions = await services.assetModelService.getGlobalCustomFieldDefinitions({
         onlyActive: false,
       });
@@ -96,33 +146,19 @@ class AssetModelAdminController {
 
   async new(req, res, next) {
     try {
-      const manufacturers = res.locals.viewData && res.locals.viewData.manufacturers
-        ? res.locals.viewData.manufacturers
-        : await services.manufacturerService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
-      const categories = res.locals.viewData && res.locals.viewData.categories
-        ? res.locals.viewData.categories
-        : await services.assetCategoryService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
-      const customFieldDefinitions = res.locals.viewData && res.locals.viewData.customFieldDefinitions
-        ? res.locals.viewData.customFieldDefinitions
-        : await services.assetModelService.getGlobalCustomFieldDefinitions({ onlyActive: true });
-      const componentModels = res.locals.viewData && res.locals.viewData.componentModels
-        ? res.locals.viewData.componentModels
-        : (await services.assetModelService.getAll({
-          lendingLocationId: req.lendingLocationId,
-          isActive: true,
-        }, { order: [['name', 'ASC']] })).filter((entry) => (entry.trackingType || 'serialized') !== 'bundle');
+      const formContext = await this.loadAssetModelFormContext(req);
       return renderPage(res, 'admin/models/new', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
           { label: 'Asset Models', href: '/admin/asset-models' },
           { label: 'New', href: '/admin/asset-models/new' },
         ],
-        manufacturers,
-        categories,
-        customFieldDefinitions,
-        componentModels,
-        stock: null,
-        bundleDefinition: null,
+        manufacturers: formContext.manufacturers,
+        categories: formContext.categories,
+        customFieldDefinitions: formContext.customFieldDefinitions,
+        componentModels: formContext.componentModels,
+        stock: formContext.stock,
+        bundleDefinition: formContext.bundleDefinition,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -132,7 +168,7 @@ class AssetModelAdminController {
   async create(req, res, next) {
     try {
       const customFieldData = await services.assetModelService.resolveCustomFieldData(req.body.customFields || {});
-      const trackingType = req.body.trackingType || 'serialized';
+      const trackingType = req.body.trackingType || TRACKING_TYPE.SERIALIZED;
       const model = await services.assetModelService.createAssetModel({
         lendingLocationId: req.lendingLocationId,
         manufacturerId: req.body.manufacturerId,
@@ -144,16 +180,7 @@ class AssetModelAdminController {
         trackingType,
         isActive: req.body.isActive !== 'false',
       });
-      if (trackingType === 'bulk') {
-        await services.inventoryStockService.updateStock(model.id, model.lendingLocationId, {
-          quantityTotal: req.body.quantityTotal,
-          quantityAvailable: req.body.quantityAvailable,
-          minThreshold: req.body.minThreshold,
-          reorderThreshold: req.body.reorderThreshold,
-        });
-      }
-      await this.syncBundleDefinition(model, req.body);
-      await this.attachFiles(model, req.files);
+      await this.runPostSavePipeline(model, req.body, req.files);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Asset Model angelegt');
       }
@@ -165,33 +192,8 @@ class AssetModelAdminController {
 
   async edit(req, res, next) {
     try {
-      const model = res.locals.viewData && res.locals.viewData.model
-        ? res.locals.viewData.model
-        : await services.assetModelService.getById(req.params.id);
-      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('AssetModel not found');
-        err.status = 404;
-        throw err;
-      }
-      const manufacturers = res.locals.viewData && res.locals.viewData.manufacturers
-        ? res.locals.viewData.manufacturers
-        : await services.manufacturerService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
-      const categories = res.locals.viewData && res.locals.viewData.categories
-        ? res.locals.viewData.categories
-        : await services.assetCategoryService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
-      const customFieldDefinitions = res.locals.viewData && res.locals.viewData.customFieldDefinitions
-        ? res.locals.viewData.customFieldDefinitions
-        : await services.assetModelService.getGlobalCustomFieldDefinitions({ onlyActive: true });
-      const stock = await services.inventoryStockService.getStock(model.id, model.lendingLocationId);
-      const componentModels = res.locals.viewData && res.locals.viewData.componentModels
-        ? res.locals.viewData.componentModels
-        : (await services.assetModelService.getAll({
-          lendingLocationId: req.lendingLocationId,
-          isActive: true,
-        }, { order: [['name', 'ASC']] })).filter((entry) => (entry.trackingType || 'serialized') !== 'bundle');
-      const bundleDefinition = res.locals.viewData && res.locals.viewData.bundleDefinition
-        ? res.locals.viewData.bundleDefinition
-        : await services.bundleService.getByAssetModel(model.id, model.lendingLocationId);
+      const formContext = await this.loadAssetModelFormContext(req);
+      const model = formContext.model;
       return renderPage(res, 'admin/models/edit', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
@@ -200,12 +202,12 @@ class AssetModelAdminController {
           { label: 'Edit', href: `/admin/asset-models/${model.id}/edit` },
         ],
         model,
-        manufacturers,
-        categories,
-        customFieldDefinitions,
-        stock,
-        componentModels,
-        bundleDefinition,
+        manufacturers: formContext.manufacturers,
+        categories: formContext.categories,
+        customFieldDefinitions: formContext.customFieldDefinitions,
+        stock: formContext.stock,
+        componentModels: formContext.componentModels,
+        bundleDefinition: formContext.bundleDefinition,
       });
     } catch (err) {
       return handleError(res, next, req, err);
@@ -217,13 +219,9 @@ class AssetModelAdminController {
       const model = res.locals.viewData && res.locals.viewData.model
         ? res.locals.viewData.model
         : await services.assetModelService.getById(req.params.id);
-      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('AssetModel not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertModelOwnership(model, req.lendingLocationId);
       const customFieldData = await services.assetModelService.resolveCustomFieldData(req.body.customFields || {});
-      const trackingType = req.body.trackingType || 'serialized';
+      const trackingType = req.body.trackingType || TRACKING_TYPE.SERIALIZED;
       const updatedModel = await services.assetModelService.updateAssetModel(model.id, {
         manufacturerId: req.body.manufacturerId,
         categoryId: req.body.categoryId,
@@ -234,16 +232,7 @@ class AssetModelAdminController {
         trackingType,
         isActive: req.body.isActive !== 'false',
       });
-      if (trackingType === 'bulk') {
-        await services.inventoryStockService.updateStock(updatedModel.id, updatedModel.lendingLocationId, {
-          quantityTotal: req.body.quantityTotal,
-          quantityAvailable: req.body.quantityAvailable,
-          minThreshold: req.body.minThreshold,
-          reorderThreshold: req.body.reorderThreshold,
-        });
-      }
-      await this.syncBundleDefinition(updatedModel, req.body);
-      await this.attachFiles(updatedModel, req.files);
+      await this.runPostSavePipeline(updatedModel, req.body, req.files);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Asset Model gespeichert');
       }
@@ -256,11 +245,7 @@ class AssetModelAdminController {
   async remove(req, res, next) {
     try {
       const model = await services.assetModelService.getById(req.params.id);
-      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('AssetModel not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertModelOwnership(model, req.lendingLocationId);
       await services.assetModelService.deleteAssetModel(model.id);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Asset Model gelöscht');
@@ -275,11 +260,7 @@ class AssetModelAdminController {
     try {
       const includeDeleted = parseIncludeDeleted(req) || req.body.includeDeleted === '1';
       const model = await services.assetModelService.getById(req.params.id, { includeDeleted: true });
-      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('AssetModel not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertModelOwnership(model, req.lendingLocationId);
       await services.assetModelService.restoreAssetModel(model.id);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Asset Model wiederhergestellt');
@@ -293,11 +274,7 @@ class AssetModelAdminController {
   async updateAttachment(req, res, next) {
     try {
       const model = await services.assetModelService.getById(req.params.id);
-      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('AssetModel not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertModelOwnership(model, req.lendingLocationId);
       const attachment = await services.assetAttachmentService.getById(req.params.attachmentId);
       if (attachment.assetModelId !== model.id) {
         const err = new Error('Attachment not found');
@@ -307,7 +284,7 @@ class AssetModelAdminController {
 
       const nextKind = req.body.kind || attachment.kind;
       const nextTitle = req.body.title || null;
-      const makePrimary = req.body.isPrimary === '1' || req.body.isPrimary === 'true' || req.body.isPrimary === true;
+      const makePrimary = parseBooleanToken(req.body.isPrimary, { defaultValue: false }) === true;
 
       await services.assetAttachmentService.updateAttachment(attachment.id, {
         kind: nextKind,
@@ -338,11 +315,7 @@ class AssetModelAdminController {
   async removeAttachment(req, res, next) {
     try {
       const model = await services.assetModelService.getById(req.params.id);
-      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('AssetModel not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertModelOwnership(model, req.lendingLocationId);
       const attachment = await services.assetAttachmentService.getById(req.params.attachmentId);
       if (attachment.assetModelId !== model.id) {
         const err = new Error('Attachment not found');
@@ -359,6 +332,22 @@ class AssetModelAdminController {
       return res.redirect(`/admin/asset-models/${model.id}`);
     } catch (err) {
       return handleError(res, next, req, err);
+    }
+  }
+
+  async createAttachmentsByKind(modelId, files, kind) {
+    const uploadFiles = Array.isArray(files) ? files : [];
+    if (!uploadFiles.length) {
+      return;
+    }
+    for (const file of uploadFiles) {
+      await services.assetAttachmentService.addAttachment({
+        assetModelId: modelId,
+        kind,
+        url: `/uploads/asset-models/${file.filename}`,
+        title: kind === 'image' ? null : (file.originalname || null),
+        isPrimary: false,
+      });
     }
   }
 
@@ -399,38 +388,27 @@ class AssetModelAdminController {
       }
     }
 
-    for (const file of manuals) {
-      await services.assetAttachmentService.addAttachment({
-        assetModelId: model.id,
-        kind: 'manual',
-        url: `/uploads/asset-models/${file.filename}`,
-        title: file.originalname || null,
-        isPrimary: false,
-      });
-    }
-
-    for (const file of documents) {
-      await services.assetAttachmentService.addAttachment({
-        assetModelId: model.id,
-        kind: 'document',
-        url: `/uploads/asset-models/${file.filename}`,
-        title: file.originalname || null,
-        isPrimary: false,
-      });
-    }
-
-    for (const file of others) {
-      await services.assetAttachmentService.addAttachment({
-        assetModelId: model.id,
-        kind: 'other',
-        url: `/uploads/asset-models/${file.filename}`,
-        title: file.originalname || null,
-        isPrimary: false,
-      });
-    }
+    await this.createAttachmentsByKind(model.id, manuals, 'manual');
+    await this.createAttachmentsByKind(model.id, documents, 'document');
+    await this.createAttachmentsByKind(model.id, others, 'other');
+    await this.ensurePrimaryModelImage(model.id);
   }
 
-  async syncModelImageUrl(modelId) {
+  async runPostSavePipeline(model, body, files) {
+    const trackingType = model.trackingType || TRACKING_TYPE.SERIALIZED;
+    if (trackingType === TRACKING_TYPE.BULK) {
+      await services.inventoryStockService.updateStock(model.id, model.lendingLocationId, {
+        quantityTotal: body.quantityTotal,
+        quantityAvailable: body.quantityAvailable,
+        minThreshold: body.minThreshold,
+        reorderThreshold: body.reorderThreshold,
+      });
+    }
+    await this.syncBundleDefinition(model, body);
+    await this.attachFiles(model, files);
+  }
+
+  async ensurePrimaryModelImage(modelId) {
     const model = await services.assetModelService.getById(modelId);
     const images = await services.assetAttachmentService.getAll({
       assetModelId: modelId,
@@ -440,6 +418,7 @@ class AssetModelAdminController {
       await services.assetModelService.updateAssetModel(modelId, { imageUrl: null });
       return;
     }
+    // Only one primary image is allowed per model; first valid image becomes fallback primary.
     const primary = images.find((item) => item.isPrimary) || images[0];
     if (!primary.isPrimary) {
       await services.assetAttachmentService.updateAttachment(primary.id, { isPrimary: true });
@@ -449,7 +428,11 @@ class AssetModelAdminController {
     }
   }
 
-  parseBundleComponents(body) {
+  async syncModelImageUrl(modelId) {
+    await this.ensurePrimaryModelImage(modelId);
+  }
+
+  parseBundleComponentItemsPayload(body) {
     const toArray = (value) => {
       if (Array.isArray(value)) {
         return value;
@@ -488,7 +471,11 @@ class AssetModelAdminController {
       }
       const quantity = Math.max(parseInt(quantities[i] || '1', 10), 1);
       const isOptionalRaw = String(optionalFlags[i] || '0').trim().toLowerCase();
-      const isOptional = ['1', 'true', 'yes', 'ja', 'on'].includes(isOptionalRaw);
+      const isOptional = parseBooleanToken(isOptionalRaw, {
+        trueTokens: ['1', 'true', 'yes', 'ja', 'on'],
+        falseTokens: ['0', 'false', 'no', 'nein', 'off'],
+        defaultValue: false,
+      });
       items.push({
         componentAssetModelId,
         quantity,
@@ -499,9 +486,9 @@ class AssetModelAdminController {
   }
 
   async syncBundleDefinition(model, body) {
-    const trackingType = model.trackingType || 'serialized';
+    const trackingType = model.trackingType || TRACKING_TYPE.SERIALIZED;
     const existing = await services.bundleService.getByAssetModel(model.id, model.lendingLocationId);
-    if (trackingType !== 'bundle') {
+    if (trackingType !== TRACKING_TYPE.BUNDLE) {
       if (existing) {
         await services.bundleService.deleteBundleDefinition(existing.id);
       }
@@ -525,7 +512,7 @@ class AssetModelAdminController {
       });
     }
 
-    const items = this.parseBundleComponents(body);
+    const items = this.parseBundleComponentItemsPayload(body);
     await services.bundleService.replaceBundleItems(bundle.id, items);
     return bundle;
   }
@@ -533,11 +520,7 @@ class AssetModelAdminController {
   async updateStock(req, res, next) {
     try {
       const model = await services.assetModelService.getById(req.params.id);
-      if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
-        const err = new Error('AssetModel not found');
-        err.status = 404;
-        throw err;
-      }
+      this.assertModelOwnership(model, req.lendingLocationId);
       await services.inventoryStockService.updateStock(
         model.id,
         model.lendingLocationId,
