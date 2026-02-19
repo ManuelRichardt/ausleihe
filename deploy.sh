@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # --- ALLGEMEINE KONFIGURATION ---
 GIT_REPO="https://github.com/ManuelRichardt/ausleihe.git"
@@ -12,7 +13,7 @@ API_URL="https://api.dein-rechenzentrum.de/acme"
 DOMAIN="deine-domain.de"
 
 # Modus auslesen
-MODE=$1
+MODE=${1:-}
 
 if [[ "$MODE" != "--dev" && "$MODE" != "--prod" ]]; then
     echo "Fehler: Bitte Modus angeben! Nutzung: ./deploy.sh --dev ODER ./deploy.sh --prod"
@@ -28,6 +29,16 @@ if ! command -v docker &> /dev/null; then
     sudo usermod -aG docker $USER
 fi
 
+DOCKER_COMPOSE_CMD=(docker compose)
+if ! docker info &> /dev/null; then
+    DOCKER_COMPOSE_CMD=(sudo docker compose)
+fi
+
+if ! "${DOCKER_COMPOSE_CMD[@]}" version &> /dev/null; then
+    echo "Fehler: 'docker compose' ist nicht verfügbar. Bitte Docker Compose Plugin installieren."
+    exit 1
+fi
+
 # 2. Firewall
 sudo ufw allow OpenSSH
 sudo ufw allow 80
@@ -39,6 +50,8 @@ sudo mkdir -p $APP_DIR
 sudo chown $USER:$USER $APP_DIR
 if [ ! -d "$APP_DIR/.git" ]; then
     git clone $GIT_REPO $APP_DIR
+else
+    git -C "$APP_DIR" pull --ff-only
 fi
 
 # 4. SSL Zertifikate generieren (Modus-Abhängig)
@@ -97,13 +110,20 @@ EOF
 
 sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
+if [ ! -f "$APP_DIR/.env" ]; then
+    echo "Fehler: $APP_DIR/.env fehlt. Deployment wird abgebrochen."
+    exit 1
+fi
+
+# 6. Docker Compose starten
+cd "$APP_DIR"
+# npm install auf dem Host ist nicht nötig: der Docker-Build installiert Node-Dependencies.
+"${DOCKER_COMPOSE_CMD[@]}" up -d --build
+
+# 7. Nginx starten (nach App-Start)
 sudo systemctl start nginx
 
 echo "Setup abgeschlossen im Modus ${MODE#--}!"
-echo "Vergiss nicht, die .env in $APP_DIR zu prüfen und 'docker compose up -d --build' zu starten."
-
-# 6. Docker Compose starten
-cd "$APP_DIR" && docker compose up -d --build
-
-# 7. PM2 Monitoring starten
-docker exec -it app-app-1 npx pm2 monit
+echo "Status:"
+"${DOCKER_COMPOSE_CMD[@]}" ps
+"${DOCKER_COMPOSE_CMD[@]}" logs --tail=20 app || true
