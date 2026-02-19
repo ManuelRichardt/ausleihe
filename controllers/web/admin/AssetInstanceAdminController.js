@@ -5,7 +5,7 @@ const {
   parseListQuery,
   parseIncludeDeleted,
   buildPagination,
-} = require('../_controllerUtils');
+} = require('../controllerUtils');
 
 class AssetInstanceAdminController {
   async index(req, res, next) {

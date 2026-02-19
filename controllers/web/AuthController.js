@@ -1,5 +1,5 @@
-const { services, renderPage, renderError, handleError } = require('./_controllerUtils');
-const { buildAuditMetadata } = require('../../utils/requestContext.helper');
+const { services, renderPage, renderError, handleError } = require('./controllerUtils');
+const { buildAuditMetadata } = require('../../utils/requestContextHelper');
 
 class AuthController {
   getSafeReturnTo(value) {

@@ -1,0 +1,461 @@
+<%
+  const isEditMode = mode === 'edit';
+  const safeCsrf = (typeof csrfToken === 'undefined' || !csrfToken) ? '' : csrfToken;
+  const safeFormData = (typeof formData !== 'undefined' && formData) ? formData : null;
+  const safeModel = (typeof model !== 'undefined' && model) ? model : {};
+  const values = (safeFormData && Object.keys(safeFormData).length) ? safeFormData : (isEditMode ? safeModel : {});
+  const safeErrors = (typeof errors !== 'undefined' && errors) ? errors : null;
+  const errorsList = Array.isArray(safeErrors) ? safeErrors : [];
+  const errorsMap = (!Array.isArray(safeErrors) && safeErrors) ? safeErrors : {};
+  const errorFor = function (field) {
+    if (errorsMap && errorsMap[field]) {
+      return errorsMap[field];
+    }
+    const match = errorsList.find(function (err) { return err.field === field; });
+    return match ? match.message : '';
+  };
+
+  const manufacturerOptions = Array.isArray(manufacturers) ? manufacturers : [];
+  const categoryOptions = Array.isArray(categories) ? categories : [];
+  const customFieldDefinitionsList = Array.isArray(customFieldDefinitions) ? customFieldDefinitions : [];
+  const componentModelOptions = Array.isArray(componentModels) ? componentModels : [];
+  const safeBundleDefinition = (typeof bundleDefinition !== 'undefined' && bundleDefinition) ? bundleDefinition : null;
+
+  const toArray = function (value) {
+    if (Array.isArray(value)) {
+      return value;
+    }
+    if (value && typeof value === 'object') {
+      return Object.values(value);
+    }
+    if (value === undefined || value === null || value === '') {
+      return [];
+    }
+    return [value];
+  };
+
+  const initialBundleItems = safeBundleDefinition && Array.isArray(safeBundleDefinition.items)
+    ? safeBundleDefinition.items
+    : [];
+
+  const submittedComponentIds = toArray(
+    values.componentAssetModelId !== undefined ? values.componentAssetModelId : values['componentAssetModelId[]']
+  );
+  const submittedQuantities = toArray(
+    values.componentQuantity !== undefined ? values.componentQuantity : values['componentQuantity[]']
+  );
+  const submittedOptional = toArray(
+    values.componentIsOptional !== undefined ? values.componentIsOptional : values['componentIsOptional[]']
+  );
+
+  let bundleItems = initialBundleItems;
+  if (submittedComponentIds.length) {
+    bundleItems = submittedComponentIds.map(function (componentAssetModelId, index) {
+      const quantityValue = submittedQuantities[index] !== undefined ? submittedQuantities[index] : '1';
+      const optionalValue = submittedOptional[index] !== undefined ? submittedOptional[index] : '0';
+      const parsedQuantity = parseInt(quantityValue, 10);
+      const normalizedOptional = String(optionalValue).toLowerCase();
+      return {
+        componentAssetModelId: String(componentAssetModelId || ''),
+        quantity: Number.isNaN(parsedQuantity) || parsedQuantity < 1 ? 1 : parsedQuantity,
+        isOptional: ['1', 'true', 'yes', 'ja', 'on'].includes(normalizedOptional),
+      };
+    }).filter(function (item) {
+      return item.componentAssetModelId;
+    });
+  }
+
+  const modelCustomFieldValues = (values.customFields && typeof values.customFields === 'object')
+    ? values.customFields
+    : ((safeModel.specs && typeof safeModel.specs === 'object') ? safeModel.specs : {});
+
+  const safeStock = (typeof stock !== 'undefined' && stock) ? stock : {};
+  const quantityTotalValue = (values.quantityTotal !== undefined && values.quantityTotal !== null && values.quantityTotal !== '')
+    ? values.quantityTotal
+    : (safeStock.quantityTotal || 0);
+  const quantityAvailableValue = (values.quantityAvailable !== undefined && values.quantityAvailable !== null && values.quantityAvailable !== '')
+    ? values.quantityAvailable
+    : (safeStock.quantityAvailable || 0);
+  const minThresholdValue = (values.minThreshold !== undefined && values.minThreshold !== null)
+    ? values.minThreshold
+    : (safeStock.minThreshold || '');
+  const reorderThresholdValue = (values.reorderThreshold !== undefined && values.reorderThreshold !== null)
+    ? values.reorderThreshold
+    : (safeStock.reorderThreshold || '');
+
+  const selectedTrackingType = values.trackingType || safeModel.trackingType || 'serialized';
+  const statusValue = (values.isActive === false || values.isActive === 'false') ? 'false' : 'true';
+
+  const safeLendingLocationId =
+    (typeof lendingLocationId !== 'undefined' && lendingLocationId)
+      ? lendingLocationId
+      : (lendingLocation && lendingLocation.id ? lendingLocation.id : '');
+
+  const queryParts = [];
+  if (safeLendingLocationId) {
+    queryParts.push(`lendingLocationId=${safeLendingLocationId}`);
+  }
+  if (safeCsrf) {
+    queryParts.push(`csrfToken=${safeCsrf}`);
+  }
+  const actionSuffix = queryParts.length ? `?${queryParts.join('&')}` : '';
+
+  const resolvedFormAction = formAction || (isEditMode ? `/admin/asset-models/${safeModel.id}` : '/admin/asset-models');
+  const resolvedActionUrl = `${resolvedFormAction}${actionSuffix}`;
+
+  const resolvedHeading = heading || (isEditMode ? 'Asset Model bearbeiten' : 'Asset Model anlegen');
+  const resolvedSubtitle = subtitle || (isEditMode ? (safeModel.name || '') : 'Modell für die aktuelle Ausleihe erfassen.');
+  const resolvedBackHref = backHref || (isEditMode ? `/admin/asset-models/${safeModel.id}` : '/admin/asset-models');
+  const resolvedBackLabel = backLabel || (isEditMode ? 'Zurück' : 'Zur Übersicht');
+  const resolvedSubmitLabel = submitLabel || (isEditMode ? 'Speichern' : 'Asset Model anlegen');
+  const resolvedCancelHref = cancelHref || resolvedBackHref;
+
+  const bundleNameValue = values.bundleName || (safeBundleDefinition ? safeBundleDefinition.name : '') || values.name || safeModel.name || '';
+  const bundleDescriptionValue = values.bundleDescription || (safeBundleDefinition ? safeBundleDefinition.description : '') || values.description || safeModel.description || '';
+%>
+
+<section class="admin models">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= resolvedHeading %></h1>
+      <% if (resolvedSubtitle) { %>
+        <p class="text-muted mb-0"><%= resolvedSubtitle %></p>
+      <% } %>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="<%= resolvedBackHref %>" class="btn btn-outline-secondary"><%= resolvedBackLabel %></a>
+    </div>
+  </div>
+
+  <form method="post" action="<%= resolvedActionUrl %>" class="card shadow-sm" enctype="multipart/form-data">
+    <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+    <% if (safeLendingLocationId) { %>
+      <input type="hidden" name="lendingLocationId" value="<%= safeLendingLocationId %>">
+    <% } %>
+
+    <div class="card-body">
+      <div class="row g-3">
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'input',
+          wrapperClass: 'col-md-6',
+          name: 'name',
+          label: 'Name',
+          value: values.name || '',
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'select',
+          wrapperClass: 'col-md-6',
+          name: 'manufacturerId',
+          label: 'Hersteller',
+          value: values.manufacturerId || '',
+          options: [{ value: '', label: 'Bitte wählen' }].concat(manufacturerOptions.map(function (item) {
+            return { value: item.id, label: item.name };
+          })),
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'select',
+          wrapperClass: 'col-md-6',
+          name: 'categoryId',
+          label: 'Kategorie',
+          value: values.categoryId || '',
+          options: [{ value: '', label: 'Bitte wählen' }].concat(categoryOptions.map(function (item) {
+            return { value: item.id, label: item.name };
+          })),
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'select',
+          wrapperClass: 'col-md-6',
+          name: 'isActive',
+          label: 'Status',
+          value: statusValue,
+          options: [
+            { value: 'true', label: 'Aktiv' },
+            { value: 'false', label: 'Inaktiv' },
+          ],
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'select',
+          wrapperClass: 'col-md-6',
+          name: 'trackingType',
+          label: 'Tracking-Typ',
+          value: selectedTrackingType,
+          options: [
+            { value: 'serialized', label: 'Serialized' },
+            { value: 'bulk', label: 'Bulk' },
+            { value: 'bundle', label: 'Bundle' },
+          ],
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'textarea',
+          wrapperClass: 'col-12',
+          name: 'description',
+          label: 'Beschreibung',
+          value: values.description || '',
+          rows: 3,
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'textarea',
+          wrapperClass: 'col-12',
+          name: 'technicalDescription',
+          label: 'Technische Beschreibung',
+          value: values.technicalDescription || '',
+          rows: 3,
+          errorFor,
+        }) %>
+
+        <div class="col-12" data-tracking-panel="bulk">
+          <div class="card border-0 bg-light">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <h2 class="h6 mb-0">Bulk-Bestand</h2>
+                <span class="text-muted small">Wird nur für Tracking-Typ „Bulk“ verwendet.</span>
+              </div>
+              <div class="row g-3">
+                <%- include('../../partials/forms/field', {
+                  variant: 'bootstrap',
+                  as: 'input',
+                  type: 'number',
+                  wrapperClass: 'col-md-3',
+                  name: 'quantityTotal',
+                  label: 'Gesamtmenge',
+                  value: quantityTotalValue,
+                  min: 0,
+                  step: 1,
+                  errorFor,
+                }) %>
+
+                <%- include('../../partials/forms/field', {
+                  variant: 'bootstrap',
+                  as: 'input',
+                  type: 'number',
+                  wrapperClass: 'col-md-3',
+                  name: 'quantityAvailable',
+                  label: 'Verfügbar',
+                  value: quantityAvailableValue,
+                  min: 0,
+                  step: 1,
+                  errorFor,
+                }) %>
+
+                <%- include('../../partials/forms/field', {
+                  variant: 'bootstrap',
+                  as: 'input',
+                  type: 'number',
+                  wrapperClass: 'col-md-3',
+                  name: 'minThreshold',
+                  label: 'Min. Bestand',
+                  value: minThresholdValue,
+                  min: 0,
+                  step: 1,
+                  errorFor,
+                }) %>
+
+                <%- include('../../partials/forms/field', {
+                  variant: 'bootstrap',
+                  as: 'input',
+                  type: 'number',
+                  wrapperClass: 'col-md-3',
+                  name: 'reorderThreshold',
+                  label: 'Meldebestand',
+                  value: reorderThresholdValue,
+                  min: 0,
+                  step: 1,
+                  errorFor,
+                }) %>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12" data-tracking-panel="bundle">
+          <div class="card border-0 bg-light">
+            <div class="card-body">
+              <h2 class="h6 mb-3">Bundle-Konfiguration</h2>
+              <div class="row g-3 mb-3">
+                <%- include('../../partials/forms/field', {
+                  variant: 'bootstrap',
+                  as: 'input',
+                  wrapperClass: 'col-md-6',
+                  name: 'bundleName',
+                  label: 'Bundle Name',
+                  value: bundleNameValue,
+                }) %>
+
+                <%- include('../../partials/forms/field', {
+                  variant: 'bootstrap',
+                  as: 'input',
+                  wrapperClass: 'col-md-6',
+                  name: 'bundleDescription',
+                  label: 'Bundle Beschreibung',
+                  value: bundleDescriptionValue,
+                }) %>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-sm align-middle mb-2">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Komponente</th>
+                      <th style="width: 110px;">Menge</th>
+                      <th style="width: 160px;">Pflicht</th>
+                      <th style="width: 60px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody data-bundle-components>
+                    <% if (bundleItems.length) { %>
+                      <% bundleItems.forEach(function (item) { %>
+                        <tr data-bundle-component-row>
+                          <td>
+                            <select name="componentAssetModelId[]" class="form-select form-select-sm">
+                              <option value="">Bitte wählen</option>
+                              <% componentModelOptions.forEach(function (cm) { %>
+                                <option value="<%= cm.id %>" <%= item.componentAssetModelId === cm.id ? 'selected' : '' %>><%= cm.name %> (<%= cm.trackingType || 'serialized' %>)</option>
+                              <% }) %>
+                            </select>
+                          </td>
+                          <td><input type="number" min="1" step="1" name="componentQuantity[]" class="form-control form-control-sm" value="<%= item.quantity || 1 %>"></td>
+                          <td>
+                            <select name="componentIsOptional[]" class="form-select form-select-sm">
+                              <option value="0" <%= item.isOptional ? '' : 'selected' %>>Pflicht</option>
+                              <option value="1" <%= item.isOptional ? 'selected' : '' %>>Optional</option>
+                            </select>
+                          </td>
+                          <td><button type="button" class="btn btn-outline-danger btn-sm" data-bundle-remove-row><i class="bi bi-trash3-fill"></i></button></td>
+                        </tr>
+                      <% }) %>
+                    <% } else { %>
+                      <tr data-bundle-component-row>
+                        <td>
+                          <select name="componentAssetModelId[]" class="form-select form-select-sm">
+                            <option value="">Bitte wählen</option>
+                            <% componentModelOptions.forEach(function (cm) { %>
+                              <option value="<%= cm.id %>"><%= cm.name %> (<%= cm.trackingType || 'serialized' %>)</option>
+                            <% }) %>
+                          </select>
+                        </td>
+                        <td><input type="number" min="1" step="1" name="componentQuantity[]" class="form-control form-control-sm" value="1"></td>
+                        <td>
+                          <select name="componentIsOptional[]" class="form-select form-select-sm">
+                            <option value="0" selected>Pflicht</option>
+                            <option value="1">Optional</option>
+                          </select>
+                        </td>
+                        <td><button type="button" class="btn btn-outline-danger btn-sm" data-bundle-remove-row><i class="bi bi-trash3-fill"></i></button></td>
+                      </tr>
+                    <% } %>
+                  </tbody>
+                </table>
+              </div>
+
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-bundle-add-row>
+                <i class="bi bi-plus-lg me-1"></i>Komponente hinzufügen
+              </button>
+
+              <template data-bundle-row-template>
+                <tr data-bundle-component-row>
+                  <td>
+                    <select name="componentAssetModelId[]" class="form-select form-select-sm">
+                      <option value="">Bitte wählen</option>
+                      <% componentModelOptions.forEach(function (cm) { %>
+                        <option value="<%= cm.id %>"><%= cm.name %> (<%= cm.trackingType || 'serialized' %>)</option>
+                      <% }) %>
+                    </select>
+                  </td>
+                  <td><input type="number" min="1" step="1" name="componentQuantity[]" class="form-control form-control-sm" value="1"></td>
+                  <td>
+                    <select name="componentIsOptional[]" class="form-select form-select-sm">
+                      <option value="0" selected>Pflicht</option>
+                      <option value="1">Optional</option>
+                    </select>
+                  </td>
+                  <td><button type="button" class="btn btn-outline-danger btn-sm" data-bundle-remove-row><i class="bi bi-trash3-fill"></i></button></td>
+                </tr>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <%- include('../../partials/forms/assetModelCustomFields', {
+          definitions: customFieldDefinitionsList,
+          fieldValues: modelCustomFieldValues,
+          errorFor: errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'input',
+          type: 'file',
+          wrapperClass: 'col-12',
+          name: 'images',
+          label: isEditMode ? 'Weitere Bilder hochladen' : 'Bilder hochladen',
+          value: '',
+          accept: 'image/*',
+          multiple: true,
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'input',
+          type: 'file',
+          wrapperClass: 'col-12',
+          name: 'manuals',
+          label: 'Manuals',
+          value: '',
+          accept: '.pdf,image/*',
+          multiple: true,
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'input',
+          type: 'file',
+          wrapperClass: 'col-12',
+          name: 'documents',
+          label: 'Documents',
+          value: '',
+          accept: '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv',
+          multiple: true,
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'input',
+          type: 'file',
+          wrapperClass: 'col-12',
+          name: 'others',
+          label: 'Other',
+          value: '',
+          multiple: true,
+          errorFor,
+        }) %>
+      </div>
+    </div>
+
+    <div class="card-footer d-flex flex-wrap gap-2 justify-content-end">
+      <button type="submit" class="btn btn-primary"><%= resolvedSubmitLabel %></button>
+      <a href="<%= resolvedCancelHref %>" class="btn btn-outline-secondary">Abbrechen</a>
+    </div>
+  </form>
+</section>

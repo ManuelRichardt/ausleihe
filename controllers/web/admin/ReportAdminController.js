@@ -1,4 +1,4 @@
-const { services, renderPage, handleError } = require('../_controllerUtils');
+const { services, renderPage, handleError } = require('../controllerUtils');
 
 class ReportAdminController {
   async index(req, res, next) {

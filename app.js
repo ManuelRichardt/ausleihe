@@ -193,7 +193,7 @@ app.use(function (err, req, res, next) {
 
   if (status === 403) {
     res.status(403);
-    return res.render('errors/403');
+    return res.render('errors/error403');
   }
 
   res.locals.message = err.message;

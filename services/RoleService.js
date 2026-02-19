@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { pickDefined, buildListOptions, findByPkOrThrow, applyIncludeDeleted } = require('./_serviceUtils');
+const { pickDefined, buildListOptions, findByPkOrThrow, applyIncludeDeleted } = require('./serviceUtils');
 
 const permissionInclude = {
   model: null,

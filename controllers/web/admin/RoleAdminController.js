@@ -1,4 +1,4 @@
-const { services, renderPage, handleError, parseIncludeDeleted } = require('../_controllerUtils');
+const { services, renderPage, handleError, parseIncludeDeleted } = require('../controllerUtils');
 
 class RoleAdminController {
   parseListQuery(req) {

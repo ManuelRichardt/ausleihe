@@ -6,7 +6,7 @@ const {
   buildListOptions,
   findByPkOrThrow,
   applyIncludeDeleted,
-} = require('./_serviceUtils');
+} = require('./serviceUtils');
 
 class StorageLocationService {
   constructor(models) {

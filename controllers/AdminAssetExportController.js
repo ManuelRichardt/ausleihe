@@ -1,4 +1,4 @@
-const CsvExportService = require('../services/CsvExportService');
+const CsvExportService = require('../services/csvExportService');
 const models = require('../models');
 const { createServices } = require('../services');
 

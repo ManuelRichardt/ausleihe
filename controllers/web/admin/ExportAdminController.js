@@ -1,4 +1,4 @@
-const { renderPage, handleError } = require('../_controllerUtils');
+const { renderPage, handleError } = require('../controllerUtils');
 
 class ExportAdminController {
   async index(req, res, next) {

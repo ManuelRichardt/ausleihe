@@ -1,0 +1,123 @@
+<%
+  const safeEntity = (typeof entity !== 'undefined' && entity) ? entity : {};
+  const safeFormData = (typeof formData !== 'undefined' && formData) ? formData : null;
+  const values = (safeFormData && Object.keys(safeFormData).length) ? safeFormData : safeEntity;
+  const safeErrors = (typeof errors !== 'undefined' && errors) ? errors : null;
+  const errorsList = Array.isArray(safeErrors) ? safeErrors : [];
+  const errorsMap = (!Array.isArray(safeErrors) && safeErrors) ? safeErrors : {};
+  const errorFor = function (field) {
+    if (errorsMap && errorsMap[field]) {
+      return errorsMap[field];
+    }
+    const match = errorsList.find(function (err) { return err.field === field; });
+    return match ? match.message : '';
+  };
+
+  const resolvedHeading = heading || (safeEntity.id ? 'Kategorie bearbeiten' : 'Neue Kategorie');
+  const resolvedSubtitle = subtitle || (safeEntity.id ? (safeEntity.name || '') : 'Kategorie für die aktuelle Ausleihe anlegen.');
+  const resolvedBackHref = backHref || (safeEntity.id ? `/admin/categories/${safeEntity.id}` : '/admin/categories');
+  const resolvedBackLabel = backLabel || (safeEntity.id ? 'Zurück' : 'Zur Übersicht');
+  const resolvedFormAction = formAction || (safeEntity.id ? `/admin/categories/${safeEntity.id}` : '/admin/categories');
+  const resolvedSubmitLabel = submitLabel || (safeEntity.id ? 'Speichern' : 'Kategorie anlegen');
+  const resolvedCancelHref = cancelHref || resolvedBackHref;
+  const statusValue = (values.isActive === false || values.isActive === 'false') ? 'false' : 'true';
+%>
+
+<section class="admin categories">
+  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+    <div>
+      <h1 class="h3 mb-1"><%= resolvedHeading %></h1>
+      <% if (resolvedSubtitle) { %>
+        <p class="text-muted mb-0"><%= resolvedSubtitle %></p>
+      <% } %>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="<%= resolvedBackHref %>" class="btn btn-outline-secondary"><%= resolvedBackLabel %></a>
+    </div>
+  </div>
+
+  <form method="post" action="<%= resolvedFormAction %>" class="card shadow-sm" enctype="multipart/form-data">
+    <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+
+    <div class="card-body">
+      <div class="row g-3">
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'input',
+          wrapperClass: 'col-md-6',
+          name: 'name',
+          label: 'Name',
+          value: values.name || '',
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'select',
+          wrapperClass: 'col-md-6',
+          name: 'isActive',
+          label: 'Status',
+          value: statusValue,
+          options: [
+            { value: 'true', label: 'Aktiv' },
+            { value: 'false', label: 'Inaktiv' },
+          ],
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'textarea',
+          wrapperClass: 'col-12',
+          name: 'description',
+          label: 'Beschreibung',
+          value: values.description || '',
+          rows: 3,
+          errorFor,
+        }) %>
+
+        <%- include('../../partials/forms/field', {
+          variant: 'bootstrap',
+          as: 'input',
+          type: 'file',
+          wrapperClass: 'col-12',
+          name: 'image',
+          label: 'Bild',
+          value: '',
+          accept: 'image/*',
+          errorFor,
+        }) %>
+
+        <% if (safeEntity.imageUrl) { %>
+          <div class="col-12">
+            <div class="card bg-light border-0">
+              <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                  <img src="<%= safeEntity.imageUrl %>" alt="Kategorie Bild" width="120" height="90" class="rounded border object-fit-cover">
+                  <div class="small text-muted">Aktuelles Bild</div>
+                </div>
+
+                <%- include('../../partials/forms/field', {
+                  variant: 'bootstrap',
+                  as: 'checkbox',
+                  wrapperClass: '',
+                  name: 'removeImage',
+                  id: 'removeImage',
+                  label: 'Bild entfernen',
+                  checkboxValue: '1',
+                  checked: false,
+                  errorFor,
+                }) %>
+              </div>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card-footer d-flex flex-wrap gap-2 justify-content-end">
+      <button type="submit" class="btn btn-primary"><%= resolvedSubmitLabel %></button>
+      <a href="<%= resolvedCancelHref %>" class="btn btn-outline-secondary">Abbrechen</a>
+    </div>
+  </form>
+</section>

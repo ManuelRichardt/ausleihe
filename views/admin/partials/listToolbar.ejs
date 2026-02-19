@@ -1,0 +1,29 @@
+<div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 <%= toolbarClass || '' %>">
+  <div class="d-flex align-items-center gap-2">
+    <nav aria-label="Pagination">
+      <ul class="pagination mb-0">
+        <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
+          <a class="page-link" href="<%= buildQuery({ page: currentPage - 1 }) %>"><i class="bi bi-caret-left-fill"></i></a>
+        </li>
+        <li class="page-item active">
+          <span class="page-link"><%= currentPage %></span>
+        </li>
+        <li class="page-item <%= pagination && pagination.hasNext ? '' : 'disabled' %>">
+          <a class="page-link" href="<%= buildQuery({ page: currentPage + 1 }) %>"><i class="bi bi-caret-right-fill"></i></a>
+        </li>
+      </ul>
+    </nav>
+
+    <% if (createHref && createLabel) { %>
+      <a href="<%= createHref %>" class="btn btn-primary">
+        <i class="bi bi-plus-circle me-1"></i> <%= createLabel %>
+      </a>
+    <% } %>
+
+    <a href="<%= includeDeletedLink %>" class="btn btn-outline-secondary">
+      <i class="bi bi-recycle me-1"></i> <%= includeDeletedToggleLabel %>
+    </a>
+  </div>
+
+  <div class="text-muted small">Gesamt: <%= totalItems %></div>
+</div>

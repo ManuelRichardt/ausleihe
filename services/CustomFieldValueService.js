@@ -1,4 +1,4 @@
-const { buildListOptions, findByPkOrThrow } = require('./_serviceUtils');
+const { buildListOptions, findByPkOrThrow } = require('./serviceUtils');
 
 class CustomFieldValueService {
   constructor(models) {

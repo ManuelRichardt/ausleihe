@@ -1,14 +1,6 @@
-<% const fieldName = name || ''; %>
-<% const fieldId = (typeof id === 'undefined' || id === null) ? fieldName : id; %>
-<% const fieldError = (typeof error !== 'undefined' ? error : null) || (typeof errors !== 'undefined' && errors && errors[fieldName]); %>
-<% const fieldLabel = label || fieldName; %>
-<% const isChecked = (typeof checked !== 'undefined') ? Boolean(checked) : false; %>
-<div class="form-field">
-  <label for="<%= fieldId %>">
-    <input id="<%= fieldId %>" name="<%= fieldName %>" type="checkbox" value="true" <%= isChecked ? 'checked' : '' %> />
-    <span><%= fieldLabel %></span>
-  </label>
-  <% if (fieldError) { %>
-    <div class="field-error" role="alert"><%= fieldError %></div>
-  <% } %>
-</div>
+<%- include(
+  './field',
+  Object.assign({}, (typeof locals !== 'undefined' && locals) ? locals : {}, {
+    as: 'checkbox',
+  })
+) %>

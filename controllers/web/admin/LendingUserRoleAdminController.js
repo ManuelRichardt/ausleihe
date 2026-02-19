@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { services, renderPage, handleError } = require('../_controllerUtils');
+const { services, renderPage, handleError } = require('../controllerUtils');
 
 class LendingUserRoleAdminController {
   buildSearchWhere(query) {
@@ -61,7 +61,7 @@ class LendingUserRoleAdminController {
         ? users
         : users.filter((user) => Array.isArray(user.userRoles) && user.userRoles.length > 0);
 
-      return renderPage(res, 'admin/users/lending-roles', req, {
+      return renderPage(res, 'admin/users/lendingRoles', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
           { label: 'Benutzerrollen (Ausleihe)', href: '/admin/lending-user-roles' },

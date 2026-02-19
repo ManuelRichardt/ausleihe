@@ -5,7 +5,7 @@ const {
   buildListOptions,
   findByPkOrThrow,
   applyIncludeDeleted,
-} = require('./_serviceUtils');
+} = require('./serviceUtils');
 
 const openingHoursInclude = { model: null, as: 'openingHours' };
 

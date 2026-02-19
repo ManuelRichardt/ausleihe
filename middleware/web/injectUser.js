@@ -1,5 +1,5 @@
 const { createServices } = require('../../services');
-const AuthSessionService = require('../../services/AuthSessionService');
+const AuthSessionService = require('../../services/authSessionService');
 
 const services = createServices();
 const authSessionService = new AuthSessionService();

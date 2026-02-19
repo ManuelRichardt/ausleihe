@@ -1,5 +1,5 @@
-const { services, renderPage, handleError } = require('./web/_controllerUtils');
-const SignatureService = require('../services/SignatureService');
+const { services, renderPage, handleError } = require('./web/controllerUtils');
+const SignatureService = require('../services/signatureService');
 const { generateLoanPdf } = require('../utils/pdfGenerator');
 const models = require('../models');
 

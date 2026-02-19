@@ -1,5 +1,5 @@
-const { services, renderPage, handleError, parseIncludeDeleted } = require('../_controllerUtils');
-const { toPublicUploadUrl, removePublicFileByUrl } = require('../../../utils/uploadImage.helper');
+const { services, renderPage, handleError, parseIncludeDeleted } = require('../controllerUtils');
+const { toPublicUploadUrl, removePublicFileByUrl } = require('../../../utils/uploadImageHelper');
 
 class LendingLocationController {
   parseListQuery(req) {

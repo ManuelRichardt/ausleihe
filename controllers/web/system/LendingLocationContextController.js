@@ -1,5 +1,5 @@
-const AuthzService = require('../../../services/AuthzService');
-const { services, handleError } = require('../_controllerUtils');
+const AuthzService = require('../../../services/authzService');
+const { services, handleError } = require('../controllerUtils');
 
 class LendingLocationContextController {
   async setActive(req, res, next) {

@@ -2,7 +2,7 @@ const {
   BOOLEAN_TRUE_TOKENS,
   BOOLEAN_FALSE_TOKENS,
   ACTIVE_STATUS_LABEL,
-} = require('../constants/domain');
+} = require('../config/dbConstants');
 
 const DEFAULT_TRUE_TOKENS = Object.freeze([...BOOLEAN_TRUE_TOKENS]);
 const DEFAULT_FALSE_TOKENS = Object.freeze([...BOOLEAN_FALSE_TOKENS]);

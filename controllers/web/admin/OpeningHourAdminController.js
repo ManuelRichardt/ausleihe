@@ -5,8 +5,8 @@ const {
   parseListQuery,
   parseIncludeDeleted,
   buildPagination,
-} = require('../_controllerUtils');
-const { assertOwnedByLendingLocation } = require('../../../utils/lendingLocationGuard.helper');
+} = require('../controllerUtils');
+const { assertOwnedByLendingLocation } = require('../../../utils/lendingLocationGuardHelper');
 
 function normalizeTab(tab) {
   const allowed = new Set(['regular', 'special', 'exceptions']);

@@ -5,8 +5,8 @@ const {
   parseListQuery,
   parseIncludeDeleted,
   buildPagination,
-} = require('../_controllerUtils');
-const { toPublicUploadUrl, removePublicFileByUrl } = require('../../../utils/uploadImage.helper');
+} = require('../controllerUtils');
+const { toPublicUploadUrl, removePublicFileByUrl } = require('../../../utils/uploadImageHelper');
 
 class CategoryAdminController {
   async index(req, res, next) {

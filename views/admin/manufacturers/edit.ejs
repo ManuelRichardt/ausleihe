@@ -1,57 +1,14 @@
 <% pageTitle = 'Hersteller bearbeiten' %>
-<%
-  const safeFormData = (typeof formData !== 'undefined' && formData) ? formData : null;
-  const safeManufacturer = (typeof manufacturer !== 'undefined' && manufacturer) ? manufacturer : {};
-  const values = (safeFormData && Object.keys(safeFormData).length) ? safeFormData : safeManufacturer;
-  const safeErrors = (typeof errors !== 'undefined' && errors) ? errors : null;
-  const errorsList = Array.isArray(safeErrors) ? safeErrors : [];
-  const errorsMap = (!Array.isArray(safeErrors) && safeErrors) ? safeErrors : {};
-  const errorFor = function (field) {
-    if (errorsMap && errorsMap[field]) {
-      return errorsMap[field];
-    }
-    const match = errorsList.find(function (err) { return err.field === field; });
-    return match ? match.message : '';
-  };
-%>
-
-<section class="admin manufacturers">
-  <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
-    <div>
-      <h1 class="h3 mb-1">Hersteller bearbeiten</h1>
-      <p class="text-muted mb-0"><%= safeManufacturer.name || '' %></p>
-    </div>
-    <div class="d-flex gap-2">
-      <a href="/admin/manufacturers/<%= safeManufacturer.id %>" class="btn btn-outline-secondary">Zurück</a>
-    </div>
-  </div>
-
-  <form method="post" action="/admin/manufacturers/<%= safeManufacturer.id %>" class="card shadow-sm">
-    <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
-    <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-6">
-          <label for="name" class="form-label">Name</label>
-          <input type="text" class="form-control <%= errorFor('name') ? 'is-invalid' : '' %>" id="name" name="name" value="<%= values.name || '' %>">
-          <% if (errorFor('name')) { %><div class="invalid-feedback"><%= errorFor('name') %></div><% } %>
-        </div>
-        <div class="col-md-6">
-          <label for="website" class="form-label">Website</label>
-          <input type="text" class="form-control <%= errorFor('website') ? 'is-invalid' : '' %>" id="website" name="website" value="<%= values.website || '' %>">
-          <% if (errorFor('website')) { %><div class="invalid-feedback"><%= errorFor('website') %></div><% } %>
-        </div>
-        <div class="col-md-6">
-          <label for="isActive" class="form-label">Status</label>
-          <select id="isActive" name="isActive" class="form-select">
-            <option value="true" <%= (values.isActive === false || values.isActive === 'false') ? '' : 'selected' %>>Aktiv</option>
-            <option value="false" <%= (values.isActive === false || values.isActive === 'false') ? 'selected' : '' %>>Inaktiv</option>
-          </select>
-        </div>
-      </div>
-    </div>
-    <div class="card-footer d-flex flex-wrap gap-2 justify-content-end">
-      <button type="submit" class="btn btn-primary">Speichern</button>
-      <a href="/admin/manufacturers/<%= safeManufacturer.id %>" class="btn btn-outline-secondary">Abbrechen</a>
-    </div>
-  </form>
-</section>
+<%- include('./form', {
+  heading: 'Hersteller bearbeiten',
+  subtitle: (manufacturer && manufacturer.name) ? manufacturer.name : '',
+  backHref: (manufacturer && manufacturer.id) ? `/admin/manufacturers/${manufacturer.id}` : '/admin/manufacturers',
+  backLabel: 'Zurück',
+  formAction: (manufacturer && manufacturer.id) ? `/admin/manufacturers/${manufacturer.id}` : '/admin/manufacturers',
+  submitLabel: 'Speichern',
+  cancelHref: (manufacturer && manufacturer.id) ? `/admin/manufacturers/${manufacturer.id}` : '/admin/manufacturers',
+  csrfToken,
+  formData,
+  errors,
+  entity: manufacturer,
+}) %>

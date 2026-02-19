@@ -1,4 +1,4 @@
-const { services, renderPage, handleError } = require('./_controllerUtils');
+const { services, renderPage, handleError } = require('./controllerUtils');
 
 const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const DAY_LABELS = {

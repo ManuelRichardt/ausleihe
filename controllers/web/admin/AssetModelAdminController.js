@@ -5,9 +5,9 @@ const {
   parseListQuery,
   parseIncludeDeleted,
   buildPagination,
-} = require('../_controllerUtils');
-const { TRACKING_TYPE } = require('../../../constants/domain');
-const { assertOwnedByLendingLocation } = require('../../../utils/lendingLocationGuard.helper');
+} = require('../controllerUtils');
+const { TRACKING_TYPE } = require('../../../config/dbConstants');
+const { assertOwnedByLendingLocation } = require('../../../utils/lendingLocationGuardHelper');
 const { parseBooleanToken } = require('../../../utils/valueParsing');
 
 class AssetModelAdminController {

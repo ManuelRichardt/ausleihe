@@ -1,7 +1,7 @@
 const express = require('express');
 const { AssetInstanceController } = require('../../../controllers/api');
-const { requirePermission } = require('./authz.middleware');
-const { resolveLendingLocationId } = require('./_scope');
+const { requirePermission } = require('./authzMiddleware');
+const { resolveLendingLocationId } = require('./scope');
 
 const router = express.Router();
 const locationScope = (req) => resolveLendingLocationId(req);

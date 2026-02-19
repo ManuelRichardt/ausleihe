@@ -5,9 +5,9 @@ const {
   parseListQuery,
   parseIncludeDeleted,
   buildPagination,
-} = require('../_controllerUtils');
-const { ROLE_SCOPE } = require('../../../constants/domain');
-const { getActorContext } = require('../../../utils/requestContext.helper');
+} = require('../controllerUtils');
+const { ROLE_SCOPE } = require('../../../config/dbConstants');
+const { getActorContext } = require('../../../utils/requestContextHelper');
 
 class UserAdminController {
   getRoleScopeMap(roles) {

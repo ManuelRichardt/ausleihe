@@ -1,6 +1,6 @@
-const { services, renderPage, handleError } = require('../_controllerUtils');
+const { services, renderPage, handleError } = require('../controllerUtils');
 const { formatDateTime } = require('../../../utils/dateFormat');
-const SignatureService = require('../../../services/SignatureService');
+const SignatureService = require('../../../services/signatureService');
 const models = require('../../../models');
 
 class LoanAdminController {

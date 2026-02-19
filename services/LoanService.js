@@ -1,4 +1,4 @@
-const { buildListOptions } = require('./_serviceUtils');
+const { buildListOptions } = require('./serviceUtils');
 const { assertOpenForRange, assertOpenAt } = require('../utils/openingHours');
 const { Op } = require('sequelize');
 const {
@@ -7,7 +7,7 @@ const {
   LOAN_ITEM_TYPE,
   LOAN_EVENT_TYPE,
   TRACKING_TYPE,
-} = require('../constants/domain');
+} = require('../config/dbConstants');
 const { DEFAULT_ITEM_QUANTITY, parsePositiveQuantity } = require('../utils/quantity');
 
 const TRANSITION_ALLOWED_STATUSES = Object.freeze({
@@ -30,19 +30,19 @@ class LoanService {
     if (availabilityService) {
       this.availabilityService = availabilityService;
     } else {
-      const AvailabilityService = require('./AvailabilityService');
+      const AvailabilityService = require('./availabilityService');
       this.availabilityService = new AvailabilityService(models);
     }
     if (inventoryStockService) {
       this.inventoryStockService = inventoryStockService;
     } else {
-      const InventoryStockService = require('./InventoryStockService');
+      const InventoryStockService = require('./inventoryStockService');
       this.inventoryStockService = new InventoryStockService(models);
     }
     if (bundleService) {
       this.bundleService = bundleService;
     } else {
-      const BundleService = require('./BundleService');
+      const BundleService = require('./bundleService');
       this.bundleService = new BundleService(models, this.availabilityService, this.inventoryStockService);
     }
   }

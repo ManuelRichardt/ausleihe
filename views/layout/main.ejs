@@ -39,7 +39,7 @@
           <button class="admin-toggle" type="button" data-bs-toggle="offcanvas" data-bs-target="#adminSidebar" aria-controls="adminSidebar" aria-label="Admin-Menü">
             <i class="bi bi-list-ul"></i>
           </button>
-          <%- include('../partials/admin-sidebar') %>
+          <%- include('../partials/adminSidebar') %>
         <% } %>
         <main class="col-12 bg-white text-dark p-4 min-vh-100 main-content" role="main">
           <%- body %>
@@ -49,7 +49,7 @@
 
     <script src="/js/bootstrap.bundle.min.js"></script>
     <% if (showAdminSidebarValue) { %>
-      <script src="/js/admin-panel.js"></script>
+      <script src="/js/adminPanel.js"></script>
     <% } %>
   </body>
 </html>

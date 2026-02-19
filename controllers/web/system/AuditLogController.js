@@ -4,7 +4,7 @@ const {
   handleError,
   parseListQuery,
   buildPagination,
-} = require('../_controllerUtils');
+} = require('../controllerUtils');
 
 class AuditLogController {
   async index(req, res, next) {

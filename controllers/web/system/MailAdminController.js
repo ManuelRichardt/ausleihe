@@ -1,4 +1,4 @@
-const { services, renderPage, handleError, parseListQuery, buildPagination } = require('../_controllerUtils');
+const { services, renderPage, handleError, parseListQuery, buildPagination } = require('../controllerUtils');
 
 class MailAdminController {
   async index(req, res, next) {
@@ -49,7 +49,7 @@ class MailAdminController {
   async editTemplate(req, res, next) {
     try {
       const template = await services.mailTemplateService.getById(req.params.id);
-      return renderPage(res, 'system/mail/template-edit', req, {
+      return renderPage(res, 'system/mail/templateEdit', req, {
         breadcrumbs: [
           { label: 'System', href: '/system/lending-locations' },
           { label: 'Mail', href: '/system/mail' },

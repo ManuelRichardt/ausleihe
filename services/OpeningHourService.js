@@ -4,7 +4,7 @@ const {
   findByPkOrThrow,
   pickDefined,
   applyIncludeDeleted,
-} = require('./_serviceUtils');
+} = require('./serviceUtils');
 
 class OpeningHourService {
   constructor(models) {

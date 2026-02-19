@@ -1,12 +1,12 @@
 const fs = require('fs/promises');
 const path = require('path');
 const { Op } = require('sequelize');
-const { buildListOptions } = require('./_serviceUtils');
+const { buildListOptions } = require('./serviceUtils');
 const {
   LOAN_STATUS,
   PRIVACY_REQUEST_STATUS,
   PRIVACY_AUDIT_ACTION,
-} = require('../constants/domain');
+} = require('../config/dbConstants');
 
 const EXTERNAL_AUTH_PROVIDERS = Object.freeze(['saml', 'ldap']);
 const ACTIVE_LOAN_STATUSES = Object.freeze([

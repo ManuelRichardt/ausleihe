@@ -1,11 +1,11 @@
-const { services, renderPage, handleError } = require('../_controllerUtils');
+const { services, renderPage, handleError } = require('../controllerUtils');
 
 class ConfigAdminController {
   async openingHours(req, res, next) {
     try {
     const hours = await services.openingHourService.getAllRegularHours(req.lendingLocationId);
     const exceptions = await services.openingHourService.getAllExceptions(req.lendingLocationId);
-      return renderPage(res, 'admin/config/opening-hours', req, {
+      return renderPage(res, 'admin/config/openingHours', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },
           { label: 'Opening Hours', href: '/admin/opening-hours' },

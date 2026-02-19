@@ -1,6 +1,6 @@
 const express = require('express');
 const { PermissionController } = require('../../../controllers/api');
-const { requirePermission } = require('./authz.middleware');
+const { requirePermission } = require('./authzMiddleware');
 
 const router = express.Router();
 const globalScope = () => null;

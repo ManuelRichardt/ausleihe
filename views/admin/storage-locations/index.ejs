@@ -1,158 +1,21 @@
 <% pageTitle = 'Lagerorte' %>
-<%
-  const query = (typeof filters !== 'undefined' && filters) ? filters : {};
-  const currentPage = (pagination && pagination.page) ? pagination.page : 1;
-  const totalItems = (pagination && pagination.total) ? pagination.total : (Array.isArray(storageLocations) ? storageLocations.length : 0);
-  const sortBy = query.sortBy || '';
-  const sortOrder = query.sortOrder || 'ASC';
-  const includeDeleted = query.includeDeleted === '1' || query.includeDeleted === 'true' || query.includeDeleted === 'yes';
-  const includeDeletedToggleLabel = includeDeleted ? 'Nur aktive anzeigen' : 'Gelöschte anzeigen';
-  const buildQuery = function (overrides) {
-    const params = Object.assign({}, query, overrides || {});
-    const parts = [];
-    Object.keys(params).forEach(function (key) {
-      const value = params[key];
-      if (typeof value !== 'undefined' && value !== null && value !== '') {
-        parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(value)));
-      }
-    });
-    return parts.length ? ('?' + parts.join('&')) : '';
-  };
-  const sortLink = function (field) {
-    const nextOrder = (sortBy === field && sortOrder === 'ASC') ? 'DESC' : 'ASC';
-    return buildQuery({ sortBy: field, sortOrder: nextOrder, page: 1 });
-  };
-  const includeDeletedLink = buildQuery({ includeDeleted: includeDeleted ? '' : '1', page: 1 });
-%>
-
-<section class="admin storage-locations">
-  <div class="d-flex flex-column flex-lg-row align-items-lg-end justify-content-between gap-3 mb-4">
-    <div>
-      <h1 class="h3 mb-2">Lagerorte</h1>
-    </div>
-  </div>
-
-  <form method="get" action="/admin/storage-locations" class="row g-2 align-items-end mb-4 panel">
-    <input type="hidden" name="includeDeleted" value="<%= includeDeleted ? '1' : '' %>">
-    <div class="col-12 col-md-6">
-      <label for="q" class="form-label">Suche</label>
-      <input type="text" class="form-control" id="q" name="q" value="<%= query.q || '' %>" placeholder="Name">
-    </div>
-    <div class="col-12 col-md-3">
-      <label for="status" class="form-label">Status</label>
-      <select id="status" name="status" class="form-select">
-        <option value="">Alle</option>
-        <option value="active" <%= query.status === 'active' ? 'selected' : '' %>>Aktiv</option>
-        <option value="inactive" <%= query.status === 'inactive' ? 'selected' : '' %>>Inaktiv</option>
-      </select>
-    </div>
-    <div class="col-12 col-md-3 d-flex gap-2">
-      <button type="submit" class="btn btn-outline-primary w-100">
-        <i class="bi bi-search me-1"></i> Suchen
-      </button>
-    </div>
-  </form>
-
-  <form class="mb-4 panel">
-    <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
-    <input type="hidden" name="includeDeleted" value="<%= includeDeleted ? '1' : '' %>">
-    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mb-3">
-      <div class="d-flex align-items-center gap-2">
-        <nav aria-label="Pagination">
-          <ul class="pagination mb-0">
-            <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
-              <a class="page-link" href="<%= buildQuery({ page: currentPage - 1 }) %>"><i class="bi bi-caret-left-fill"></i></a>
-            </li>
-            <li class="page-item active">
-              <span class="page-link"><%= currentPage %></span>
-            </li>
-            <li class="page-item <%= pagination && pagination.hasNext ? '' : 'disabled' %>">
-              <a class="page-link" href="<%= buildQuery({ page: currentPage + 1 }) %>"><i class="bi bi-caret-right-fill"></i></a>
-            </li>
-          </ul>
-        </nav>
-        <a href="/admin/storage-locations/new" class="btn btn-primary">
-          <i class="bi bi-plus-circle me-1"></i> Neuer Lagerort
-        </a>
-        <a href="<%= includeDeletedLink %>" class="btn btn-outline-secondary">
-          <i class="bi bi-recycle me-1"></i> <%= includeDeletedToggleLabel %>
-        </a>
-      </div>
-      <div class="text-muted small">Gesamt: <%= totalItems %></div>
-    </div>
-
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead>
-          <tr>
-            <th scope="col"><a class="text-decoration-none" href="<%= sortLink('name') %>">Name</a></th>
-            <th scope="col">Beschreibung</th>
-            <th scope="col">Status / Aktionen</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% if (Array.isArray(storageLocations) && storageLocations.length) { %>
-            <% storageLocations.forEach(function(item) { %>
-              <tr>
-                <td><%= item.name %></td>
-                <td><%= item.description || '-' %></td>
-                <td class="d-flex align-items-center gap-2">
-                  <% if (item.deletedAt) { %>
-                    <span class="badge text-bg-secondary">Gelöscht</span>
-                    <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/storage-locations/<%= item.id %>/restore" formmethod="post" aria-label="Wiederherstellen">
-                      <i class="bi bi-recycle"></i>
-                    </button>
-                  <% } else { %>
-                    <% if (item.isActive) { %>
-                      <span class="badge text-bg-success">Aktiv</span>
-                    <% } else { %>
-                      <span class="badge text-bg-danger">Inaktiv</span>
-                    <% } %>
-                    <a href="/admin/storage-locations/<%= item.id %>" class="text-decoration-none" aria-label="Details">
-                      <i class="bi bi-info-circle-fill"></i>
-                    </a>
-                    <a href="/admin/storage-locations/<%= item.id %>/edit" class="text-decoration-none" aria-label="Bearbeiten">
-                      <i class="bi bi-pencil-fill"></i>
-                    </a>
-                    <button type="submit" class="btn btn-link p-0 text-decoration-none" formaction="/admin/storage-locations/<%= item.id %>/delete" formmethod="post" aria-label="Löschen">
-                      <i class="bi bi-trash3-fill"></i>
-                    </button>
-                  <% } %>
-                </td>
-              </tr>
-            <% }) %>
-          <% } else { %>
-            <tr>
-              <td colspan="3" class="text-center text-muted py-4">Keine Lagerorte vorhanden.</td>
-            </tr>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2 mt-3">
-      <div class="d-flex align-items-center gap-2">
-        <nav aria-label="Pagination">
-          <ul class="pagination mb-0">
-            <li class="page-item <%= currentPage <= 1 ? 'disabled' : '' %>">
-              <a class="page-link" href="<%= buildQuery({ page: currentPage - 1 }) %>"><i class="bi bi-caret-left-fill"></i></a>
-            </li>
-            <li class="page-item active">
-              <span class="page-link"><%= currentPage %></span>
-            </li>
-            <li class="page-item <%= pagination && pagination.hasNext ? '' : 'disabled' %>">
-              <a class="page-link" href="<%= buildQuery({ page: currentPage + 1 }) %>"><i class="bi bi-caret-right-fill"></i></a>
-            </li>
-          </ul>
-        </nav>
-        <a href="/admin/storage-locations/new" class="btn btn-primary">
-          <i class="bi bi-plus-circle me-1"></i> Neuer Lagerort
-        </a>
-        <a href="<%= includeDeletedLink %>" class="btn btn-outline-secondary">
-          <i class="bi bi-recycle me-1"></i> <%= includeDeletedToggleLabel %>
-        </a>
-      </div>
-      <div class="text-muted small">Gesamt: <%= totalItems %></div>
-    </div>
-  </form>
-</section>
+<%- include('../partials/listLayout', {
+  sectionClass: 'storage-locations',
+  heading: 'Lagerorte',
+  filters: filters,
+  pagination: pagination,
+  items: storageLocations,
+  filterAction: '/admin/storage-locations',
+  filterPartial: '../storage-locations/indexFilters',
+  createHref: '/admin/storage-locations/new',
+  createLabel: 'Neuer Lagerort',
+  columns: [
+    { label: 'Name', valuePath: 'name', sortableField: 'name' },
+    { label: 'Beschreibung', valuePath: 'description', fallback: '-' },
+  ],
+  actions: {
+    basePath: '/admin/storage-locations',
+  },
+  emptyMessage: 'Keine Lagerorte vorhanden.',
+  csrfToken: csrfToken,
+}) %>

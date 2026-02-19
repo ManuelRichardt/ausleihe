@@ -1,4 +1,4 @@
-const ConfigService = require('../services/ConfigService');
+const ConfigService = require('../services/configService');
 const models = require('../models');
 
 const configService = new ConfigService(models);

@@ -3,7 +3,7 @@ const {
   buildListOptions,
   findByPkOrThrow,
   applyIncludeDeleted,
-} = require('./_serviceUtils');
+} = require('./serviceUtils');
 
 class OpeningExceptionService {
   constructor(models) {

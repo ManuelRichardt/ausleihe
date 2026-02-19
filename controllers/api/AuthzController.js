@@ -1,5 +1,5 @@
 const { createServices } = require('../../services');
-const { handle } = require('./_controllerUtils');
+const { handle } = require('./controllerUtils');
 
 const services = createServices();
 

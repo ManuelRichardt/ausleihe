@@ -1,22 +1,22 @@
 const express = require('express');
 const injectUser = require('../../middleware/web/injectUser');
 const lendingLocationContext = require('../../middleware/web/lendingLocationContext');
-const navigationMiddleware = require('../../middleware/navigation.middleware');
+const navigationMiddleware = require('../../middleware/navigationMiddleware');
 const i18nMiddleware = require('../../middleware/i18n');
-const HomeController = require('../../controllers/web/HomeController');
+const HomeController = require('../../controllers/web/homeController');
 
-const authRoutes = require('./auth.routes');
-const installRoutes = require('./install.routes');
-const dashboardRoutes = require('./dashboard.routes');
-const assetsRoutes = require('./assets.routes');
-const cartRoutes = require('./cart.routes');
-const reservationsRoutes = require('./reservations.routes');
-const loansRoutes = require('./loans.routes');
-const profileRoutes = require('./profile.routes');
-const adminRoutes = require('./admin.routes');
-const systemRoutes = require('./system.routes');
-const signatureRoutes = require('./signatures');
-const authConfigRoutes = require('./admin.auth-config.routes');
+const authRoutes = require('./authRoutes');
+const installRoutes = require('./installRoutes');
+const dashboardRoutes = require('./dashboardRoutes');
+const assetsRoutes = require('./assetsRoutes');
+const cartRoutes = require('./cartRoutes');
+const reservationsRoutes = require('./reservationsRoutes');
+const loansRoutes = require('./loansRoutes');
+const profileRoutes = require('./profileRoutes');
+const adminRoutes = require('./adminRoutes');
+const systemRoutes = require('./systemRoutes');
+const signatureRoutes = require('./signaturesRoutes');
+const authConfigRoutes = require('./adminAuthConfigRoutes');
 
 const router = express.Router();
 const homeController = new HomeController();

@@ -1,0 +1,140 @@
+<%
+  const listRows = Array.isArray(rows) ? rows : [];
+  const listColumns = Array.isArray(columns) ? columns : [];
+  const listActions = (typeof actions === 'object' && actions) ? actions : {};
+  const showActions = listActions.enabled !== false;
+  const actionsHeaderLabel = listActions.headerLabel || 'Status / Aktionen';
+  const actionsHeaderClass = listActions.headerClass || '';
+  const actionsCellClass = listActions.cellClass || 'd-flex align-items-center gap-2';
+  const emptyText = emptyMessage || 'Keine Einträge vorhanden.';
+  const colspan = listColumns.length + (showActions ? 1 : 0);
+
+  const readPath = function (source, path) {
+    if (!source || !path) {
+      return null;
+    }
+    return path.split('.').reduce(function (acc, segment) {
+      if (acc === null || typeof acc === 'undefined') {
+        return null;
+      }
+      return acc[segment];
+    }, source);
+  };
+
+  const readText = function (source, config) {
+    const raw = readPath(source, config.valuePath);
+    if (raw === undefined || raw === null || raw === '') {
+      return (typeof config.fallback !== 'undefined') ? config.fallback : '-';
+    }
+    return raw;
+  };
+
+  const resolveSortLink = function (columnConfig) {
+    if (!columnConfig.sortableField || typeof sortLink !== 'function') {
+      return null;
+    }
+    return sortLink(columnConfig.sortableField);
+  };
+%>
+
+<div class="table-responsive">
+  <table class="table table-hover align-middle">
+    <thead>
+      <tr>
+        <% listColumns.forEach(function (columnConfig) { %>
+          <% const thClass = columnConfig.headerClass || ''; %>
+          <% const sortableUrl = resolveSortLink(columnConfig); %>
+          <th scope="col" class="<%= thClass %>">
+            <% if (sortableUrl) { %>
+              <a class="text-decoration-none" href="<%= sortableUrl %>"><%= columnConfig.label %></a>
+            <% } else { %>
+              <%= columnConfig.label %>
+            <% } %>
+          </th>
+        <% }) %>
+
+        <% if (showActions) { %>
+          <th scope="col" class="<%= actionsHeaderClass %>"><%= actionsHeaderLabel %></th>
+        <% } %>
+      </tr>
+    </thead>
+
+    <tbody>
+      <% if (listRows.length) { %>
+        <% listRows.forEach(function (row) { %>
+          <tr>
+            <% listColumns.forEach(function (columnConfig) { %>
+              <% const tdClass = columnConfig.cellClass || ''; %>
+              <td class="<%= tdClass %>">
+                <% if (columnConfig.type === 'image') { %>
+                  <% const imageSrc = readPath(row, columnConfig.valuePath); %>
+                  <% const imageAlt = readPath(row, columnConfig.altPath || 'name') || 'Bild'; %>
+                  <% if (imageSrc) { %>
+                    <img src="<%= imageSrc %>" alt="<%= imageAlt %>" class="<%= columnConfig.imageClass || 'rounded border table-thumb' %>">
+                  <% } else { %>
+                    <span class="text-muted small"><%= columnConfig.emptyText || '-' %></span>
+                  <% } %>
+                <% } else { %>
+                  <%= readText(row, columnConfig) %>
+                <% } %>
+              </td>
+            <% }) %>
+
+            <% if (showActions) { %>
+              <td class="<%= actionsCellClass %>">
+                <% if (row.deletedAt) { %>
+                  <span class="badge text-bg-secondary">Gelöscht</span>
+                  <button
+                    type="submit"
+                    class="btn btn-link p-0 text-decoration-none"
+                    formaction="<%= `${listActions.basePath}/${row.id}/restore` %>"
+                    formmethod="post"
+                    aria-label="Wiederherstellen"
+                  >
+                    <i class="bi bi-recycle"></i>
+                  </button>
+                <% } else { %>
+                  <% if (typeof row.isActive !== 'undefined') { %>
+                    <% if (row.isActive) { %>
+                      <span class="badge text-bg-success">Aktiv</span>
+                    <% } else { %>
+                      <span class="badge text-bg-danger">Inaktiv</span>
+                    <% } %>
+                  <% } %>
+
+                  <% if (listActions.showDetails !== false) { %>
+                    <a href="<%= `${listActions.basePath}/${row.id}` %>" class="text-decoration-none" aria-label="Details">
+                      <i class="bi bi-info-circle-fill"></i>
+                    </a>
+                  <% } %>
+
+                  <% if (listActions.showEdit !== false) { %>
+                    <a href="<%= `${listActions.basePath}/${row.id}/edit` %>" class="text-decoration-none" aria-label="Bearbeiten">
+                      <i class="bi bi-pencil-fill"></i>
+                    </a>
+                  <% } %>
+
+                  <% if (listActions.showDelete !== false) { %>
+                    <button
+                      type="submit"
+                      class="btn btn-link p-0 text-decoration-none"
+                      formaction="<%= `${listActions.basePath}/${row.id}/delete` %>"
+                      formmethod="post"
+                      aria-label="Löschen"
+                    >
+                      <i class="bi bi-trash3-fill"></i>
+                    </button>
+                  <% } %>
+                <% } %>
+              </td>
+            <% } %>
+          </tr>
+        <% }) %>
+      <% } else { %>
+        <tr>
+          <td colspan="<%= colspan %>" class="text-center text-muted py-4"><%= emptyText %></td>
+        </tr>
+      <% } %>
+    </tbody>
+  </table>
+</div>

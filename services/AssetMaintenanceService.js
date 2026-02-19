@@ -1,4 +1,4 @@
-const { pickDefined, buildListOptions, findByPkOrThrow } = require('./_serviceUtils');
+const { pickDefined, buildListOptions, findByPkOrThrow } = require('./serviceUtils');
 
 class AssetMaintenanceService {
   constructor(models) {

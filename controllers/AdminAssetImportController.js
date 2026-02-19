@@ -1,5 +1,5 @@
 const multer = require('multer');
-const CsvImportService = require('../services/CsvImportService');
+const CsvImportService = require('../services/csvImportService');
 const models = require('../models');
 
 const upload = multer({

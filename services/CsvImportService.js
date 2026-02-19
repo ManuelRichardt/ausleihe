@@ -2,7 +2,7 @@ const { parse } = require('csv-parse/sync');
 const { Op } = require('sequelize');
 const {
   TRACKING_TYPE,
-} = require('../constants/domain');
+} = require('../config/dbConstants');
 const { parseBooleanToken } = require('../utils/valueParsing');
 const { DEFAULT_ITEM_QUANTITY, parsePositiveQuantity } = require('../utils/quantity');
 

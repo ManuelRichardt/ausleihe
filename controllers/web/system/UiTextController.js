@@ -1,4 +1,4 @@
-const { services, renderPage, handleError, parseListQuery, buildPagination } = require('../_controllerUtils');
+const { services, renderPage, handleError, parseListQuery, buildPagination } = require('../controllerUtils');
 
 class UiTextController {
   async index(req, res, next) {

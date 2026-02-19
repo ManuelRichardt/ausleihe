@@ -7,7 +7,7 @@ const {
   buildListOptions,
   findByPkOrThrow,
   applyIncludeDeleted,
-} = require('./_serviceUtils');
+} = require('./serviceUtils');
 
 class AssetModelService {
   constructor(models) {

@@ -1,5 +1,5 @@
-const ConfigService = require('./ConfigService');
-const samlAuth = require('../auth/saml');
+const ConfigService = require('./configService');
+const samlAuth = require('./samlProtocolService');
 
 class SamlAuthService {
   constructor(models) {

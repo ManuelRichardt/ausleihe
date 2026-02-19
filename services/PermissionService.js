@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { pickDefined, buildListOptions, findByPkOrThrow } = require('./_serviceUtils');
+const { pickDefined, buildListOptions, findByPkOrThrow } = require('./serviceUtils');
 
 class PermissionService {
   constructor(models) {

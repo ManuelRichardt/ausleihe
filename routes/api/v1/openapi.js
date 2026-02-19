@@ -1,7 +1,7 @@
 const { apiBase, openapiVersion, tags } = require('./openapi/constants');
 // This module should only orchestrate calls; business rules belong in services.
 const buildComponents = require('./openapi/components');
-const buildPaths = require('./openapi/paths.builder');
+const buildPaths = require('./openapi/pathsBuilder');
 const helpers = require('./openapi/helpers');
 
 module.exports = {

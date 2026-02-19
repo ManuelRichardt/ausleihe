@@ -1,4 +1,4 @@
-const { services, renderPage, handleError } = require('./_controllerUtils');
+const { services, renderPage, handleError } = require('./controllerUtils');
 
 class ProfileController {
   async show(req, res, next) {
