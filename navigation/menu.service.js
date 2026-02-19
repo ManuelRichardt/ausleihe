@@ -1,5 +1,5 @@
 const menuConfig = require('./menu.config');
-const { createPermissionHelper } = require('../helpers/permission.helper');
+const { createPermissionHelper } = require('../utils/permission.helper');
 
 function isRouteActive(currentPath, route) {
   if (!route) {

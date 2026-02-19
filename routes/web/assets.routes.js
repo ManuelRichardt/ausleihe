@@ -1,7 +1,7 @@
 const express = require('express');
-const requireLogin = require('../../middlewares/web/requireLogin');
-const requirePermission = require('../../middlewares/web/requirePermission');
-const lendingLocationContext = require('../../middlewares/web/lendingLocationContext');
+const requireLogin = require('../../middleware/web/requireLogin');
+const requirePermission = require('../../middleware/web/requirePermission');
+const lendingLocationContext = require('../../middleware/web/lendingLocationContext');
 const AssetController = require('../../controllers/web/AssetController');
 const CatalogController = require('../../controllers/web/CatalogController');
 

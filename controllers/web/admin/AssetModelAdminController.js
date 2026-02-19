@@ -7,7 +7,7 @@ const {
   buildPagination,
 } = require('../_controllerUtils');
 const { TRACKING_TYPE } = require('../../../constants/domain');
-const { assertOwnedByLendingLocation } = require('../../../helpers/lendingLocationGuard.helper');
+const { assertOwnedByLendingLocation } = require('../../../utils/lendingLocationGuard.helper');
 const { parseBooleanToken } = require('../../../utils/valueParsing');
 
 class AssetModelAdminController {

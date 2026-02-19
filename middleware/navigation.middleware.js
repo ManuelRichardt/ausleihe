@@ -1,6 +1,6 @@
 const { buildMenu, fallbackMenu } = require('../navigation/menu.service');
 const { buildBreadcrumbs } = require('../navigation/breadcrumbs.service');
-const { createPermissionHelper } = require('../helpers/permission.helper');
+const { createPermissionHelper } = require('../utils/permission.helper');
 const models = require('../models');
 
 module.exports = async function navigationMiddleware(req, res, next) {

@@ -4,21 +4,7 @@
   "private": true,
   "scripts": {
     "start": "node ./bin/www",
-    "dev": "nodemon ./bin/www",
-    "install-app": "node ./scripts/install.js",
-    "check-user": "node ./scripts/check-user.js",
-    "reset-admin-password": "node ./scripts/reset-admin-password.js",
-    "diagnose-login": "node ./scripts/diagnose-login.js",
-    "cleanup-refresh-tokens": "node ./scripts/cleanup-refresh-tokens.js",
-    "sync-default-roles": "node ./scripts/sync-default-roles.js",
-    "migrate-drop-auth-provider-secret-refs": "node ./scripts/migrate-drop-auth-provider-secret-refs.js",
-    "migrate-add-asset-model-specs": "node ./scripts/migrate-add-asset-model-specs.js",
-    "migrate-add-location-category-images": "node ./scripts/migrate-add-location-category-images.js",
-    "migrate-add-ui-texts": "node ./scripts/migrate-add-ui-texts.js",
-    "migrate-add-mail-system": "node ./scripts/migrate-add-mail-system.js",
-    "migrate-add-privacy-system": "node ./scripts/migrate-add-privacy-system.js",
-    "sync-ui-texts": "node ./scripts/sync-ui-texts.js",
-    "openapi:check-generated": "node ./scripts/check-openapi-generated.js"
+    "dev": "nodemon ./bin/www"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

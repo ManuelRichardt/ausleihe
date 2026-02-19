@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { signToken, verifyToken } = require('../middlewares/web/token');
+const { signToken, verifyToken } = require('../middleware/web/token');
 
 class AuthService {
   constructor(models) {

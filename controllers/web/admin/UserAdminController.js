@@ -7,7 +7,7 @@ const {
   buildPagination,
 } = require('../_controllerUtils');
 const { ROLE_SCOPE } = require('../../../constants/domain');
-const { getActorContext } = require('../../../helpers/requestContext.helper');
+const { getActorContext } = require('../../../utils/requestContext.helper');
 
 class UserAdminController {
   getRoleScopeMap(roles) {

@@ -1,5 +1,5 @@
 const express = require('express');
-const requireLogin = require('../../middlewares/web/requireLogin');
+const requireLogin = require('../../middleware/web/requireLogin');
 const ProfileController = require('../../controllers/web/ProfileController');
 
 const router = express.Router();

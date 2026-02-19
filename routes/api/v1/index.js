@@ -1,7 +1,7 @@
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const openapi = require('./openapi');
-const injectUser = require('../../../middlewares/web/injectUser');
+const injectUser = require('../../../middleware/web/injectUser');
 
 const users = require('./users');
 const roles = require('./roles');

@@ -6,7 +6,7 @@ const {
   parseIncludeDeleted,
   buildPagination,
 } = require('../_controllerUtils');
-const { assertOwnedByLendingLocation } = require('../../../helpers/lendingLocationGuard.helper');
+const { assertOwnedByLendingLocation } = require('../../../utils/lendingLocationGuard.helper');
 
 function normalizeTab(tab) {
   const allowed = new Set(['regular', 'special', 'exceptions']);

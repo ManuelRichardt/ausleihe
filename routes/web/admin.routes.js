@@ -1,8 +1,8 @@
 const express = require('express');
 // This module should only orchestrate calls; business rules belong in services.
-const requireLogin = require('../../middlewares/web/requireLogin');
-const requirePermission = require('../../middlewares/web/requirePermission');
-const lendingLocationContext = require('../../middlewares/web/lendingLocationContext');
+const requireLogin = require('../../middleware/web/requireLogin');
+const requirePermission = require('../../middleware/web/requirePermission');
+const lendingLocationContext = require('../../middleware/web/lendingLocationContext');
 const resolveLoanScopeMiddleware = require('../../middleware/loanScope');
 const validate = require('../../middleware/validate');
 const uploadAssetModelImages = require('../../middleware/assetModelImagesUpload');
