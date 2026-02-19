@@ -18,6 +18,11 @@
   const resolvedBackHref = backHref || (safeEntity.id ? `/admin/categories/${safeEntity.id}` : '/admin/categories');
   const resolvedBackLabel = backLabel || (safeEntity.id ? 'Zurück' : 'Zur Übersicht');
   const resolvedFormAction = formAction || (safeEntity.id ? `/admin/categories/${safeEntity.id}` : '/admin/categories');
+  const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : '';
+  const actionHasQuery = String(resolvedFormAction).includes('?');
+  const resolvedActionUrl = safeCsrf
+    ? `${resolvedFormAction}${actionHasQuery ? '&' : '?'}csrfToken=${encodeURIComponent(safeCsrf)}`
+    : resolvedFormAction;
   const resolvedSubmitLabel = submitLabel || (safeEntity.id ? 'Speichern' : 'Kategorie anlegen');
   const resolvedCancelHref = cancelHref || resolvedBackHref;
   const statusValue = (values.isActive === false || values.isActive === 'false') ? 'false' : 'true';
@@ -36,8 +41,8 @@
     </div>
   </div>
 
-  <form method="post" action="<%= resolvedFormAction %>" class="card shadow-sm" enctype="multipart/form-data">
-    <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
+  <form method="post" action="<%= resolvedActionUrl %>" class="card shadow-sm" enctype="multipart/form-data">
+    <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
 
     <div class="card-body">
       <div class="row g-3">
