@@ -74,9 +74,9 @@
           <span class="badge text-bg-secondary"><%= safeModel.trackingType || 'serialized' %></span>
         </dd>
         <dt class="col-sm-3">Beschreibung</dt>
-        <dd class="col-sm-9"><%= safeModel.description || '-' %></dd>
+        <dd class="col-sm-9 preserve-text-format"><%= safeModel.description || '-' %></dd>
         <dt class="col-sm-3">Technische Beschreibung</dt>
-        <dd class="col-sm-9"><%= safeModel.technicalDescription || '-' %></dd>
+        <dd class="col-sm-9 preserve-text-format"><%= safeModel.technicalDescription || '-' %></dd>
         <dt class="col-sm-3">Custom Fields</dt>
         <dd class="col-sm-9">
           <% if (customFieldRows.length) { %>

@@ -123,7 +123,7 @@
           <h2 class="h6 mb-0">Beschreibung</h2>
         </div>
         <div class="card-body">
-          <p class="mb-0"><%= model.description || 'Keine Beschreibung vorhanden.' %></p>
+          <p class="mb-0 preserve-text-format"><%= model.description || 'Keine Beschreibung vorhanden.' %></p>
         </div>
       </div>
 
@@ -133,7 +133,7 @@
             <h2 class="h6 mb-0">Technische Beschreibung</h2>
           </div>
           <div class="card-body">
-            <p class="mb-0"><%= model.technicalDescription %></p>
+            <p class="mb-0 preserve-text-format"><%= model.technicalDescription %></p>
           </div>
         </div>
       <% } %>

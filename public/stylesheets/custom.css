@@ -130,6 +130,11 @@
   display: block;
 }
 
+.preserve-text-format {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 991.98px) {
   .navbar-height {
     height: auto;
