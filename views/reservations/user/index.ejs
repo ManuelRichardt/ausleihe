@@ -1,6 +1,18 @@
 <% pageTitle = 'Meine Reservierungen' %>
 <% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
 <% const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : ''; %>
+<%
+  const toItemCount = function (loan) {
+    if (!loan || !Array.isArray(loan.loanItems)) {
+      return 0;
+    }
+    return loan.loanItems.reduce(function (sum, item) {
+      const parsed = parseInt(item && item.quantity, 10);
+      const quantity = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+      return sum + quantity;
+    }, 0);
+  };
+%>
 <section>
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
@@ -27,7 +39,7 @@
             <% reservations.forEach(function (reservation) { %>
               <tr>
                 <td><%= reservation.lendingLocation ? reservation.lendingLocation.name : '-' %></td>
-                <td><%= Array.isArray(reservation.loanItems) ? reservation.loanItems.length : 0 %></td>
+                <td><%= toItemCount(reservation) %></td>
                 <td><%= safeFormatDateTime(reservation.reservedFrom) %></td>
                 <td><%= safeFormatDateTime(reservation.reservedUntil) %></td>
                 <td>

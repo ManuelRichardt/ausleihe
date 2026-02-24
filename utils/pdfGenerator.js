@@ -147,22 +147,33 @@ function drawSignatureArea(doc, loan) {
   doc.fill('#000000');
   doc.font('Helvetica').fontSize(9).text('Datum, Unterschrift', 65, 447);
 
+  const handoverDateX = 72;
+  const handoverSignatureX = 125;
+  const handoverSignatureFit = [105, 30];
+
   const signature = pickLatestSignatureByType(loan.loanSignatures, 'handover');
   if (signature && signature.filePath) {
     try {
-      doc.image(signature.filePath, 72, 414, { fit: [160, 30], align: 'left', valign: 'center' });
+      doc.image(signature.filePath, handoverSignatureX, 414, {
+        fit: handoverSignatureFit,
+        align: 'left',
+        valign: 'center',
+      });
     } catch (err) {
-      doc.font('Helvetica').fontSize(8).text('Signatur konnte nicht geladen werden', 72, 431);
+      doc.font('Helvetica').fontSize(8).text('Signatur konnte nicht geladen werden', handoverSignatureX, 431);
     }
   }
 
   const signedAt = signature && signature.signedAt ? signature.signedAt : loan.handedOverAt || new Date();
-  doc.font('Helvetica').fontSize(9).text(formatDate(signedAt), 72, 431);
+  doc.font('Helvetica').fontSize(9).text(formatDate(signedAt), handoverDateX, 431);
 }
 
 function groupModels(loanItems) {
   const groups = new Map();
   (loanItems || []).forEach((item) => {
+    if (!item || item.itemType === 'bundle_root') {
+      return;
+    }
     const model = item.assetModel || (item.asset && item.asset.model) || null;
     const manufacturer = model && model.manufacturer ? `${model.manufacturer.name} ` : '';
     const modelName = model ? model.name : 'Unbekanntes Modell';
@@ -173,7 +184,10 @@ function groupModels(loanItems) {
         quantity: 0,
       });
     }
-    groups.get(key).quantity += 1;
+    const normalizedQuantity = Number.isFinite(Number(item.quantity))
+      ? Math.max(parseInt(item.quantity, 10) || 1, 1)
+      : 1;
+    groups.get(key).quantity += normalizedQuantity;
   });
   return Array.from(groups.values());
 }
@@ -233,16 +247,25 @@ function drawFooter(doc, loan) {
   const returnSignature = pickLatestSignatureByType(loan.loanSignatures, 'return');
   doc.font('Helvetica').fontSize(11).text('Geräte wurden ordnungsgemäß zurückgegeben.', 65, 764);
   doc.moveTo(362, 772).lineTo(548, 772).strokeColor('#777777').lineWidth(0.8).stroke();
+
+  const returnDateX = 366;
+  const returnSignatureX = 430;
+  const returnSignatureFit = [112, 26];
+
   if (returnSignature && returnSignature.filePath) {
     try {
-      doc.image(returnSignature.filePath, 366, 744, { fit: [178, 26], align: 'left', valign: 'center' });
+      doc.image(returnSignature.filePath, returnSignatureX, 744, {
+        fit: returnSignatureFit,
+        align: 'left',
+        valign: 'center',
+      });
     } catch (err) {
       // ignore image load error in printable output
     }
   }
   const returnDate = returnSignature && returnSignature.signedAt ? returnSignature.signedAt : loan.returnedAt || null;
   if (returnDate) {
-    doc.font('Helvetica').fontSize(9).text(formatDate(returnDate), 366, 760);
+    doc.font('Helvetica').fontSize(9).text(formatDate(returnDate), returnDateX, 760);
   }
   doc.font('Helvetica').fontSize(9).text('Datum, Unterschrift (Labor)', 362, 780);
 }

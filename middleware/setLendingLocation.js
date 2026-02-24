@@ -1,4 +1,7 @@
 module.exports = function setLendingLocation(req, res, next) {
+  if (!req.body || typeof req.body !== 'object') {
+    req.body = {};
+  }
   if (!req.body.lendingLocationId && req.lendingLocationId) {
     req.body.lendingLocationId = req.lendingLocationId;
   }

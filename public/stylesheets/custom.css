@@ -130,17 +130,20 @@
   display: block;
 }
 
-@media (max-width:992px) {
+@media (max-width: 991.98px) {
   .navbar-height {
     height: auto;
-    padding:0px;
+    padding: 0;
   }
   .main-content {
-    margin-left: 50px;
-    margin-right: 50px;
-    padding-top: 2rem!important;
+    margin-left: 0;
+    margin-right: 0;
+    padding-top: 2rem !important;
+  }
+  .has-admin-panel .main-content {
+    padding-left: calc(1.5rem + 48px);
   }
   .main-content.admin-panel-open {
-    margin-left: 250px;
+    margin-left: 0;
   }
 }

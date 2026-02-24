@@ -17,7 +17,14 @@
     return fullName || loan.user.username || loan.user.email || '-';
   };
   const toItemCount = function (loan) {
-    return Array.isArray(loan && loan.loanItems) ? loan.loanItems.length : 0;
+    if (!loan || !Array.isArray(loan.loanItems)) {
+      return 0;
+    }
+    return loan.loanItems.reduce(function (sum, item) {
+      const parsed = parseInt(item && item.quantity, 10);
+      const quantity = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+      return sum + quantity;
+    }, 0);
   };
   const loanStatusBadgeClass = function (status) {
     if (status === 'reserved') return 'text-bg-primary';

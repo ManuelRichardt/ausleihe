@@ -93,10 +93,10 @@
 
   const queryParts = [];
   if (safeLendingLocationId) {
-    queryParts.push(`lendingLocationId=${safeLendingLocationId}`);
+    queryParts.push(`lendingLocationId=${encodeURIComponent(safeLendingLocationId)}`);
   }
   if (safeCsrf) {
-    queryParts.push(`csrfToken=${safeCsrf}`);
+    queryParts.push(`csrfToken=${encodeURIComponent(safeCsrf)}`);
   }
   const actionSuffix = queryParts.length ? `?${queryParts.join('&')}` : '';
 
@@ -127,7 +127,14 @@
     </div>
   </div>
 
-  <form method="post" action="<%= resolvedActionUrl %>" class="card shadow-sm" enctype="multipart/form-data">
+  <form
+    method="post"
+    action="<%= resolvedActionUrl %>"
+    class="card shadow-sm"
+    enctype="multipart/form-data"
+    id="assetModelForm"
+    data-upload-form="asset-model"
+  >
     <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
     <% if (safeLendingLocationId) { %>
       <input type="hidden" name="lendingLocationId" value="<%= safeLendingLocationId %>">
@@ -453,9 +460,25 @@
       </div>
     </div>
 
-    <div class="card-footer d-flex flex-wrap gap-2 justify-content-end">
-      <button type="submit" class="btn btn-primary"><%= resolvedSubmitLabel %></button>
-      <a href="<%= resolvedCancelHref %>" class="btn btn-outline-secondary">Abbrechen</a>
+    <div class="card-footer">
+      <div class="d-none mb-3" data-upload-progress-container>
+        <div class="d-flex justify-content-between small mb-1">
+          <span data-upload-progress-label>Dateien werden hochgeladen ...</span>
+          <span data-upload-progress-percent>0%</span>
+        </div>
+        <div class="progress" role="progressbar" aria-label="Upload-Fortschritt" aria-valuemin="0" aria-valuemax="100">
+          <div
+            class="progress-bar progress-bar-striped progress-bar-animated"
+            style="width: 0%;"
+            data-upload-progress-bar
+          >0%</div>
+        </div>
+        <div class="text-danger small mt-2 d-none" data-upload-progress-error></div>
+      </div>
+      <div class="d-flex flex-wrap gap-2 justify-content-end">
+        <button type="submit" class="btn btn-primary"><%= resolvedSubmitLabel %></button>
+        <a href="<%= resolvedCancelHref %>" class="btn btn-outline-secondary">Abbrechen</a>
+      </div>
     </div>
   </form>
 </section>

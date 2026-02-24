@@ -1,5 +1,11 @@
 <% pageTitle = 'Ausleihdetails' %>
 <% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
+<%
+  const toItemQuantity = function (item) {
+    const parsed = parseInt(item && item.quantity, 10);
+    return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+  };
+%>
 <section>
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
@@ -44,7 +50,7 @@
               if (!grouped[key]) {
                 grouped[key] = { model: model, quantity: 0 };
               }
-              grouped[key].quantity += 1;
+              grouped[key].quantity += toItemQuantity(item);
             });
             const groupedItems = Object.values(grouped);
           %>

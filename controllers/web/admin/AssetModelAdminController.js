@@ -11,6 +11,14 @@ const { assertOwnedByLendingLocation } = require('../../../utils/lendingLocation
 const { parseBooleanToken } = require('../../../utils/valueParsing');
 
 class AssetModelAdminController {
+  normalizeAttachmentTitle(value) {
+    const text = String(value || '').trim();
+    if (!text) {
+      return null;
+    }
+    return text.slice(0, 200);
+  }
+
   assertModelOwnership(model, lendingLocationId) {
     assertOwnedByLendingLocation(model, lendingLocationId, 'AssetModel');
   }
@@ -283,12 +291,13 @@ class AssetModelAdminController {
       }
 
       const nextKind = req.body.kind || attachment.kind;
-      const nextTitle = req.body.title || null;
+      const hasTitleInput = req.body && Object.prototype.hasOwnProperty.call(req.body, 'title');
+      const nextTitle = hasTitleInput ? this.normalizeAttachmentTitle(req.body.title) : attachment.title;
       const makePrimary = parseBooleanToken(req.body.isPrimary, { defaultValue: false }) === true;
 
       await services.assetAttachmentService.updateAttachment(attachment.id, {
         kind: nextKind,
-        title: nextTitle,
+        title: nextTitle || null,
       });
 
       if (nextKind === 'image' && makePrimary) {
@@ -345,7 +354,7 @@ class AssetModelAdminController {
         assetModelId: modelId,
         kind,
         url: `/uploads/asset-models/${file.filename}`,
-        title: kind === 'image' ? null : (file.originalname || null),
+        title: kind === 'image' ? null : this.normalizeAttachmentTitle(file.originalname),
         isPrimary: false,
       });
     }

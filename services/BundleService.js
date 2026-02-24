@@ -1,4 +1,5 @@
 const { Op } = require('sequelize');
+const { TRACKING_TYPE, LOAN_ITEM_TYPE } = require('../config/dbConstants');
 
 class BundleService {
   constructor(models, availabilityService, inventoryStockService) {
@@ -154,20 +155,7 @@ class BundleService {
       throw err;
     }
 
-    const bundleDef = availability.bundle;
-    const root = await LoanItem.create(
-      {
-        loanId,
-        assetModelId: bundleDef.assetModelId,
-        assetId: null,
-        quantity: 1,
-        itemType: 'bundle_root',
-        bundleDefinitionId,
-        parentLoanItemId: null,
-        status,
-      },
-      { transaction }
-    );
+    const createdItems = [];
 
     for (const component of availability.components) {
       if (!component.isOptional && !component.available) {
@@ -178,30 +166,49 @@ class BundleService {
       if (component.isOptional && !component.available) {
         continue;
       }
-      if (component.trackingType === 'bulk') {
+      if (component.trackingType === TRACKING_TYPE.BULK) {
         await this.inventoryStockService.decreaseAvailable(
           component.componentAssetModelId,
           lendingLocationId,
           component.requiredQuantity,
           { transaction }
         );
+        const bulkItem = await LoanItem.create(
+          {
+            loanId,
+            assetId: null,
+            assetModelId: component.componentAssetModelId,
+            quantity: component.requiredQuantity,
+            itemType: LOAN_ITEM_TYPE.BULK,
+            bundleDefinitionId,
+            parentLoanItemId: null,
+            status,
+          },
+          { transaction }
+        );
+        createdItems.push(bulkItem);
+        continue;
       }
-      await LoanItem.create(
-        {
-          loanId,
-          assetId: null,
-          assetModelId: component.componentAssetModelId,
-          quantity: component.requiredQuantity,
-          itemType: 'bundle_component',
-          bundleDefinitionId,
-          parentLoanItemId: root.id,
-          status,
-        },
-        { transaction }
-      );
+
+      for (let index = 0; index < component.requiredQuantity; index += 1) {
+        const serializedItem = await LoanItem.create(
+          {
+            loanId,
+            assetId: null,
+            assetModelId: component.componentAssetModelId,
+            quantity: 1,
+            itemType: LOAN_ITEM_TYPE.SERIALIZED,
+            bundleDefinitionId,
+            parentLoanItemId: null,
+            status,
+          },
+          { transaction }
+        );
+        createdItems.push(serializedItem);
+      }
     }
 
-    return root;
+    return createdItems;
   }
 
   async createBundleDefinition(data, options = {}) {

@@ -139,6 +139,27 @@ class LoanService {
     };
   }
 
+  #stripBundleRootLoanItems(loan) {
+    if (!loan || !Array.isArray(loan.loanItems)) {
+      return loan;
+    }
+    const visibleItems = loan.loanItems.filter(
+      (item) => item && item.itemType !== LOAN_ITEM_TYPE.BUNDLE_ROOT
+    );
+    if (typeof loan.setDataValue === 'function') {
+      loan.setDataValue('loanItems', visibleItems);
+    }
+    loan.loanItems = visibleItems;
+    return loan;
+  }
+
+  #stripBundleRootLoanItemsFromList(loans) {
+    if (!Array.isArray(loans)) {
+      return loans;
+    }
+    return loans.map((loan) => this.#stripBundleRootLoanItems(loan));
+  }
+
   async #loadLoanForTransition(Loan, loanId, allowedStatuses, errorMessage, transaction) {
     const loan = await Loan.findByPk(loanId, { transaction });
     if (!loan) {
@@ -188,6 +209,7 @@ class LoanService {
       where: {
         loanId,
         status: { [Op.in]: OPEN_LOAN_ITEM_STATUSES },
+        itemType: { [Op.ne]: LOAN_ITEM_TYPE.BUNDLE_ROOT },
       },
       transaction,
     });
@@ -504,7 +526,7 @@ class LoanService {
     if (!loan) {
       throw new Error('Loan not found');
     }
-    return loan;
+    return this.#stripBundleRootLoanItems(loan);
   }
 
   async getAll(filter = {}, options = {}) {
@@ -522,7 +544,8 @@ class LoanService {
     if (options.include) {
       listOptions.include = options.include;
     }
-    return this.models.Loan.findAll({ where, ...listOptions });
+    const loans = await this.models.Loan.findAll({ where, ...listOptions });
+    return this.#stripBundleRootLoanItemsFromList(loans);
   }
 
   async cancelLoan(loanId, userId, note) {

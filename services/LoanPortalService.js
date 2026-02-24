@@ -1,3 +1,5 @@
+const { LOAN_ITEM_TYPE } = require('../config/dbConstants');
+
 class LoanPortalService {
   constructor(models, loanService, assetModelService, assetInstanceService) {
     this.models = models;
@@ -46,8 +48,29 @@ class LoanPortalService {
     return include;
   }
 
+  #stripBundleRootLoanItems(loansOrLoan) {
+    const stripFromLoan = (loan) => {
+      if (!loan || !Array.isArray(loan.loanItems)) {
+        return loan;
+      }
+      const visibleItems = loan.loanItems.filter(
+        (item) => item && item.itemType !== LOAN_ITEM_TYPE.BUNDLE_ROOT
+      );
+      if (typeof loan.setDataValue === 'function') {
+        loan.setDataValue('loanItems', visibleItems);
+      }
+      loan.loanItems = visibleItems;
+      return loan;
+    };
+
+    if (Array.isArray(loansOrLoan)) {
+      return loansOrLoan.map(stripFromLoan);
+    }
+    return stripFromLoan(loansOrLoan);
+  }
+
   async listForUser(userId, filter = {}) {
-    return this.loanService.getAll(
+    const loans = await this.loanService.getAll(
       {
         userId,
         status: filter.status || undefined,
@@ -57,6 +80,7 @@ class LoanPortalService {
         order: [['reservedFrom', 'DESC']],
       }
     );
+    return this.#stripBundleRootLoanItems(loans);
   }
 
   async listForAdmin(lendingLocationId, filter = {}) {
@@ -67,7 +91,7 @@ class LoanPortalService {
       todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date(now);
       todayEnd.setHours(23, 59, 59, 999);
-      return this.models.Loan.findAll({
+      const loans = await this.models.Loan.findAll({
         where: {
           lendingLocationId,
           status: { [Op.in]: ['handed_over', 'overdue'] },
@@ -79,12 +103,13 @@ class LoanPortalService {
         include: this.#includes({ includeUser: true }),
         order: [['reservedFrom', 'DESC']],
       });
+      return this.#stripBundleRootLoanItems(loans);
     }
 
     if (filter.status === 'overdue') {
       const { Op } = this.models.Sequelize;
       const now = new Date();
-      return this.models.Loan.findAll({
+      const loans = await this.models.Loan.findAll({
         where: {
           lendingLocationId,
           [Op.or]: [
@@ -98,9 +123,10 @@ class LoanPortalService {
         include: this.#includes({ includeUser: true }),
         order: [['reservedFrom', 'DESC']],
       });
+      return this.#stripBundleRootLoanItems(loans);
     }
 
-    return this.loanService.getAll(
+    const loans = await this.loanService.getAll(
       {
         lendingLocationId,
         status: filter.status || undefined,
@@ -110,6 +136,7 @@ class LoanPortalService {
         order: [['reservedFrom', 'DESC']],
       }
     );
+    return this.#stripBundleRootLoanItems(loans);
   }
 
   async getForUser(loanId, userId) {

@@ -1,6 +1,7 @@
 const fs = require('fs/promises');
 const path = require('path');
 const crypto = require('crypto');
+const { LOAN_ITEM_TYPE } = require('../config/dbConstants');
 
 class SignatureService {
   constructor(models) {
@@ -132,6 +133,15 @@ class SignatureService {
     });
     if (!loan) {
       throw new Error('Loan not found');
+    }
+    if (Array.isArray(loan.loanItems)) {
+      const visibleLoanItems = loan.loanItems.filter(
+        (item) => item && item.itemType !== LOAN_ITEM_TYPE.BUNDLE_ROOT
+      );
+      if (typeof loan.setDataValue === 'function') {
+        loan.setDataValue('loanItems', visibleLoanItems);
+      }
+      loan.loanItems = visibleLoanItems;
     }
     const customFieldsByAsset = {};
     (loan.loanItems || []).forEach((item) => {

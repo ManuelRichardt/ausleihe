@@ -4,6 +4,12 @@
 <% const safeCan = (typeof can === 'function') ? can : function () { return false; }; %>
 <% const canViewSignatureMeta = safeCan('audit.view') || safeCan('system.admin'); %>
 <% const canEditPeriod = ['reserved', 'handed_over', 'overdue'].includes(loan.status); %>
+<%
+  const toItemQuantity = function (item) {
+    const parsed = parseInt(item && item.quantity, 10);
+    return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+  };
+%>
 <section class="admin-loan-detail">
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
@@ -119,6 +125,7 @@
             <th>Inventarnummer</th>
             <th>Modell</th>
             <th>Hersteller</th>
+            <th>Menge</th>
             <th>Aktionen</th>
           </tr>
         </thead>
@@ -147,6 +154,7 @@
                 </td>
                 <td><%= model ? model.name : '-' %></td>
                 <td><%= manufacturer ? manufacturer.name : '-' %></td>
+                <td><%= toItemQuantity(item) %></td>
                 <td class="d-flex gap-2">
                   <form method="post" action="/admin/loans/<%= loan.id %>/items/<%= item.id %>/model" class="d-flex gap-2">
                     <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
@@ -166,7 +174,7 @@
             <% }) %>
           <% } else { %>
             <tr>
-              <td colspan="4" class="text-center text-muted py-4">Keine reservierten Items vorhanden.</td>
+              <td colspan="5" class="text-center text-muted py-4">Keine reservierten Items vorhanden.</td>
             </tr>
           <% } %>
         </tbody>

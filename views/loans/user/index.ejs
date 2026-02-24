@@ -1,5 +1,17 @@
 <% pageTitle = 'Meine Ausleihen' %>
 <% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
+<%
+  const toItemCount = function (loan) {
+    if (!loan || !Array.isArray(loan.loanItems)) {
+      return 0;
+    }
+    return loan.loanItems.reduce(function (sum, item) {
+      const parsed = parseInt(item && item.quantity, 10);
+      const quantity = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+      return sum + quantity;
+    }, 0);
+  };
+%>
 <section>
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
@@ -26,7 +38,7 @@
             <% loans.forEach(function (loan) { %>
               <tr>
                 <td><%= loan.lendingLocation ? loan.lendingLocation.name : '-' %></td>
-                <td><%= Array.isArray(loan.loanItems) ? loan.loanItems.length : 0 %></td>
+                <td><%= toItemCount(loan) %></td>
                 <td><%= safeFormatDateTime(loan.reservedFrom) %></td>
                 <td><%= safeFormatDateTime(loan.reservedUntil) %></td>
                 <td>

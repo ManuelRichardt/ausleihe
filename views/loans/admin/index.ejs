@@ -1,6 +1,16 @@
 <% pageTitle = 'Ausleihen' %>
 <% const safeFormatDateTime = (typeof formatDateTime === 'function') ? formatDateTime : function () { return '-'; }; %>
 <%
+  const toItemCount = function (loan) {
+    if (!loan || !Array.isArray(loan.loanItems)) {
+      return 0;
+    }
+    return loan.loanItems.reduce(function (sum, item) {
+      const parsed = parseInt(item && item.quantity, 10);
+      const quantity = Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+      return sum + quantity;
+    }, 0);
+  };
   const statusBadgeClass = function (status) {
     if (status === 'reserved') return 'text-bg-primary';
     if (status === 'handed_over') return 'text-bg-success';
@@ -60,7 +70,7 @@
                 <td><%= loan.user ? [loan.user.firstName, loan.user.lastName].filter(Boolean).join(' ') || loan.user.username : '-' %></td>
                 <td><%= loan.user ? loan.user.email || '-' : '-' %></td>
                 <td><%= loan.lendingLocation ? loan.lendingLocation.name : '-' %></td>
-                <td><%= Array.isArray(loan.loanItems) ? loan.loanItems.length : 0 %></td>
+                <td><%= toItemCount(loan) %></td>
                 <td><%= safeFormatDateTime(loan.reservedFrom) %></td>
                 <td><%= safeFormatDateTime(loan.reservedUntil) %></td>
                 <td>
