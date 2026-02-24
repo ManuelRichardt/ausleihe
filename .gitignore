@@ -1,5 +1,5 @@
 node_modules/
-public/uploads/*
+public/uploads/asset-models/*
 uploads/signatures/*
 !uploads/signatures/.gitkeep 
 package-lock.json

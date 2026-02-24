@@ -96,6 +96,7 @@ server {
 
     ssl_certificate $CERT_PATH;
     ssl_certificate_key $KEY_PATH;
+    client_max_body_size 100M;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -119,6 +120,14 @@ fi
 cd "$APP_DIR"
 # npm install auf dem Host ist nicht nötig: der Docker-Build installiert Node-Dependencies.
 "${DOCKER_COMPOSE_CMD[@]}" up -d --build
+
+# 6b. Schreibrechte für Uploadpfade im Container prüfen
+echo "Prüfe Schreibrechte in Upload-Verzeichnissen ..."
+if ! "${DOCKER_COMPOSE_CMD[@]}" exec -T app sh -lc 'set -e; mkdir -p /app/public/uploads/asset-models /app/uploads/signatures; f1="/app/public/uploads/asset-models/.perm-test-$$"; f2="/app/uploads/signatures/.perm-test-$$"; touch "$f1" "$f2"; rm -f "$f1" "$f2"'; then
+    echo "Fehler: Upload-Verzeichnisse im App-Container sind nicht beschreibbar."
+    "${DOCKER_COMPOSE_CMD[@]}" logs --tail=100 app || true
+    exit 1
+fi
 
 # 7. App-Verfügbarkeit prüfen, bevor Nginx gestartet wird
 echo "Warte auf App-Start auf http://127.0.0.1:3000 ..."

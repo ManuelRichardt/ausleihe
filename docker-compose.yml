@@ -1,11 +1,15 @@
 services:
   app:
     build: .
+    restart: unless-stopped
     ports:
       - "3000:3000"
     env_file: .env
     depends_on:
       - db
+    volumes:
+      - app_public_uploads:/app/public/uploads
+      - app_signature_uploads:/app/uploads/signatures
 
   db:
     image: mariadb:latest
@@ -20,3 +24,5 @@ services:
 
 volumes:
   db_data:
+  app_public_uploads:
+  app_signature_uploads:
