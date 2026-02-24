@@ -33,27 +33,80 @@ class ReportService {
       include: [
         { model: this.models.Manufacturer, as: 'manufacturer' },
         { model: this.models.AssetCategory, as: 'category' },
-        { model: this.models.Asset, as: 'assets', required: false },
+        {
+          model: this.models.Asset,
+          as: 'assets',
+          required: false,
+          include: [{ model: this.models.StorageLocation, as: 'storageLocation', required: false }],
+        },
         { model: this.models.InventoryStock, as: 'stocks', required: false },
       ],
       order: [['name', 'ASC']],
     });
 
-    return models.map((model) => {
+    const rows = [];
+    models.forEach((model) => {
       const trackingType = model.trackingType || 'serialized';
       const stock = Array.isArray(model.stocks) ? model.stocks[0] : null;
       const assets = Array.isArray(model.assets) ? model.assets : [];
-      return {
+      const baseRow = {
         modelName: model.name,
         manufacturer: model.manufacturer ? model.manufacturer.name : '-',
         category: model.category ? model.category.name : '-',
         trackingType,
-        isActive: Boolean(model.isActive),
-        serializedCount: trackingType === 'serialized' ? assets.length : 0,
-        bulkTotal: trackingType === 'bulk' ? (stock ? stock.quantityTotal : 0) : 0,
-        bulkAvailable: trackingType === 'bulk' ? (stock ? stock.quantityAvailable : 0) : 0,
       };
+
+      if (trackingType === 'serialized') {
+        const assetsWithInventory = assets
+          .filter((asset) => String(asset.inventoryNumber || '').trim())
+          .sort((a, b) => String(a.inventoryNumber || '').localeCompare(String(b.inventoryNumber || ''), 'de', {
+            numeric: true,
+            sensitivity: 'base',
+          }));
+
+        assetsWithInventory.forEach((asset) => {
+          rows.push({
+            ...baseRow,
+            inventoryOrStock: asset.inventoryNumber,
+            storageLocation: asset.storageLocation ? asset.storageLocation.name : '-',
+            isActive: Boolean(asset.isActive),
+          });
+        });
+
+        const missingInventoryCount = assets.length - assetsWithInventory.length;
+        if (missingInventoryCount > 0 || assets.length === 0) {
+          rows.push({
+            ...baseRow,
+            inventoryOrStock: assets.length === 0
+              ? 'Keine Assets erfasst'
+              : `Ohne Inventarnummer: ${missingInventoryCount}`,
+            storageLocation: '-',
+            isActive: Boolean(model.isActive),
+          });
+        }
+        return;
+      }
+
+      if (trackingType === 'bulk') {
+        const quantityTotal = stock ? stock.quantityTotal : 0;
+        const quantityAvailable = stock ? stock.quantityAvailable : 0;
+        rows.push({
+          ...baseRow,
+          inventoryOrStock: `Gesamt: ${quantityTotal} / Verfügbar: ${quantityAvailable}`,
+          storageLocation: '-',
+          isActive: Boolean(model.isActive),
+        });
+        return;
+      }
+
+      rows.push({
+        ...baseRow,
+        inventoryOrStock: `Assets: ${assets.length}`,
+        storageLocation: '-',
+        isActive: Boolean(model.isActive),
+      });
     });
+    return rows;
   }
 
   async getMaintenanceRows(lendingLocationId, filters = {}) {
@@ -120,7 +173,7 @@ class ReportService {
 
   generateInventoryPdf({ lendingLocationName, rows }) {
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A4', margin: 36 });
+      const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 36 });
       const chunks = [];
       doc.on('data', (chunk) => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -131,34 +184,41 @@ class ReportService {
       doc.text(`Erstellt: ${formatDateTime(new Date())}`);
       doc.moveDown(1);
 
-      const widths = [130, 80, 80, 60, 50, 50, 50];
+      const widths = [188, 108, 118, 68, 145, 96, 46];
       const startX = doc.x;
       let cursorY = doc.y;
-      const headers = ['Modell', 'Hersteller', 'Kategorie', 'Typ', 'Aktiv', 'Gesamt', 'Verfügbar'];
+      const headers = ['Modell', 'Hersteller', 'Kategorie', 'Typ', 'Inventar / Bestand', 'Lagerort', 'Aktiv'];
 
-      doc.font('Helvetica-Bold').fontSize(9);
-      let x = startX;
-      headers.forEach((header, idx) => {
-        doc.text(header, x, cursorY, { width: widths[idx], continued: false });
-        x += widths[idx];
-      });
-      cursorY += 16;
-      doc.moveTo(startX, cursorY - 2).lineTo(startX + widths.reduce((sum, item) => sum + item, 0), cursorY - 2).stroke();
+      const tableWidth = widths.reduce((sum, item) => sum + item, 0);
+      const drawTableHeader = () => {
+        doc.font('Helvetica-Bold').fontSize(9);
+        let x = startX;
+        headers.forEach((header, idx) => {
+          doc.text(header, x, cursorY, { width: widths[idx], continued: false });
+          x += widths[idx];
+        });
+        cursorY += 16;
+        doc.moveTo(startX, cursorY - 2).lineTo(startX + tableWidth, cursorY - 2).stroke();
+      };
+
+      drawTableHeader();
 
       doc.font('Helvetica').fontSize(9);
       rows.forEach((row) => {
         if (cursorY > doc.page.height - 50) {
           doc.addPage();
           cursorY = 36;
+          drawTableHeader();
+          doc.font('Helvetica').fontSize(9);
         }
         const values = [
           row.modelName || '-',
           row.manufacturer || '-',
           row.category || '-',
           row.trackingType || 'serialized',
+          row.inventoryOrStock || '-',
+          row.storageLocation || '-',
           row.isActive ? 'Ja' : 'Nein',
-          row.trackingType === 'bulk' ? String(row.bulkTotal || 0) : String(row.serializedCount || 0),
-          row.trackingType === 'bulk' ? String(row.bulkAvailable || 0) : '-',
         ];
         let colX = startX;
         values.forEach((value, idx) => {
