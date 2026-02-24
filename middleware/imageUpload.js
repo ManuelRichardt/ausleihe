@@ -3,7 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const multer = require('multer');
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024;
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_ASSET_MODEL_FILES = 40;
 
 const ASSET_MODEL_ALLOWED_EXTENSIONS = Object.freeze({
