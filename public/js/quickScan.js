@@ -1,9 +1,373 @@
 (function () {
+  var CODE128_PATTERNS = [
+    '11011001100', '11001101100', '11001100110', '10010011000', '10010001100', '10001001100', '10011001000',
+    '10011000100', '10001100100', '11001001000', '11001000100', '11000100100', '10110011100', '10011011100',
+    '10011001110', '10111001100', '10011101100', '10011100110', '11001110010', '11001011100', '11001001110',
+    '11011100100', '11001110100', '11101101110', '11101001100', '11100101100', '11100100110', '11101100100',
+    '11100110100', '11100110010', '11011011000', '11011000110', '11000110110', '10100011000', '10001011000',
+    '10001000110', '10110001000', '10001101000', '10001100010', '11010001000', '11000101000', '11000100010',
+    '10110111000', '10110001110', '10001101110', '10111011000', '10111000110', '10001110110', '11101110110',
+    '11010001110', '11000101110', '11011101000', '11011100010', '11011101110', '11101011000', '11101000110',
+    '11100010110', '11101101000', '11101100010', '11100011010', '11101111010', '11001000010', '11110001010',
+    '10100110000', '10100001100', '10010110000', '10010000110', '10000101100', '10000100110', '10110010000',
+    '10110000100', '10011010000', '10011000010', '10000110100', '10000110010', '11000010010', '11001010000',
+    '11110111010', '11000010100', '10001111010', '10100111100', '10010111100', '10010011110', '10111100100',
+    '10011110100', '10011110010', '11110100100', '11110010100', '11110010010', '11011011110', '11011110110',
+    '11110110110', '10101111000', '10100011110', '10001011110', '10111101000', '10111100010', '11110101000',
+    '11110100010', '10111011110', '10111101110', '11101011110', '11110101110', '11010000100', '11010010000',
+    '11010011100', '1100011101011',
+  ];
+
+  var CODE128_START_B = 104;
+  var CODE128_STOP = 106;
+  var CODE128_DATA_MAX = 95;
+  var CODE128_NORMAL_MATCH_THRESHOLD = 0.34;
+  var CODE128_STOP_MATCH_THRESHOLD = 0.38;
+  var FALLBACK_SCAN_INTERVAL_MS = 220;
+  var DETECTOR_SCAN_INTERVAL_MS = 180;
+
+  var CODE128_SYMBOLS = (function buildCode128Symbols() {
+    return CODE128_PATTERNS.map(function (pattern, code) {
+      var runs = [];
+      var current = pattern.charAt(0);
+      var runLength = 1;
+      for (var i = 1; i < pattern.length; i += 1) {
+        if (pattern.charAt(i) === current) {
+          runLength += 1;
+          continue;
+        }
+        runs.push(runLength);
+        current = pattern.charAt(i);
+        runLength = 1;
+      }
+      runs.push(runLength);
+      return {
+        code: code,
+        pattern: pattern,
+        modules: pattern.length,
+        runs: runs,
+      };
+    });
+  })();
+
   function normalizeCode(value) {
     return String(value || '')
       .trim()
       .replace(/\s+/g, '')
       .toUpperCase();
+  }
+
+  function safeMinMax(line) {
+    var min = 255;
+    var max = 0;
+    for (var i = 0; i < line.length; i += 1) {
+      if (line[i] < min) {
+        min = line[i];
+      }
+      if (line[i] > max) {
+        max = line[i];
+      }
+    }
+    return { min: min, max: max };
+  }
+
+  function luminanceFromImageData(imageData, x, y) {
+    var index = ((y * imageData.width) + x) * 4;
+    var data = imageData.data;
+    return (0.299 * data[index]) + (0.587 * data[index + 1]) + (0.114 * data[index + 2]);
+  }
+
+  function buildHorizontalLine(imageData, y) {
+    var row = new Array(imageData.width);
+    for (var x = 0; x < imageData.width; x += 1) {
+      row[x] = luminanceFromImageData(imageData, x, y);
+    }
+    return row;
+  }
+
+  function buildVerticalLine(imageData, x) {
+    var column = new Array(imageData.height);
+    for (var y = 0; y < imageData.height; y += 1) {
+      column[y] = luminanceFromImageData(imageData, x, y);
+    }
+    return column;
+  }
+
+  function smoothBinary(binary) {
+    for (var i = 1; i < binary.length - 1; i += 1) {
+      if (binary[i - 1] === binary[i + 1] && binary[i] !== binary[i - 1]) {
+        binary[i] = binary[i - 1];
+      }
+    }
+  }
+
+  function buildRuns(binary, fromIndex, toIndex) {
+    var runs = [];
+    var colors = [];
+    if (fromIndex >= toIndex) {
+      return { runs: runs, colors: colors };
+    }
+
+    var current = binary[fromIndex];
+    var runLength = 1;
+    for (var i = fromIndex + 1; i <= toIndex; i += 1) {
+      if (binary[i] === current) {
+        runLength += 1;
+        continue;
+      }
+      colors.push(current);
+      runs.push(runLength);
+      current = binary[i];
+      runLength = 1;
+    }
+    colors.push(current);
+    runs.push(runLength);
+    return { runs: runs, colors: colors };
+  }
+
+  function collapseTinyRuns(runData) {
+    var runs = runData.runs;
+    var colors = runData.colors;
+    if (runs.length < 7) {
+      return runData;
+    }
+
+    var total = 0;
+    for (var i = 0; i < runs.length; i += 1) {
+      total += runs[i];
+    }
+    var average = total / runs.length;
+    var tinyThreshold = Math.max(1, Math.floor(average * 0.14));
+    var changed = true;
+
+    while (changed && runs.length >= 7) {
+      changed = false;
+
+      if (runs.length > 1 && runs[0] <= tinyThreshold) {
+        runs[1] += runs[0];
+        runs.shift();
+        colors.shift();
+        changed = true;
+      }
+
+      if (runs.length > 1 && runs[runs.length - 1] <= tinyThreshold) {
+        runs[runs.length - 2] += runs[runs.length - 1];
+        runs.pop();
+        colors.pop();
+        changed = true;
+      }
+
+      for (var idx = 1; idx < runs.length - 1; idx += 1) {
+        if (runs[idx] > tinyThreshold) {
+          continue;
+        }
+        runs[idx - 1] += runs[idx] + runs[idx + 1];
+        runs.splice(idx, 2);
+        colors.splice(idx, 2);
+        changed = true;
+        break;
+      }
+    }
+    return { runs: runs, colors: colors };
+  }
+
+  function matchRunsToSymbol(observedRuns, symbols, maxError) {
+    var observedSum = 0;
+    for (var i = 0; i < observedRuns.length; i += 1) {
+      observedSum += observedRuns[i];
+    }
+    if (!observedSum) {
+      return null;
+    }
+
+    var best = null;
+    for (var idx = 0; idx < symbols.length; idx += 1) {
+      var symbol = symbols[idx];
+      if (!symbol || symbol.runs.length !== observedRuns.length) {
+        continue;
+      }
+      var scale = observedSum / symbol.modules;
+      var error = 0;
+      for (var r = 0; r < observedRuns.length; r += 1) {
+        error += Math.abs(observedRuns[r] - (symbol.runs[r] * scale));
+      }
+      var normalizedError = error / observedSum;
+      if (!best || normalizedError < best.error) {
+        best = { symbol: symbol, error: normalizedError };
+      }
+    }
+
+    if (!best || best.error > maxError) {
+      return null;
+    }
+    return {
+      code: best.symbol.code,
+      error: best.error,
+    };
+  }
+
+  function decodeCode128B(codes) {
+    if (!Array.isArray(codes) || codes.length < 3) {
+      return null;
+    }
+    if (codes[0] !== CODE128_START_B) {
+      return null;
+    }
+
+    var checksumCode = codes[codes.length - 1];
+    var dataCodes = codes.slice(1, -1);
+
+    var checksum = CODE128_START_B;
+    for (var i = 0; i < dataCodes.length; i += 1) {
+      checksum += dataCodes[i] * (i + 1);
+    }
+    if ((checksum % 103) !== checksumCode) {
+      return null;
+    }
+
+    var output = '';
+    for (var j = 0; j < dataCodes.length; j += 1) {
+      var code = dataCodes[j];
+      if (code < 0 || code > CODE128_DATA_MAX) {
+        return null;
+      }
+      output += String.fromCharCode(code + 32);
+    }
+    return output || null;
+  }
+
+  function decodeRunsAsCode128(runData) {
+    var runs = runData.runs;
+    var colors = runData.colors;
+    if (!Array.isArray(runs) || !Array.isArray(colors) || runs.length < 20) {
+      return null;
+    }
+
+    var normalSymbols = CODE128_SYMBOLS.slice(0, CODE128_STOP);
+    var stopSymbol = [CODE128_SYMBOLS[CODE128_STOP]];
+
+    for (var startIndex = 0; startIndex <= runs.length - 20; startIndex += 1) {
+      if (colors[startIndex] !== 1) {
+        continue;
+      }
+      var startMatch = matchRunsToSymbol(
+        runs.slice(startIndex, startIndex + 6),
+        normalSymbols,
+        CODE128_NORMAL_MATCH_THRESHOLD
+      );
+      if (!startMatch || startMatch.code !== CODE128_START_B) {
+        continue;
+      }
+
+      var cursor = startIndex + 6;
+      var decodedCodes = [CODE128_START_B];
+      var guard = 0;
+
+      while (cursor + 6 <= runs.length && guard < 96) {
+        guard += 1;
+        if (cursor + 7 <= runs.length) {
+          var stopMatch = matchRunsToSymbol(
+            runs.slice(cursor, cursor + 7),
+            stopSymbol,
+            CODE128_STOP_MATCH_THRESHOLD
+          );
+          if (stopMatch && stopMatch.code === CODE128_STOP) {
+            var value = decodeCode128B(decodedCodes);
+            if (value) {
+              return value;
+            }
+            break;
+          }
+        }
+
+        var symbolMatch = matchRunsToSymbol(
+          runs.slice(cursor, cursor + 6),
+          normalSymbols,
+          CODE128_NORMAL_MATCH_THRESHOLD
+        );
+        if (!symbolMatch) {
+          break;
+        }
+
+        decodedCodes.push(symbolMatch.code);
+        cursor += 6;
+      }
+    }
+
+    return null;
+  }
+
+  function decodeCode128FromLine(line) {
+    if (!Array.isArray(line) || line.length < 80) {
+      return null;
+    }
+
+    var minMax = safeMinMax(line);
+    if ((minMax.max - minMax.min) < 45) {
+      return null;
+    }
+    var threshold = minMax.min + ((minMax.max - minMax.min) * 0.5);
+
+    var binary = new Uint8Array(line.length);
+    for (var i = 0; i < line.length; i += 1) {
+      binary[i] = line[i] <= threshold ? 1 : 0;
+    }
+    smoothBinary(binary);
+
+    var firstBlack = 0;
+    while (firstBlack < binary.length && binary[firstBlack] === 0) {
+      firstBlack += 1;
+    }
+    if (firstBlack >= binary.length) {
+      return null;
+    }
+    var lastBlack = binary.length - 1;
+    while (lastBlack >= 0 && binary[lastBlack] === 0) {
+      lastBlack -= 1;
+    }
+    if ((lastBlack - firstBlack) < 60) {
+      return null;
+    }
+
+    var runData = buildRuns(binary, firstBlack, lastBlack);
+    if (!runData.runs.length) {
+      return null;
+    }
+    runData = collapseTinyRuns(runData);
+    return decodeRunsAsCode128(runData);
+  }
+
+  function decodeCode128FromImageData(imageData) {
+    if (!imageData || !imageData.width || !imageData.height) {
+      return null;
+    }
+
+    var rowOffsets = [0, -2, 2, -4, 4, -6, 6, -8, 8, -12, 12, -16, 16, -22, 22, -28, 28];
+    var centerY = Math.floor(imageData.height / 2);
+    for (var r = 0; r < rowOffsets.length; r += 1) {
+      var y = centerY + rowOffsets[r];
+      if (y < 0 || y >= imageData.height) {
+        continue;
+      }
+      var horizontal = decodeCode128FromLine(buildHorizontalLine(imageData, y));
+      if (horizontal) {
+        return horizontal;
+      }
+    }
+
+    var colOffsets = [0, -2, 2, -4, 4, -6, 6, -8, 8, -12, 12, -16, 16, -22, 22];
+    var centerX = Math.floor(imageData.width / 2);
+    for (var c = 0; c < colOffsets.length; c += 1) {
+      var x = centerX + colOffsets[c];
+      if (x < 0 || x >= imageData.width) {
+        continue;
+      }
+      var vertical = decodeCode128FromLine(buildVerticalLine(imageData, x));
+      if (vertical) {
+        return vertical;
+      }
+    }
+    return null;
   }
 
   function createQuickScan() {
@@ -21,6 +385,7 @@
 
     var stream = null;
     var detector = null;
+    var useFallbackCode128Decoder = false;
     var loopTimer = null;
     var activeHandler = null;
     var lastSeen = new Map();
@@ -77,6 +442,8 @@
         });
       }
       stream = null;
+      detector = null;
+      useFallbackCode128Decoder = false;
     }
 
     function shouldAccept(code) {
@@ -93,18 +460,37 @@
       return true;
     }
 
+    function handleCode(code) {
+      var normalized = normalizeCode(code);
+      if (!normalized) {
+        return;
+      }
+      if (!shouldAccept(normalized)) {
+        return;
+      }
+      if (typeof activeHandler === 'function') {
+        activeHandler(normalized, appendLog);
+      }
+    }
+
     function ensureSnapshotSize() {
       if (!videoEl) {
         return false;
       }
-      var width = videoEl.videoWidth || 0;
-      var height = videoEl.videoHeight || 0;
-      if (!width || !height) {
+      var sourceWidth = videoEl.videoWidth || 0;
+      var sourceHeight = videoEl.videoHeight || 0;
+      if (!sourceWidth || !sourceHeight) {
         return false;
       }
-      if (snapshotCanvas.width !== width || snapshotCanvas.height !== height) {
-        snapshotCanvas.width = width;
-        snapshotCanvas.height = height;
+
+      var maxWidth = 960;
+      var scale = sourceWidth > maxWidth ? (maxWidth / sourceWidth) : 1;
+      var targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+      var targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+
+      if (snapshotCanvas.width !== targetWidth || snapshotCanvas.height !== targetHeight) {
+        snapshotCanvas.width = targetWidth;
+        snapshotCanvas.height = targetHeight;
       }
       return true;
     }
@@ -120,44 +506,56 @@
       return snapshotCanvas;
     }
 
-    function handleCode(code) {
-      var normalized = normalizeCode(code);
-      if (!normalized) {
+    function runFallbackDecode(source) {
+      if (!snapshotContext) {
         return;
       }
-      if (!shouldAccept(normalized)) {
-        return;
-      }
-      if (typeof activeHandler === 'function') {
-        activeHandler(normalized, appendLog);
+      try {
+        var imageData = snapshotContext.getImageData(0, 0, source.width, source.height);
+        var decoded = decodeCode128FromImageData(imageData);
+        if (decoded) {
+          handleCode(decoded);
+        }
+      } catch (err) {
+        // non-fatal fallback decode errors
       }
     }
 
     function scanLoop() {
-      if (!detector || !videoEl || !stream) {
+      if (!videoEl || !stream) {
         return;
       }
       if (videoEl.readyState < 2) {
-        loopTimer = setTimeout(scanLoop, 180);
+        loopTimer = setTimeout(scanLoop, useFallbackCode128Decoder ? FALLBACK_SCAN_INTERVAL_MS : DETECTOR_SCAN_INTERVAL_MS);
         return;
       }
+
       var source = getDetectionSource();
-      detector.detect(source)
-        .then(function (barcodes) {
-          if (Array.isArray(barcodes)) {
-            barcodes.forEach(function (barcode) {
-              if (barcode && barcode.rawValue) {
-                handleCode(barcode.rawValue);
-              }
-            });
-          }
-        })
-        .catch(function () {
-          // scanner errors are non-fatal in loop
-        })
-        .finally(function () {
-          loopTimer = setTimeout(scanLoop, 180);
-        });
+
+      if (detector) {
+        detector.detect(source)
+          .then(function (barcodes) {
+            if (Array.isArray(barcodes)) {
+              barcodes.forEach(function (barcode) {
+                if (barcode && barcode.rawValue) {
+                  handleCode(barcode.rawValue);
+                }
+              });
+            }
+          })
+          .catch(function () {
+            // detector errors are non-fatal inside loop
+          })
+          .finally(function () {
+            loopTimer = setTimeout(scanLoop, DETECTOR_SCAN_INTERVAL_MS);
+          });
+        return;
+      }
+
+      if (useFallbackCode128Decoder && source && source.width && source.height) {
+        runFallbackDecode(source);
+      }
+      loopTimer = setTimeout(scanLoop, FALLBACK_SCAN_INTERVAL_MS);
     }
 
     function startCamera() {
@@ -181,7 +579,10 @@
         return null;
       }).then(function () {
         if (window.BarcodeDetector) {
-          var preferredFormats = ['code_128', 'code_39', 'codabar', 'itf', 'qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'data_matrix'];
+          var preferredFormats = [
+            'code_128', 'code_39', 'codabar', 'itf',
+            'qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'data_matrix',
+          ];
           var hasSupportedFormatsApi = typeof window.BarcodeDetector.getSupportedFormats === 'function';
           if (hasSupportedFormatsApi) {
             return window.BarcodeDetector.getSupportedFormats()
@@ -199,7 +600,9 @@
                   setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
                   scanLoop();
                 } catch (err) {
-                  setStatus('Barcode-Scanner nicht verfügbar. Bitte Code manuell eingeben.');
+                  useFallbackCode128Decoder = true;
+                  setStatus('Scanner aktiv (Fallback für Code128). Mehrere Labels nacheinander scannen.');
+                  scanLoop();
                 }
               });
           }
@@ -207,12 +610,18 @@
             detector = new window.BarcodeDetector();
             setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
             scanLoop();
-          } catch (err) {
-            setStatus('Barcode-Scanner nicht verfügbar. Bitte Code manuell eingeben.');
+            return null;
+          } catch (error) {
+            useFallbackCode128Decoder = true;
+            setStatus('Scanner aktiv (Fallback für Code128). Mehrere Labels nacheinander scannen.');
+            scanLoop();
+            return null;
           }
-          return null;
         }
-        setStatus('Barcode-Scanner nicht verfügbar. Bitte Code manuell eingeben.');
+
+        useFallbackCode128Decoder = true;
+        setStatus('Scanner aktiv (Fallback für Code128). Mehrere Labels nacheinander scannen.');
+        scanLoop();
         return null;
       }).catch(function () {
         setStatus('Kamera konnte nicht geöffnet werden. Bitte Code manuell eingeben.');
@@ -222,6 +631,7 @@
     function resetState() {
       activeHandler = null;
       detector = null;
+      useFallbackCode128Decoder = false;
       lastSeen = new Map();
       if (logEl) {
         logEl.innerHTML = '';
