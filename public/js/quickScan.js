@@ -8,11 +8,11 @@
 
   function createQuickScan() {
     var modalEl = document.getElementById('quickScanModal');
-    if (!modalEl || !window.bootstrap || !window.bootstrap.Modal) {
+    if (!modalEl) {
       return null;
     }
 
-    var modal = new window.bootstrap.Modal(modalEl);
+    var modal = null;
     var videoEl = document.getElementById('quickScanVideo');
     var statusEl = document.getElementById('quickScanStatus');
     var logEl = document.getElementById('quickScanLog');
@@ -25,6 +25,17 @@
     var activeHandler = null;
     var lastSeen = new Map();
     var throttleMs = 1200;
+
+    function ensureModalInstance() {
+      if (modal) {
+        return true;
+      }
+      if (!window.bootstrap || !window.bootstrap.Modal) {
+        return false;
+      }
+      modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+      return true;
+    }
 
     function setStatus(message) {
       if (statusEl) {
@@ -168,6 +179,9 @@
     }
 
     function open(config) {
+      if (!ensureModalInstance()) {
+        return;
+      }
       resetState();
       activeHandler = config && typeof config.onCode === 'function'
         ? config.onCode
@@ -177,6 +191,9 @@
     }
 
     function close() {
+      if (!ensureModalInstance()) {
+        return;
+      }
       modal.hide();
       stopCamera();
       resetState();
