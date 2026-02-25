@@ -65,8 +65,9 @@
 
 .admin-drawer {
   background-color: #f8f9fa;
-  margin-top:60px;
-  max-width:250px;
+  top: 60px;
+  height: calc(100dvh - 60px);
+  max-width: 250px;
 }
 
 .admin-drawer-header {
@@ -80,6 +81,7 @@
 
 .admin-drawer-content {
   padding: 0.5rem 0.5rem;
+  overflow-y: auto;
 }
 
 .admin-drawer-title {
