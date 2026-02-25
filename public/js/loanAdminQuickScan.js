@@ -26,6 +26,21 @@
       return null;
     }
 
+    function collectKnownCodes() {
+      return checkboxes
+        .map(function (checkbox) {
+          var row = checkbox.closest('tr');
+          if (!row || !row.children || !row.children[1]) {
+            return '';
+          }
+          return String(row.children[1].textContent || '').trim();
+        })
+        .filter(Boolean)
+        .filter(function (value) {
+          return value !== '-';
+        });
+    }
+
     function findRowByCode(code) {
       var normalized = normalizeCode(code);
       var normalizedIdentifier = normalizeIdentifier(code);
@@ -57,19 +72,22 @@
       return null;
     }
 
-    return function handleCode(code, appendLog) {
-      var row = findRowByCode(code);
-      if (!row) {
-        appendLog('Nicht zugeordnet: ' + code, 'text-danger');
-        return;
-      }
-      var checkbox = row.querySelector('.return-item-checkbox');
-      if (checkbox) {
-        checkbox.checked = true;
-        checkbox.dispatchEvent(new Event('change'));
-      }
-      highlightRow(row);
-      appendLog('Markiert: ' + code, 'text-success');
+    return {
+      knownCodes: collectKnownCodes(),
+      handleCode: function handleCode(code, appendLog) {
+        var row = findRowByCode(code);
+        if (!row) {
+          appendLog('Nicht zugeordnet: ' + code, 'text-danger');
+          return;
+        }
+        var checkbox = row.querySelector('.return-item-checkbox');
+        if (checkbox) {
+          checkbox.checked = true;
+          checkbox.dispatchEvent(new Event('change'));
+        }
+        highlightRow(row);
+        appendLog('Markiert: ' + code, 'text-success');
+      },
     };
   }
 
@@ -77,6 +95,26 @@
     var selects = Array.from(document.querySelectorAll('#handoverForm select[name$="[assetId]"]'));
     if (!selects.length) {
       return null;
+    }
+
+    function collectKnownCodes() {
+      var values = [];
+      selects.forEach(function (select) {
+        Array.from(select.options || []).forEach(function (option) {
+          if (!option || !option.value) {
+            return;
+          }
+          var byDataset = option.getAttribute('data-scan-code');
+          if (byDataset) {
+            values.push(byDataset);
+          }
+          var byLabel = option.textContent || '';
+          if (byLabel) {
+            values.push(byLabel);
+          }
+        });
+      });
+      return values.filter(Boolean);
     }
 
     function collectUsedValues() {
@@ -114,53 +152,56 @@
         ));
     }
 
-    return function handleCode(code, appendLog) {
-      var normalizedCode = normalizeCode(code);
-      var usedValues = collectUsedValues();
-      var matched = null;
-      var matchedOption = null;
+    return {
+      knownCodes: collectKnownCodes(),
+      handleCode: function handleCode(code, appendLog) {
+        var normalizedCode = normalizeCode(code);
+        var usedValues = collectUsedValues();
+        var matched = null;
+        var matchedOption = null;
 
-      for (var i = 0; i < selects.length; i += 1) {
-        var select = selects[i];
-        for (var j = 0; j < select.options.length; j += 1) {
-          var option = select.options[j];
-          if (!optionMatchesCode(option, normalizedCode)) {
-            continue;
+        for (var i = 0; i < selects.length; i += 1) {
+          var select = selects[i];
+          for (var j = 0; j < select.options.length; j += 1) {
+            var option = select.options[j];
+            if (!optionMatchesCode(option, normalizedCode)) {
+              continue;
+            }
+            if (!select.value && !usedValues.has(option.value)) {
+              matched = select;
+              matchedOption = option;
+              break;
+            }
+            if (select.value === option.value) {
+              matched = select;
+              matchedOption = option;
+              break;
+            }
           }
-          if (!select.value && !usedValues.has(option.value)) {
-            matched = select;
-            matchedOption = option;
-            break;
-          }
-          if (select.value === option.value) {
-            matched = select;
-            matchedOption = option;
+          if (matched) {
             break;
           }
         }
-        if (matched) {
-          break;
+
+        if (!matched || !matchedOption) {
+          appendLog('Nicht zugeordnet: ' + code, 'text-danger');
+          return;
         }
-      }
 
-      if (!matched || !matchedOption) {
-        appendLog('Nicht zugeordnet: ' + code, 'text-danger');
-        return;
-      }
-
-      matched.value = matchedOption.value;
-      matched.dispatchEvent(new Event('change'));
-      var row = matched.closest('tr');
-      highlightRow(row);
-      appendLog('Zugeteilt: ' + (matchedOption.textContent || code), 'text-success');
+        matched.value = matchedOption.value;
+        matched.dispatchEvent(new Event('change'));
+        var row = matched.closest('tr');
+        highlightRow(row);
+        appendLog('Zugeteilt: ' + (matchedOption.textContent || code), 'text-success');
+      },
     };
   }
 
   function initQuickScanButtons() {
-    var returnHandler = initReturnQuickScan();
-    var handoverHandler = initHandoverQuickScan();
+    var returnScan = initReturnQuickScan();
+    var handoverScan = initHandoverQuickScan();
 
-    if (!returnHandler && !handoverHandler) {
+    if (!returnScan && !handoverScan) {
       return;
     }
 
@@ -173,12 +214,13 @@
         }
 
         var mode = button.getAttribute('data-scan-mode') || '';
-        var handler = mode === 'return' ? returnHandler : handoverHandler;
-        if (!handler) {
+        var scanConfig = mode === 'return' ? returnScan : handoverScan;
+        if (!scanConfig || typeof scanConfig.handleCode !== 'function') {
           return;
         }
         window.QuickScan.open({
-          onCode: handler,
+          onCode: scanConfig.handleCode,
+          knownCodes: Array.isArray(scanConfig.knownCodes) ? scanConfig.knownCodes : [],
         });
       });
     });

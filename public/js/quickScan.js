@@ -18,7 +18,9 @@
     '11010011100', '1100011101011',
   ];
 
+  var CODE128_START_A = 103;
   var CODE128_START_B = 104;
+  var CODE128_START_C = 105;
   var CODE128_STOP = 106;
   var CODE128_DATA_MAX = 95;
   var CODE128_NORMAL_MATCH_THRESHOLD = 0.34;
@@ -55,6 +57,94 @@
       .trim()
       .replace(/\s+/g, '')
       .toUpperCase();
+  }
+
+  function normalizeCode128Input(value) {
+    return String(value || '')
+      .split('')
+      .map(function (char) {
+        var code = char.charCodeAt(0);
+        if (code >= 32 && code <= 126) {
+          return char;
+        }
+        return ' ';
+      })
+      .join('')
+      .trim();
+  }
+
+  function encodeCode128BPattern(value) {
+    var input = normalizeCode128Input(value);
+    if (!input) {
+      return '';
+    }
+    var codes = [];
+    for (var i = 0; i < input.length; i += 1) {
+      codes.push(input.charCodeAt(i) - 32);
+    }
+
+    var checksum = CODE128_START_B;
+    for (var c = 0; c < codes.length; c += 1) {
+      checksum += codes[c] * (c + 1);
+    }
+    var checkCode = checksum % 103;
+    var sequence = [CODE128_START_B].concat(codes).concat([checkCode, CODE128_STOP]);
+    var pattern = '';
+    for (var s = 0; s < sequence.length; s += 1) {
+      pattern += CODE128_PATTERNS[sequence[s]];
+    }
+    return pattern;
+  }
+
+  function pad2(value) {
+    return String(value).padStart(2, '0');
+  }
+
+  function patternToRuns(pattern) {
+    if (!pattern) {
+      return [];
+    }
+    var runs = [];
+    var current = pattern.charAt(0);
+    var runLength = 1;
+    for (var i = 1; i < pattern.length; i += 1) {
+      if (pattern.charAt(i) === current) {
+        runLength += 1;
+        continue;
+      }
+      runs.push(runLength);
+      current = pattern.charAt(i);
+      runLength = 1;
+    }
+    runs.push(runLength);
+    return runs;
+  }
+
+  function buildKnownCode128Candidates(values) {
+    if (!Array.isArray(values)) {
+      return [];
+    }
+    var seen = new Set();
+    var candidates = [];
+    values.forEach(function (rawValue) {
+      var normalized = normalizeCode(rawValue);
+      if (!normalized || normalized === '-' || seen.has(normalized)) {
+        return;
+      }
+      seen.add(normalized);
+      var pattern = encodeCode128BPattern(normalized);
+      if (!pattern) {
+        return;
+      }
+      candidates.push({
+        raw: rawValue,
+        normalized: normalized,
+        pattern: pattern,
+        runs: patternToRuns(pattern),
+        modules: pattern.length,
+      });
+    });
+    return candidates;
   }
 
   function safeMinMax(line) {
@@ -171,6 +261,123 @@
     return { runs: runs, colors: colors };
   }
 
+  function buildRunDataFromLine(line) {
+    if (!Array.isArray(line) || line.length < 80) {
+      return null;
+    }
+
+    var minMax = safeMinMax(line);
+    if ((minMax.max - minMax.min) < 40) {
+      return null;
+    }
+    var threshold = minMax.min + ((minMax.max - minMax.min) * 0.5);
+
+    var binary = new Uint8Array(line.length);
+    for (var i = 0; i < line.length; i += 1) {
+      binary[i] = line[i] <= threshold ? 1 : 0;
+    }
+    smoothBinary(binary);
+
+    var firstBlack = 0;
+    while (firstBlack < binary.length && binary[firstBlack] === 0) {
+      firstBlack += 1;
+    }
+    if (firstBlack >= binary.length) {
+      return null;
+    }
+    var lastBlack = binary.length - 1;
+    while (lastBlack >= 0 && binary[lastBlack] === 0) {
+      lastBlack -= 1;
+    }
+    if ((lastBlack - firstBlack) < 50) {
+      return null;
+    }
+
+    var runData = buildRuns(binary, firstBlack, lastBlack);
+    if (!runData.runs.length) {
+      return null;
+    }
+    return collapseTinyRuns(runData);
+  }
+
+  function scoreCandidateRuns(observedRuns, candidateRuns, candidateModules) {
+    if (!Array.isArray(observedRuns) || !Array.isArray(candidateRuns) || observedRuns.length !== candidateRuns.length) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    var observedSum = 0;
+    for (var i = 0; i < observedRuns.length; i += 1) {
+      observedSum += observedRuns[i];
+    }
+    if (!observedSum || !candidateModules) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    var scale = observedSum / candidateModules;
+    var error = 0;
+    for (var r = 0; r < observedRuns.length; r += 1) {
+      error += Math.abs(observedRuns[r] - (candidateRuns[r] * scale));
+    }
+    return error / observedSum;
+  }
+
+  function matchKnownCode128CandidatesFromRunData(runData, knownCandidates) {
+    if (!runData || !Array.isArray(knownCandidates) || !knownCandidates.length) {
+      return null;
+    }
+    var runs = runData.runs;
+    var colors = runData.colors;
+    if (!Array.isArray(runs) || !Array.isArray(colors) || !runs.length) {
+      return null;
+    }
+
+    var best = null;
+    var threshold = 0.47;
+    for (var c = 0; c < knownCandidates.length; c += 1) {
+      var candidate = knownCandidates[c];
+      if (!candidate || !Array.isArray(candidate.runs) || !candidate.runs.length) {
+        continue;
+      }
+      var requiredLength = candidate.runs.length;
+      if (runs.length < requiredLength) {
+        continue;
+      }
+
+      for (var start = 0; start <= runs.length - requiredLength; start += 1) {
+        if (colors[start] !== 1) {
+          continue;
+        }
+        var observed = runs.slice(start, start + requiredLength);
+        var score = scoreCandidateRuns(observed, candidate.runs, candidate.modules);
+        if (score > threshold) {
+          continue;
+        }
+        if (!best || score < best.score) {
+          best = { candidate: candidate, score: score };
+        }
+      }
+    }
+    return best ? best.candidate.normalized : null;
+  }
+
+  function matchKnownCode128CandidatesFromImageData(imageData, knownCandidates) {
+    if (!imageData || !imageData.width || !imageData.height || !knownCandidates || !knownCandidates.length) {
+      return null;
+    }
+
+    var rowPercents = [0.2, 0.26, 0.32, 0.38, 0.44, 0.5, 0.56, 0.62, 0.68, 0.74, 0.8];
+    for (var r = 0; r < rowPercents.length; r += 1) {
+      var rowY = Math.max(0, Math.min(imageData.height - 1, Math.round(imageData.height * rowPercents[r])));
+      var rowLine = buildHorizontalLine(imageData, rowY);
+      var rowRunData = buildRunDataFromLine(rowLine);
+      var rowMatch = matchKnownCode128CandidatesFromRunData(rowRunData, knownCandidates);
+      if (rowMatch) {
+        return rowMatch;
+      }
+    }
+    return null;
+  }
+
   function matchRunsToSymbol(observedRuns, symbols, maxError) {
     var observedSum = 0;
     for (var i = 0; i < observedRuns.length; i += 1) {
@@ -206,11 +413,11 @@
     };
   }
 
-  function decodeCode128B(codes) {
+  function decodeCode128(codes) {
     if (!Array.isArray(codes) || codes.length < 3) {
       return null;
     }
-    if (codes[0] !== CODE128_START_B) {
+    if (codes[0] !== CODE128_START_A && codes[0] !== CODE128_START_B && codes[0] !== CODE128_START_C) {
       return null;
     }
 
@@ -226,12 +433,70 @@
     }
 
     var output = '';
+    var activeSet = codes[0];
+    var pendingShiftSet = null;
     for (var j = 0; j < dataCodes.length; j += 1) {
       var code = dataCodes[j];
+
+      if (code === 99) {
+        activeSet = CODE128_START_C;
+        pendingShiftSet = null;
+        continue;
+      }
+      if (code === 100) {
+        activeSet = CODE128_START_B;
+        pendingShiftSet = null;
+        continue;
+      }
+      if (code === 101) {
+        activeSet = CODE128_START_A;
+        pendingShiftSet = null;
+        continue;
+      }
+      if (code === 98) {
+        if (activeSet === CODE128_START_A) {
+          pendingShiftSet = CODE128_START_B;
+        } else if (activeSet === CODE128_START_B) {
+          pendingShiftSet = CODE128_START_A;
+        } else {
+          pendingShiftSet = null;
+        }
+        continue;
+      }
+      if (code === 96 || code === 97 || code === 102) {
+        pendingShiftSet = null;
+        continue;
+      }
       if (code < 0 || code > CODE128_DATA_MAX) {
         return null;
       }
-      output += String.fromCharCode(code + 32);
+
+      var codeSetForValue = pendingShiftSet || activeSet;
+      pendingShiftSet = null;
+
+      if (codeSetForValue === CODE128_START_C) {
+        output += pad2(code);
+        continue;
+      }
+
+      if (codeSetForValue === CODE128_START_A) {
+        if (code <= 63) {
+          output += String.fromCharCode(code + 32);
+        } else if (code <= 95) {
+          output += String.fromCharCode(code - 64);
+        } else {
+          return null;
+        }
+        continue;
+      }
+
+      if (codeSetForValue === CODE128_START_B) {
+        if (code <= 95) {
+          output += String.fromCharCode(code + 32);
+          continue;
+        }
+        return null;
+      }
     }
     return output || null;
   }
@@ -255,12 +520,16 @@
         normalSymbols,
         CODE128_NORMAL_MATCH_THRESHOLD
       );
-      if (!startMatch || startMatch.code !== CODE128_START_B) {
+      if (!startMatch || (
+        startMatch.code !== CODE128_START_A
+        && startMatch.code !== CODE128_START_B
+        && startMatch.code !== CODE128_START_C
+      )) {
         continue;
       }
 
       var cursor = startIndex + 6;
-      var decodedCodes = [CODE128_START_B];
+      var decodedCodes = [startMatch.code];
       var guard = 0;
 
       while (cursor + 6 <= runs.length && guard < 96) {
@@ -272,7 +541,7 @@
             CODE128_STOP_MATCH_THRESHOLD
           );
           if (stopMatch && stopMatch.code === CODE128_STOP) {
-            var value = decodeCode128B(decodedCodes);
+            var value = decodeCode128(decodedCodes);
             if (value) {
               return value;
             }
@@ -298,42 +567,10 @@
   }
 
   function decodeCode128FromLine(line) {
-    if (!Array.isArray(line) || line.length < 80) {
+    var runData = buildRunDataFromLine(line);
+    if (!runData) {
       return null;
     }
-
-    var minMax = safeMinMax(line);
-    if ((minMax.max - minMax.min) < 45) {
-      return null;
-    }
-    var threshold = minMax.min + ((minMax.max - minMax.min) * 0.5);
-
-    var binary = new Uint8Array(line.length);
-    for (var i = 0; i < line.length; i += 1) {
-      binary[i] = line[i] <= threshold ? 1 : 0;
-    }
-    smoothBinary(binary);
-
-    var firstBlack = 0;
-    while (firstBlack < binary.length && binary[firstBlack] === 0) {
-      firstBlack += 1;
-    }
-    if (firstBlack >= binary.length) {
-      return null;
-    }
-    var lastBlack = binary.length - 1;
-    while (lastBlack >= 0 && binary[lastBlack] === 0) {
-      lastBlack -= 1;
-    }
-    if ((lastBlack - firstBlack) < 60) {
-      return null;
-    }
-
-    var runData = buildRuns(binary, firstBlack, lastBlack);
-    if (!runData.runs.length) {
-      return null;
-    }
-    runData = collapseTinyRuns(runData);
     return decodeRunsAsCode128(runData);
   }
 
@@ -386,6 +623,7 @@
     var stream = null;
     var detector = null;
     var useFallbackCode128Decoder = false;
+    var knownCodeCandidates = [];
     var loopTimer = null;
     var activeHandler = null;
     var lastSeen = new Map();
@@ -446,6 +684,7 @@
       stream = null;
       detector = null;
       useFallbackCode128Decoder = false;
+      knownCodeCandidates = [];
     }
 
     function shouldAccept(code) {
@@ -515,6 +754,9 @@
       try {
         var imageData = snapshotContext.getImageData(0, 0, source.width, source.height);
         var decoded = decodeCode128FromImageData(imageData);
+        if (!decoded && knownCodeCandidates.length) {
+          decoded = matchKnownCode128CandidatesFromImageData(imageData, knownCodeCandidates);
+        }
         if (decoded) {
           handleCode(decoded);
           return;
@@ -531,6 +773,9 @@
           rotatedContext.restore();
           var rotatedImageData = rotatedContext.getImageData(0, 0, rotatedCanvas.width, rotatedCanvas.height);
           decoded = decodeCode128FromImageData(rotatedImageData);
+          if (!decoded && knownCodeCandidates.length) {
+            decoded = matchKnownCode128CandidatesFromImageData(rotatedImageData, knownCodeCandidates);
+          }
         }
         if (decoded) {
           handleCode(decoded);
@@ -682,6 +927,7 @@
       activeHandler = null;
       detector = null;
       useFallbackCode128Decoder = false;
+      knownCodeCandidates = [];
       lastSeen = new Map();
       if (logEl) {
         logEl.innerHTML = '';
@@ -699,6 +945,9 @@
       activeHandler = config && typeof config.onCode === 'function'
         ? config.onCode
         : function () {};
+      knownCodeCandidates = buildKnownCode128Candidates(
+        config && Array.isArray(config.knownCodes) ? config.knownCodes : []
+      );
       modal.show();
       startCamera();
     }
