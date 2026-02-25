@@ -386,13 +386,14 @@
     var stream = null;
     var detector = null;
     var useFallbackCode128Decoder = false;
-    var isPortraitFeed = false;
     var loopTimer = null;
     var activeHandler = null;
     var lastSeen = new Map();
     var throttleMs = 1200;
     var snapshotCanvas = document.createElement('canvas');
     var snapshotContext = snapshotCanvas.getContext('2d');
+    var rotatedCanvas = document.createElement('canvas');
+    var rotatedContext = rotatedCanvas.getContext('2d');
 
     function ensureModalInstance() {
       if (modal) {
@@ -436,7 +437,6 @@
       if (videoEl) {
         videoEl.pause();
         videoEl.srcObject = null;
-        videoEl.classList.remove('quickscan-video-portrait');
       }
       if (stream) {
         stream.getTracks().forEach(function (track) {
@@ -446,7 +446,6 @@
       stream = null;
       detector = null;
       useFallbackCode128Decoder = false;
-      isPortraitFeed = false;
     }
 
     function shouldAccept(code) {
@@ -487,31 +486,15 @@
       }
 
       var maxWidth = 1600;
-      var longestEdge = Math.max(sourceWidth, sourceHeight);
-      var scale = longestEdge > maxWidth ? (maxWidth / longestEdge) : 1;
-      var isPortraitSource = sourceHeight > sourceWidth;
-      var targetWidth = Math.max(1, Math.round((isPortraitSource ? sourceHeight : sourceWidth) * scale));
-      var targetHeight = Math.max(1, Math.round((isPortraitSource ? sourceWidth : sourceHeight) * scale));
+      var scale = sourceWidth > maxWidth ? (maxWidth / sourceWidth) : 1;
+      var targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+      var targetHeight = Math.max(1, Math.round(sourceHeight * scale));
 
       if (snapshotCanvas.width !== targetWidth || snapshotCanvas.height !== targetHeight) {
         snapshotCanvas.width = targetWidth;
         snapshotCanvas.height = targetHeight;
       }
       return true;
-    }
-
-    function updateVideoOrientationState() {
-      if (!videoEl) {
-        return;
-      }
-      var sourceWidth = videoEl.videoWidth || 0;
-      var sourceHeight = videoEl.videoHeight || 0;
-      isPortraitFeed = sourceHeight > sourceWidth;
-      if (isPortraitFeed) {
-        videoEl.classList.add('quickscan-video-portrait');
-      } else {
-        videoEl.classList.remove('quickscan-video-portrait');
-      }
     }
 
     function getDetectionSource() {
@@ -521,21 +504,7 @@
       if (!ensureSnapshotSize()) {
         return videoEl;
       }
-      if (isPortraitFeed) {
-        snapshotContext.save();
-        snapshotContext.translate(snapshotCanvas.width * 0.5, snapshotCanvas.height * 0.5);
-        snapshotContext.rotate(Math.PI * 0.5);
-        snapshotContext.drawImage(
-          videoEl,
-          -snapshotCanvas.height * 0.5,
-          -snapshotCanvas.width * 0.5,
-          snapshotCanvas.height,
-          snapshotCanvas.width
-        );
-        snapshotContext.restore();
-      } else {
-        snapshotContext.drawImage(videoEl, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
-      }
+      snapshotContext.drawImage(videoEl, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
       return snapshotCanvas;
     }
 
@@ -546,6 +515,23 @@
       try {
         var imageData = snapshotContext.getImageData(0, 0, source.width, source.height);
         var decoded = decodeCode128FromImageData(imageData);
+        if (decoded) {
+          handleCode(decoded);
+          return;
+        }
+        if (rotatedContext) {
+          if (rotatedCanvas.width !== source.height || rotatedCanvas.height !== source.width) {
+            rotatedCanvas.width = source.height;
+            rotatedCanvas.height = source.width;
+          }
+          rotatedContext.save();
+          rotatedContext.translate(rotatedCanvas.width * 0.5, rotatedCanvas.height * 0.5);
+          rotatedContext.rotate(Math.PI * 0.5);
+          rotatedContext.drawImage(source, -source.width * 0.5, -source.height * 0.5, source.width, source.height);
+          rotatedContext.restore();
+          var rotatedImageData = rotatedContext.getImageData(0, 0, rotatedCanvas.width, rotatedCanvas.height);
+          decoded = decodeCode128FromImageData(rotatedImageData);
+        }
         if (decoded) {
           handleCode(decoded);
         }
@@ -638,9 +624,7 @@
         stream = mediaStream;
         if (videoEl) {
           videoEl.srcObject = stream;
-          return videoEl.play().then(function () {
-            updateVideoOrientationState();
-          });
+          return videoEl.play();
         }
         return null;
       }).then(function () {
@@ -747,10 +731,6 @@
         handleCode(manualInputEl.value);
         manualInputEl.value = '';
       });
-    }
-
-    if (videoEl) {
-      videoEl.addEventListener('loadedmetadata', updateVideoOrientationState);
     }
 
     return {
