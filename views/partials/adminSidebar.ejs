@@ -14,10 +14,10 @@
     <nav class="nav flex-column">
 
     <!-- Manage LendingLocation -->
-    <% if (sidebarCanAny(['openinghours.manage', 'lendinglocations.manage', 'system.admin']) || (sidebarCan('admin.access') && sidebarCan('loan.manage'))) { %>
+    <% if (sidebarCanAny(['openinghours.manage', 'lendinglocations.manage', 'system.admin'])) { %>
       <div class="mb-3">
         <div class="text-uppercase small text-muted fw-semibold mt-2"><%= tr('admin.sidebar.lending_management', 'Ausleih Verwaltung') %></div>
-        <% if (activeLendingLocation) { %>
+        <% if (activeLendingLocation && (sidebarCan('lendinglocations.manage') || sidebarCan('system.admin'))) { %>
           <a class="nav-link" href="/system/lending-locations/<%= activeLendingLocation.id %>/edit"><%= tr('admin.sidebar.settings', 'Einstellungen') %></a>
         <% } else if (sidebarCan('system.admin')) { %>
           <a class="nav-link" href="/system/lending-locations"><%= tr('admin.sidebar.settings', 'Einstellungen') %></a>
@@ -25,7 +25,7 @@
         <% if (sidebarCan('openinghours.manage')) { %>
           <a class="nav-link" href="/admin/opening-hours"><%= tr('admin.sidebar.opening_hours', 'Öffnungszeiten') %></a>
         <% } %>
-        <% if (sidebarCan('admin.access') && sidebarCan('loan.manage')) { %>
+        <% if (sidebarCan('lendinglocations.manage') || sidebarCan('system.admin')) { %>
           <a class="nav-link" href="/admin/lending-user-roles"><%= tr('admin.sidebar.lending_roles', 'Benutzerrolle (Ausleihe)') %></a>
         <% } %>
       </div>
@@ -51,6 +51,7 @@
     <% if (sidebarCan('loan.manage')) { %>
       <div class="mb-3">
       <div class="text-uppercase small text-muted fw-semibold mt-2"><%= tr('admin.sidebar.loans', 'Ausleihe') %></div>
+      <a class="nav-link" href="/admin/loans/new"><%= tr('admin.sidebar.new_loan', 'Neue Ausleihe') %></a>
       <a class="nav-link" href="/admin/loans"><%= tr('admin.sidebar.active_loans', 'Aktive Ausleihen') %></a>
       <a class="nav-link" href="/admin/reservations"><%= tr('admin.sidebar.open_reservations', 'Offene Reservierungen') %></a>
       <a class="nav-link" href="/admin/loans?status=overdue"><%= tr('admin.sidebar.overdue_returns', 'Überfällige Rückgaben') %></a>

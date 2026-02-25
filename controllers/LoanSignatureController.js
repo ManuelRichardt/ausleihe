@@ -8,6 +8,31 @@ class LoanSignatureController {
     this.signatureService = new SignatureService(models);
   }
 
+  resolveSignatureType(rawType) {
+    return String(rawType || '').toLowerCase() === 'return' ? 'return' : 'handover';
+  }
+
+  resolveUserDisplayName(user) {
+    if (!user) {
+      return '';
+    }
+    return [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || user.email || '';
+  }
+
+  resolveSignedByNameForType(req, loan, signatureType) {
+    if (signatureType === 'handover') {
+      const borrowerName = this.resolveUserDisplayName(loan ? loan.user : null);
+      if (borrowerName) {
+        return borrowerName;
+      }
+    }
+    const actorName = this.resolveUserDisplayName(req.user);
+    if (actorName) {
+      return actorName;
+    }
+    return signatureType === 'handover' ? 'Ausleihender' : 'Rücknahme';
+  }
+
   resolveSignedAt(rawSignedAt) {
     const now = new Date();
     if (!rawSignedAt) {
@@ -39,11 +64,17 @@ class LoanSignatureController {
   async renderSignPage(req, res, next) {
     try {
       const loan = await services.loanService.getById(req.params.id);
+      const resolvedSignatureType = this.resolveSignatureType(req.query.type);
       const loanBasePath = this.resolveLoanBasePath(req, loan);
+      const handoverSignerName = this.resolveSignedByNameForType(req, loan, 'handover');
+      const returnSignerName = this.resolveSignedByNameForType(req, loan, 'return');
       return renderPage(res, 'loans/sign', req, {
         loan,
         loanBasePath,
-        signatureType: req.query.type || 'handover',
+        signatureType: resolvedSignatureType,
+        signedByNameDefault: this.resolveSignedByNameForType(req, loan, resolvedSignatureType),
+        handoverSignerName,
+        returnSignerName,
         breadcrumbs: [
           { label: 'Ausleihen', href: loanBasePath },
           { label: 'Signatur', href: `/loans/${loan.id}/sign` },
@@ -59,33 +90,39 @@ class LoanSignatureController {
 
   async storeSignature(req, res, next) {
     try {
+      const loan = await services.loanService.getById(req.body.loanId || req.params.id);
+      const signatureType = this.resolveSignatureType(req.body.signatureType);
+      const signedByName = this.resolveSignedByNameForType(req, loan, signatureType);
       const payload = {
-        loanId: req.body.loanId || req.params.id,
+        loanId: loan.id,
         userId: req.user ? req.user.id : null,
-        signatureType: req.body.signatureType,
-        signedByName: req.body.signedByName,
+        signatureType,
+        signedByName,
         signedAt: this.resolveSignedAt(req.body.signedAt),
         base64: req.body.signatureBase64,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
         metadata: {
-          loanId: req.body.loanId || req.params.id,
+          loanId: loan.id,
         },
       };
       await this.signatureService.createFromBase64(payload);
       if (typeof req.flash === 'function') {
         req.flash('success', 'Signatur gespeichert');
       }
-      const loan = await services.loanService.getById(payload.loanId);
       return res.redirect(this.resolveLoanBasePath(req, loan));
     } catch (err) {
       if (err && err.message && err.message.toLowerCase().includes('signature')) {
         const loan = await services.loanService.getById(req.params.id);
+        const resolvedSignatureType = this.resolveSignatureType(req.body.signatureType);
         res.status(422);
         return renderPage(res, 'loans/sign', req, {
           loan,
           loanBasePath: this.resolveLoanBasePath(req, loan),
-          signatureType: req.body.signatureType || 'handover',
+          signatureType: resolvedSignatureType,
+          signedByNameDefault: this.resolveSignedByNameForType(req, loan, resolvedSignatureType),
+          handoverSignerName: this.resolveSignedByNameForType(req, loan, 'handover'),
+          returnSignerName: this.resolveSignedByNameForType(req, loan, 'return'),
           errors: { signatureBase64: err.message },
           formData: req.body,
         });

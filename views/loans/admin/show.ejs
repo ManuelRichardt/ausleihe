@@ -98,7 +98,7 @@
           <button type="submit" class="btn btn-outline-primary flex-fill" title="Hinzufügen" <%= loan.status !== 'reserved' ? 'disabled' : '' %>>
             <i class="bi bi-plus-lg"></i>
           </button>
-          <button type="button" class="btn btn-outline-secondary flex-fill" title="Quickscan">
+          <button type="button" class="btn btn-outline-secondary flex-fill js-quickscan-open" data-scan-mode="handover" title="Quickscan">
             <i class="bi bi-upc-scan"></i>
           </button>
         </div>
@@ -107,8 +107,8 @@
   </div>
 
   <div class="d-flex flex-wrap gap-2 justify-content-end mb-2">
-    <button type="button" class="btn btn-outline-secondary"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
-    <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/sign"><i class="bi bi-pen me-1"></i>Unterschreiben</a>
+    <button type="button" class="btn btn-outline-secondary js-quickscan-open" data-scan-mode="handover"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
+    <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/sign?type=handover"><i class="bi bi-pen me-1"></i>Unterschreiben</a>
     <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/print?format=pdf" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Ausleihzettel drucken</a>
     <% if (loan.status === 'handed_over' || loan.status === 'overdue') { %>
       <a class="btn btn-outline-secondary" href="/admin/loans/<%= loan.id %>/return"><i class="bi bi-arrow-return-left me-1"></i>Rücknahme</a>
@@ -145,7 +145,7 @@
                     <select class="form-select form-select-sm" name="items[<%= index %>][assetId]">
                       <option value="">Bitte wählen</option>
                       <% assignable.forEach(function (asset) { %>
-                        <option value="<%= asset.id %>" <%= item.assetId === asset.id ? 'selected' : '' %>><%= asset.inventoryNumber || asset.serialNumber || asset.id %></option>
+                        <option value="<%= asset.id %>" data-scan-code="<%= asset.inventoryNumber || asset.serialNumber || asset.id %>" <%= item.assetId === asset.id ? 'selected' : '' %>><%= asset.inventoryNumber || asset.serialNumber || asset.id %></option>
                       <% }) %>
                     </select>
                   <% } else { %>
@@ -187,8 +187,8 @@
   </form>
 
   <div class="d-flex flex-wrap gap-2 justify-content-end mt-2">
-    <button type="button" class="btn btn-outline-secondary"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
-    <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/sign"><i class="bi bi-pen me-1"></i>Unterschreiben</a>
+    <button type="button" class="btn btn-outline-secondary js-quickscan-open" data-scan-mode="handover"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
+    <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/sign?type=handover"><i class="bi bi-pen me-1"></i>Unterschreiben</a>
     <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/print?format=pdf" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Ausleihzettel drucken</a>
     <% if (loan.status === 'handed_over' || loan.status === 'overdue') { %>
       <a class="btn btn-outline-secondary" href="/admin/loans/<%= loan.id %>/return"><i class="bi bi-arrow-return-left me-1"></i>Rücknahme</a>
@@ -323,4 +323,7 @@
     </div>
   </div>
 </section>
+<%- include('../../partials/quickScanModal') %>
+<script src="/js/quickScan.js"></script>
+<script src="/js/loanAdminQuickScan.js"></script>
 <script src="/js/loanModelSearch.js"></script>

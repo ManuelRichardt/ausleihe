@@ -76,6 +76,7 @@ class LoanService {
       reservedUntil: data.reservedUntil,
       notes: data.notes || null,
       items: Array.isArray(data.items) ? data.items : [],
+      skipOpeningHours: Boolean(data.skipOpeningHours),
     };
   }
 
@@ -408,12 +409,14 @@ class LoanService {
       throw new Error('At least one item is required');
     }
 
-    await assertOpenForRange(
-      this.models,
-      reservationCommand.lendingLocationId,
-      reservationCommand.reservedFrom,
-      reservationCommand.reservedUntil
-    );
+    if (!reservationCommand.skipOpeningHours) {
+      await assertOpenForRange(
+        this.models,
+        reservationCommand.lendingLocationId,
+        reservationCommand.reservedFrom,
+        reservationCommand.reservedUntil
+      );
+    }
   }
 
   async #reserveItemByKindOrTrackingType(item, reservationCommand, reservationContext) {

@@ -50,7 +50,7 @@
   </div>
 
   <div class="d-flex flex-wrap gap-2 justify-content-end mb-2">
-    <button type="button" class="btn btn-outline-secondary"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
+    <button type="button" class="btn btn-outline-secondary js-quickscan-open" data-scan-mode="return"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
     <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/print?format=pdf" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Ausleihzettel drucken</a>
     <button type="submit" form="returnItemsForm" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>Ausgewählte zurücknehmen</button>
   </div>
@@ -139,9 +139,12 @@
   </form>
 
   <div class="d-flex flex-wrap gap-2 justify-content-end mt-2">
-    <button type="button" class="btn btn-outline-secondary"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
+    <button type="button" class="btn btn-outline-secondary js-quickscan-open" data-scan-mode="return"><i class="bi bi-upc-scan me-1"></i>Quickscan</button>
     <a class="btn btn-outline-primary" href="/loans/<%= loan.id %>/print?format=pdf" target="_blank" rel="noopener"><i class="bi bi-printer me-1"></i>Ausleihzettel drucken</a>
     <button type="submit" form="returnItemsForm" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>Ausgewählte zurücknehmen</button>
   </div>
 </section>
+<%- include('../../partials/quickScanModal') %>
+<script src="/js/quickScan.js"></script>
+<script src="/js/loanAdminQuickScan.js"></script>
 <script src="/js/loanReturnSignature.js"></script>

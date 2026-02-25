@@ -3,8 +3,10 @@
   const safeLoan = (typeof loan !== 'undefined' && loan) ? loan : { id: '' };
   const safeLoanBasePath = (typeof loanBasePath !== 'undefined' && loanBasePath) ? loanBasePath : '/loans/' + safeLoan.id;
   const safeCsrf = (typeof csrfToken !== 'undefined' && csrfToken) ? csrfToken : '';
-  const currentUser = (typeof user !== 'undefined' && user) ? user : null;
-  const defaultName = currentUser ? [currentUser.firstName, currentUser.lastName].filter(Boolean).join(' ') || currentUser.username : '';
+  const safeSignatureType = (typeof signatureType !== 'undefined' && signatureType) ? signatureType : 'handover';
+  const safeSignedByNameDefault = (typeof signedByNameDefault !== 'undefined' && signedByNameDefault) ? signedByNameDefault : '';
+  const safeHandoverSignerName = (typeof handoverSignerName !== 'undefined' && handoverSignerName) ? handoverSignerName : safeSignedByNameDefault;
+  const safeReturnSignerName = (typeof returnSignerName !== 'undefined' && returnSignerName) ? returnSignerName : safeSignedByNameDefault;
   const submittedSignedAt = (typeof formData !== 'undefined' && formData && formData.signedAt) ? formData.signedAt : '';
   const signedAtSource = submittedSignedAt || new Date();
   const signedAtDate = signedAtSource instanceof Date ? signedAtSource : new Date(signedAtSource);
@@ -29,6 +31,7 @@
       <div class="row g-3">
         <div class="col-md-6">
           <%- include('../partials/forms/select', {
+            id: 'signatureType',
             name: 'signatureType',
             label: 'Signaturtyp',
             required: true,
@@ -36,7 +39,7 @@
               { value: 'handover', label: 'Uebergabe' },
               { value: 'return', label: 'Rueckgabe' }
             ],
-            value: (typeof formData !== 'undefined' && formData && formData.signatureType) ? formData.signatureType : signatureType
+            value: safeSignatureType
           }) %>
         </div>
         <div class="col-md-6">
@@ -49,7 +52,9 @@
           }) %>
         </div>
         <div class="col-12">
-          <%- include('../partials/forms/input', { name: 'signedByName', label: 'Name', value: ((typeof formData !== 'undefined' && formData && formData.signedByName) ? formData.signedByName : '') || defaultName, required: true }) %>
+          <%- include('../partials/forms/input', { id: 'signedByName', name: 'signedByName', label: 'Name', value: safeSignedByNameDefault, required: true, readonly: true, helpText: 'Der Name wird abhängig vom Signaturtyp automatisch gesetzt.' }) %>
+          <input type="hidden" id="handoverSignerName" value="<%= safeHandoverSignerName %>">
+          <input type="hidden" id="returnSignerName" value="<%= safeReturnSignerName %>">
         </div>
         <div class="col-12">
           <label for="signatureCanvas" class="form-label">Unterschrift</label>

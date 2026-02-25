@@ -8,6 +8,118 @@ class LoanPortalService {
     this.assetInstanceService = assetInstanceService;
   }
 
+  #parseDateInput(value) {
+    if (!value) {
+      return null;
+    }
+    const parsed = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    return parsed;
+  }
+
+  #normalizeSelectedItems(items) {
+    const rawItems = Array.isArray(items) ? items : [];
+    const itemMap = new Map();
+    rawItems.forEach((entry) => {
+      if (!entry) {
+        return;
+      }
+      const assetId = String(entry.assetId || entry.id || '').trim();
+      if (!assetId) {
+        return;
+      }
+      if (!itemMap.has(assetId)) {
+        itemMap.set(assetId, {
+          assetId,
+          quantity: 1,
+        });
+      }
+    });
+    return Array.from(itemMap.values());
+  }
+
+  #buildGuestUsername(firstName, lastName, email) {
+    const source = [firstName, lastName, email]
+      .filter(Boolean)
+      .join('_')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 40);
+    const base = source || 'gast';
+    return `guest_${base}`;
+  }
+
+  async #resolveGuestUserId(payload) {
+    const { User, sequelize } = this.models;
+    const { Op } = this.models.Sequelize;
+    const firstName = String(payload.guestFirstName || '').trim();
+    const lastName = String(payload.guestLastName || '').trim();
+    const email = String(payload.guestEmail || '').trim().toLowerCase();
+    if (!firstName || !lastName || !email) {
+      throw new Error('Vorname, Nachname und E-Mail sind erforderlich');
+    }
+
+    const existingByEmail = await User.findOne({
+      where: sequelize.where(sequelize.fn('LOWER', sequelize.col('email')), {
+        [Op.eq]: email,
+      }),
+      paranoid: false,
+    });
+    if (existingByEmail) {
+      if (existingByEmail.deletedAt) {
+        await existingByEmail.restore();
+      }
+      return {
+        userId: existingByEmail.id,
+        createdUserId: null,
+      };
+    }
+
+    const baseUsername = this.#buildGuestUsername(firstName, lastName, email);
+    let username = baseUsername;
+    let counter = 0;
+    while (counter < 100) {
+      const existingByUsername = await User.findOne({
+        where: sequelize.where(sequelize.fn('LOWER', sequelize.col('username')), {
+          [Op.eq]: username.toLowerCase(),
+        }),
+        paranoid: false,
+      });
+      if (!existingByUsername) {
+        break;
+      }
+      counter += 1;
+      username = `${baseUsername}_${counter}`;
+    }
+
+    const created = await User.create({
+      username,
+      email,
+      firstName,
+      lastName,
+      password: null,
+      isActive: false,
+    });
+    return {
+      userId: created.id,
+      createdUserId: created.id,
+    };
+  }
+
+  async #resolveLoanUser(payload) {
+    const userId = String(payload.userId || '').trim();
+    if (userId) {
+      return {
+        userId,
+        createdUserId: null,
+      };
+    }
+    return this.#resolveGuestUserId(payload);
+  }
+
   #includes(options = {}) {
     const include = [
       { model: this.models.LendingLocation, as: 'lendingLocation' },
@@ -196,6 +308,39 @@ class LoanPortalService {
     };
   }
 
+  async createForAdmin(lendingLocationId, payload = {}) {
+    const reservedFrom = this.#parseDateInput(payload.reservedFrom);
+    const reservedUntil = this.#parseDateInput(payload.reservedUntil);
+    const items = this.#normalizeSelectedItems(payload.items);
+    if (!reservedFrom || !reservedUntil) {
+      throw new Error('Von/Bis ist erforderlich');
+    }
+    if (reservedUntil <= reservedFrom) {
+      throw new Error('Bis muss nach Von liegen');
+    }
+    if (!items.length) {
+      throw new Error('Mindestens ein Asset ist erforderlich');
+    }
+
+    const { userId, createdUserId } = await this.#resolveLoanUser(payload);
+    try {
+      return await this.loanService.createReservation({
+        userId,
+        lendingLocationId,
+        reservedFrom,
+        reservedUntil,
+        notes: payload.notes || null,
+        items,
+        skipOpeningHours: true,
+      });
+    } catch (err) {
+      if (createdUserId) {
+        await this.models.User.destroy({ where: { id: createdUserId } });
+      }
+      throw err;
+    }
+  }
+
   async handOver(loanId, lendingLocationId, payload) {
     await this.getForAdmin(loanId, lendingLocationId);
     return this.loanService.handOverLoan(loanId, payload);
@@ -244,6 +389,86 @@ class LoanPortalService {
       name: model.name,
       manufacturerName: model.manufacturer ? model.manufacturer.name : '',
       categoryName: model.category ? model.category.name : '',
+    }));
+  }
+
+  async searchUsers(query) {
+    const q = String(query || '').trim();
+    if (!q || q.length < 2) {
+      return [];
+    }
+    const users = await this.models.User.findAll({
+      where: {
+        isActive: true,
+        [this.models.Sequelize.Op.and]: [
+          this.models.sequelize.where(
+            this.models.sequelize.fn(
+              'CONCAT',
+              this.models.sequelize.fn(
+                'LOWER',
+                this.models.sequelize.fn('COALESCE', this.models.sequelize.col('first_name'), '')
+              ),
+              ' ',
+              this.models.sequelize.fn(
+                'LOWER',
+                this.models.sequelize.fn('COALESCE', this.models.sequelize.col('last_name'), '')
+              ),
+              ' ',
+              this.models.sequelize.fn(
+                'LOWER',
+                this.models.sequelize.fn('COALESCE', this.models.sequelize.col('username'), '')
+              ),
+              ' ',
+              this.models.sequelize.fn(
+                'LOWER',
+                this.models.sequelize.fn('COALESCE', this.models.sequelize.col('email'), '')
+              )
+            ),
+            { [this.models.Sequelize.Op.like]: `%${q.toLowerCase()}%` }
+          ),
+        ],
+      },
+      order: [['firstName', 'ASC'], ['lastName', 'ASC'], ['username', 'ASC']],
+      limit: 12,
+    });
+    return users.map((user) => ({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      label: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username,
+    }));
+  }
+
+  async searchAssets(lendingLocationId, query) {
+    const q = String(query || '').trim();
+    if (!q || q.length < 1) {
+      return [];
+    }
+    const assets = await this.assetInstanceService.searchAssets(
+      {
+        lendingLocationId,
+        query: q,
+        isActive: true,
+      },
+      {
+        limit: 20,
+        order: [['inventoryNumber', 'ASC'], ['serialNumber', 'ASC']],
+      }
+    );
+    return assets.map((asset) => ({
+      id: asset.id,
+      inventoryNumber: asset.inventoryNumber || '',
+      serialNumber: asset.serialNumber || '',
+      modelId: asset.assetModelId,
+      modelName: asset.model ? asset.model.name : '',
+      manufacturerName: asset.model && asset.model.manufacturer ? asset.model.manufacturer.name : '',
+      label: [
+        asset.inventoryNumber || asset.serialNumber || asset.id,
+        asset.model ? asset.model.name : null,
+        asset.model && asset.model.manufacturer ? asset.model.manufacturer.name : null,
+      ].filter(Boolean).join(' — '),
     }));
   }
 

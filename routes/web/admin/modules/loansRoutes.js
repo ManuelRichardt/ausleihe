@@ -35,6 +35,26 @@ module.exports = function registerAdminLoanRoutes(routeContext) {
     controllers.loanController.index.bind(controllers.loanController)
   );
   router.get(
+    '/admin/loans/new',
+    ...middlewareStacks.loanScopedLocation(),
+    controllers.loanController.new.bind(controllers.loanController)
+  );
+  router.post(
+    '/admin/loans/new',
+    ...middlewareStacks.loanScopedLocation(),
+    controllers.loanController.create.bind(controllers.loanController)
+  );
+  router.get(
+    '/admin/loans/users/search',
+    ...middlewareStacks.loanScopedLocation(),
+    controllers.loanController.searchUsers.bind(controllers.loanController)
+  );
+  router.get(
+    '/admin/loans/assets/search',
+    ...middlewareStacks.loanScopedLocation(),
+    controllers.loanController.searchAssets.bind(controllers.loanController)
+  );
+  router.get(
     '/admin/loans/:id',
     ...withLoanScopePermission(controllers.loanController.show.bind(controllers.loanController))
   );

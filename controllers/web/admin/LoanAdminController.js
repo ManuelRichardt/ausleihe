@@ -26,6 +26,216 @@ class LoanAdminController {
     this.signatureService = new SignatureService(models);
   }
 
+  buildNewLoanDefaults() {
+    const now = new Date();
+    const start = new Date(now);
+    start.setMinutes(0, 0, 0);
+    const end = new Date(start);
+    end.setHours(end.getHours() + 1);
+    return {
+      borrowerType: 'existing',
+      userId: '',
+      borrowerQuery: '',
+      guestFirstName: '',
+      guestLastName: '',
+      guestEmail: '',
+      reservedFrom: start.toISOString().slice(0, 16),
+      reservedUntil: end.toISOString().slice(0, 16),
+      notes: '',
+    };
+  }
+
+  parseSelectedItems(raw) {
+    if (Array.isArray(raw)) {
+      return raw
+        .map((entry) => {
+          if (!entry) {
+            return null;
+          }
+          if (typeof entry === 'string') {
+            return { assetId: entry };
+          }
+          if (typeof entry === 'object') {
+            return {
+              assetId: entry.assetId || entry.id || null,
+            };
+          }
+          return null;
+        })
+        .filter(Boolean)
+        .filter((entry) => entry.assetId);
+    }
+    if (raw && typeof raw === 'object') {
+      const assetId = raw.assetId || raw.id || null;
+      return assetId ? [{ assetId }] : [];
+    }
+    if (!raw) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  parseAssetIds(rawAssetIds) {
+    if (!rawAssetIds) {
+      return [];
+    }
+    const values = Array.isArray(rawAssetIds) ? rawAssetIds : [rawAssetIds];
+    return values
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean)
+      .map((assetId) => ({ assetId }));
+  }
+
+  validateCreateLoanInput(formData, selectedItems) {
+    const errors = {};
+    if (!formData.reservedFrom) {
+      errors.reservedFrom = 'Von ist erforderlich';
+    }
+    if (!formData.reservedUntil) {
+      errors.reservedUntil = 'Bis ist erforderlich';
+    }
+    const fromDate = formData.reservedFrom ? new Date(formData.reservedFrom) : null;
+    const untilDate = formData.reservedUntil ? new Date(formData.reservedUntil) : null;
+    if (fromDate && untilDate && !Number.isNaN(fromDate.getTime()) && !Number.isNaN(untilDate.getTime())) {
+      if (untilDate <= fromDate) {
+        errors.reservedUntil = 'Bis muss nach Von liegen';
+      }
+    }
+
+    if (formData.borrowerType === 'guest') {
+      if (!formData.guestFirstName) {
+        errors.guestFirstName = 'Vorname ist erforderlich';
+      }
+      if (!formData.guestLastName) {
+        errors.guestLastName = 'Nachname ist erforderlich';
+      }
+      if (!formData.guestEmail) {
+        errors.guestEmail = 'E-Mail ist erforderlich';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.guestEmail)) {
+        errors.guestEmail = 'E-Mail ist ungültig';
+      }
+    } else if (!formData.userId) {
+      errors.userId = 'Bitte Benutzer auswählen';
+    }
+
+    if (!selectedItems.length) {
+      errors.selectedAssets = 'Bitte mindestens ein Asset hinzufügen';
+    }
+
+    return errors;
+  }
+
+  async new(req, res, next) {
+    try {
+      return renderPage(res, 'loans/admin/new', req, {
+        pageTitle: 'Ausleihe erstellen',
+        breadcrumbs: [
+          { label: 'Admin', href: '/admin/assets' },
+          { label: 'Ausleihen', href: '/admin/loans' },
+          { label: 'Neue Ausleihe', href: '/admin/loans/new' },
+        ],
+        formData: this.buildNewLoanDefaults(),
+        selectedAssets: [],
+        errors: {},
+      });
+    } catch (err) {
+      return handleError(res, next, req, err);
+    }
+  }
+
+  async create(req, res, next) {
+    try {
+      const formData = {
+        borrowerType: String(req.body.borrowerType || 'existing') === 'guest' ? 'guest' : 'existing',
+        userId: String(req.body.userId || '').trim(),
+        borrowerQuery: String(req.body.borrowerQuery || '').trim(),
+        guestFirstName: String(req.body.guestFirstName || '').trim(),
+        guestLastName: String(req.body.guestLastName || '').trim(),
+        guestEmail: String(req.body.guestEmail || '').trim(),
+        reservedFrom: String(req.body.reservedFrom || '').trim(),
+        reservedUntil: String(req.body.reservedUntil || '').trim(),
+        notes: String(req.body.notes || '').trim(),
+      };
+      let selectedAssets = this.parseSelectedItems(req.body.selectedAssetsJson);
+      if (!selectedAssets.length) {
+        selectedAssets = this.parseAssetIds(req.body.assetIds);
+      }
+      const errors = this.validateCreateLoanInput(formData, selectedAssets);
+      if (Object.keys(errors).length) {
+        res.status(422);
+        return renderPage(res, 'loans/admin/new', req, {
+          pageTitle: 'Ausleihe erstellen',
+          breadcrumbs: [
+            { label: 'Admin', href: '/admin/assets' },
+            { label: 'Ausleihen', href: '/admin/loans' },
+            { label: 'Neue Ausleihe', href: '/admin/loans/new' },
+          ],
+          formData,
+          selectedAssets,
+          errors,
+        });
+      }
+
+      const loan = await services.loanPortalService.createForAdmin(req.lendingLocationId, {
+        userId: formData.borrowerType === 'existing' ? formData.userId : null,
+        guestFirstName: formData.borrowerType === 'guest' ? formData.guestFirstName : null,
+        guestLastName: formData.borrowerType === 'guest' ? formData.guestLastName : null,
+        guestEmail: formData.borrowerType === 'guest' ? formData.guestEmail : null,
+        reservedFrom: formData.reservedFrom,
+        reservedUntil: formData.reservedUntil,
+        notes: formData.notes || null,
+        items: selectedAssets.map((entry) => ({
+          assetId: entry.assetId || entry.id,
+        })),
+      });
+
+      if (typeof req.flash === 'function') {
+        req.flash('success', 'Ausleihe wurde erstellt.');
+      }
+      return res.redirect(`/admin/loans/${loan.id}`);
+    } catch (err) {
+      const formData = {
+        borrowerType: String(req.body.borrowerType || 'existing') === 'guest' ? 'guest' : 'existing',
+        userId: String(req.body.userId || '').trim(),
+        borrowerQuery: String(req.body.borrowerQuery || '').trim(),
+        guestFirstName: String(req.body.guestFirstName || '').trim(),
+        guestLastName: String(req.body.guestLastName || '').trim(),
+        guestEmail: String(req.body.guestEmail || '').trim(),
+        reservedFrom: String(req.body.reservedFrom || '').trim(),
+        reservedUntil: String(req.body.reservedUntil || '').trim(),
+        notes: String(req.body.notes || '').trim(),
+      };
+      let selectedAssets = this.parseSelectedItems(req.body.selectedAssetsJson);
+      if (!selectedAssets.length) {
+        selectedAssets = this.parseAssetIds(req.body.assetIds);
+      }
+      const message = err && err.message ? err.message : 'Ausleihe konnte nicht erstellt werden';
+      const status = err && (err.status || err.statusCode);
+      if (!status || status === 422) {
+        res.status(422);
+        return renderPage(res, 'loans/admin/new', req, {
+          pageTitle: 'Ausleihe erstellen',
+          breadcrumbs: [
+            { label: 'Admin', href: '/admin/assets' },
+            { label: 'Ausleihen', href: '/admin/loans' },
+            { label: 'Neue Ausleihe', href: '/admin/loans/new' },
+          ],
+          formData,
+          selectedAssets,
+          errors: {
+            form: message,
+          },
+        });
+      }
+      return handleError(res, next, req, err);
+    }
+  }
+
   resolveSignedAt(rawSignedAt) {
     const now = new Date();
     if (!rawSignedAt) {
@@ -275,6 +485,24 @@ class LoanAdminController {
   async searchModels(req, res, next) {
     try {
       const results = await services.loanPortalService.searchModels(req.lendingLocationId, req.query.q);
+      return res.json({ data: results, error: null });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  async searchUsers(req, res, next) {
+    try {
+      const results = await services.loanPortalService.searchUsers(req.query.q);
+      return res.json({ data: results, error: null });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
+  async searchAssets(req, res, next) {
+    try {
+      const results = await services.loanPortalService.searchAssets(req.lendingLocationId, req.query.q);
       return res.json({ data: results, error: null });
     } catch (err) {
       return next(err);

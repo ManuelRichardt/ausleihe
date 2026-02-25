@@ -9,6 +9,10 @@
   const saveButton = document.getElementById('signatureSave');
   const input = document.getElementById('signatureBase64');
   const form = document.getElementById('signatureForm');
+  const signatureTypeSelect = document.getElementById('signatureType');
+  const signedByInput = document.getElementById('signedByName');
+  const handoverSignerNameInput = document.getElementById('handoverSignerName');
+  const returnSignerNameInput = document.getElementById('returnSignerName');
   let drawing = false;
   let hasDrawn = false;
 
@@ -81,6 +85,19 @@
     return true;
   }
 
+  function syncSignedByName() {
+    if (!signatureTypeSelect || !signedByInput) {
+      return;
+    }
+    const handoverName = handoverSignerNameInput ? handoverSignerNameInput.value : '';
+    const returnName = returnSignerNameInput ? returnSignerNameInput.value : '';
+    if (signatureTypeSelect.value === 'return') {
+      signedByInput.value = returnName || signedByInput.value;
+      return;
+    }
+    signedByInput.value = handoverName || signedByInput.value;
+  }
+
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
 
@@ -123,4 +140,9 @@
       }
     });
   }
+
+  if (signatureTypeSelect) {
+    signatureTypeSelect.addEventListener('change', syncSignedByName);
+  }
+  syncSignedByName();
 })();
