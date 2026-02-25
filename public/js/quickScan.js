@@ -25,7 +25,7 @@
   var CODE128_DATA_MAX = 95;
   var CODE128_NORMAL_MATCH_THRESHOLD = 0.34;
   var CODE128_STOP_MATCH_THRESHOLD = 0.38;
-  var FALLBACK_SCAN_INTERVAL_MS = 220;
+  var FALLBACK_SCAN_INTERVAL_MS = 140;
   var DETECTOR_SCAN_INTERVAL_MS = 180;
 
   var CODE128_SYMBOLS = (function buildCode128Symbols() {
@@ -478,7 +478,10 @@
       }
     });
 
-    if (bestVote.count >= 3 && (bestVote.count - secondBestCount) >= 2 && bestVote.bestScore <= 0.22) {
+    if (bestVote.count >= 3 && (bestVote.count - secondBestCount) >= 1 && bestVote.bestScore <= 0.26) {
+      return bestCode;
+    }
+    if (bestVote.count >= 2 && (bestVote.count - secondBestCount) >= 1 && bestVote.bestScore <= 0.16) {
       return bestCode;
     }
     return null;
@@ -769,8 +772,6 @@
     var throttleMs = 1200;
     var pendingNormalizedCode = '';
     var pendingNormalizedCodeCount = 0;
-    var recentDetections = [];
-    var recentDetectionWindowSize = 7;
     var snapshotCanvas = document.createElement('canvas');
     var snapshotContext = snapshotCanvas.getContext('2d');
     var rotatedCanvas = document.createElement('canvas');
@@ -830,7 +831,6 @@
       knownCodeCandidates = [];
       pendingNormalizedCode = '';
       pendingNormalizedCodeCount = 0;
-      recentDetections = [];
     }
 
     function shouldAccept(code) {
@@ -866,40 +866,6 @@
       }
       pendingNormalizedCode = '';
       pendingNormalizedCodeCount = 0;
-
-      recentDetections.push(normalized);
-      if (recentDetections.length > recentDetectionWindowSize) {
-        recentDetections.shift();
-      }
-
-      var counts = new Map();
-      recentDetections.forEach(function (item) {
-        counts.set(item, (counts.get(item) || 0) + 1);
-      });
-
-      var topCode = '';
-      var topCount = 0;
-      var secondCount = 0;
-      counts.forEach(function (count, key) {
-        if (count > topCount) {
-          secondCount = topCount;
-          topCount = count;
-          topCode = key;
-          return;
-        }
-        if (count > secondCount) {
-          secondCount = count;
-        }
-      });
-
-      if (topCode !== normalized) {
-        return;
-      }
-      if (topCount < 4 || (topCount - secondCount) < 2) {
-        return;
-      }
-
-      recentDetections = [];
       if (!shouldAccept(normalized)) {
         return;
       }
@@ -1131,7 +1097,6 @@
       lastSeen = new Map();
       pendingNormalizedCode = '';
       pendingNormalizedCodeCount = 0;
-      recentDetections = [];
       if (logEl) {
         logEl.innerHTML = '';
       }
