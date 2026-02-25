@@ -244,9 +244,15 @@ class LoanService {
       throw new Error('At least one item is required');
     }
 
-    const itemQuery = options.requireItemIds
-      ? { where: { loanId, id: selectedItemIds } }
-      : { where: { loanId } };
+    const itemWhere = {
+      loanId,
+      status: { [Op.in]: OPEN_LOAN_ITEM_STATUSES },
+    };
+    if (options.requireItemIds) {
+      itemWhere.id = selectedItemIds;
+    }
+
+    const itemQuery = { where: itemWhere };
     if (options.updateAssetStatus) {
       itemQuery.include = [{ model: Asset, as: 'asset' }];
     }

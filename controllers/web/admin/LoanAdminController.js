@@ -2,6 +2,7 @@ const { services, renderPage, handleError } = require('../controllerUtils');
 const { formatDateTime } = require('../../../utils/dateFormat');
 const SignatureService = require('../../../services/SignatureService');
 const models = require('../../../models');
+const { LOAN_ITEM_STATUS } = require('../../../config/dbConstants');
 
 const RETURN_ITEM_REDIRECT = Object.freeze({
   form: (loanId) => `/admin/loans/${loanId}/return`,
@@ -19,6 +20,11 @@ const KNOWN_RETURN_ERROR_HANDLERS = Object.freeze([
     message: () => 'Bitte mindestens ein Item auswählen.',
     redirectTo: (loanId) => RETURN_ITEM_REDIRECT.form(loanId),
   },
+]);
+
+const RETURNABLE_LOAN_ITEM_STATUSES = Object.freeze([
+  LOAN_ITEM_STATUS.RESERVED,
+  LOAN_ITEM_STATUS.HANDED_OVER,
 ]);
 
 class LoanAdminController {
@@ -339,6 +345,13 @@ class LoanAdminController {
     try {
       const { loan, assetsByModelId, assetModels } =
         await services.loanPortalService.getAdminContext(req.params.id, req.lendingLocationId);
+      const returnableLoanItems = Array.isArray(loan.loanItems)
+        ? loan.loanItems.filter((item) => item && RETURNABLE_LOAN_ITEM_STATUSES.includes(item.status))
+        : [];
+      if (typeof loan.setDataValue === 'function') {
+        loan.setDataValue('loanItems', returnableLoanItems);
+      }
+      loan.loanItems = returnableLoanItems;
       return renderPage(res, 'loans/admin/return', req, {
         pageTitle: 'Rücknahme',
         breadcrumbs: [

@@ -168,7 +168,7 @@ function drawSignatureArea(doc, loan) {
   doc.font('Helvetica').fontSize(9).text(formatDate(signedAt), handoverDateX, 431);
 }
 
-function groupModels(loanItems) {
+function buildLoanTableRows(loanItems) {
   const groups = new Map();
   (loanItems || []).forEach((item) => {
     if (!item || item.itemType === 'bundle_root') {
@@ -177,11 +177,13 @@ function groupModels(loanItems) {
     const model = item.assetModel || (item.asset && item.asset.model) || null;
     const manufacturer = model && model.manufacturer ? `${model.manufacturer.name} ` : '';
     const modelName = model ? model.name : 'Unbekanntes Modell';
-    const key = `${manufacturer}${modelName}`;
+    const returnDate = formatDate(item.returnedAt);
+    const key = `${manufacturer}${modelName}|${returnDate}`;
     if (!groups.has(key)) {
       groups.set(key, {
         modelLabel: `${manufacturer}${modelName}`.trim(),
         quantity: 0,
+        returnDate,
       });
     }
     const normalizedQuantity = Number.isFinite(Number(item.quantity))
@@ -226,18 +228,22 @@ function drawTable(doc, loan) {
     width: widths[4] - 8,
   });
 
-  const grouped = groupModels(loan.loanItems || []);
+  const tableRows = buildLoanTableRows(loan.loanItems || []);
   doc.font('Helvetica').fontSize(9);
   for (let index = 0; index < 16; index += 1) {
     const y = startY + rowHeight * (index + 1) + 5;
     doc.text(String(index + 1), startX + 4, y, { width: widths[0] - 8 });
-    const row = grouped[index];
+    const row = tableRows[index];
     if (row) {
       doc.text(String(row.quantity), startX + widths[0] + 4, y, { width: widths[1] - 8 });
       doc.text(row.modelLabel, startX + widths[0] + widths[1] + 4, y, {
         width: widths[2] - 8,
         lineBreak: false,
         ellipsis: true,
+      });
+      doc.text(row.returnDate || '', startX + widths[0] + widths[1] + widths[2] + 4, y, {
+        width: widths[3] - 8,
+        lineBreak: false,
       });
     }
   }
