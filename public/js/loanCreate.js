@@ -217,6 +217,7 @@
     var tbody = table ? table.querySelector('tbody') : null;
     var assetSearchInput = document.getElementById('assetSearch');
     var assetSuggestions = document.getElementById('assetSuggestions');
+    var form = document.getElementById('loanCreateForm');
     var knownScanCodes = [];
     var knownScanCodesLoaded = false;
     var knownScanCodesPromise = null;
@@ -293,6 +294,18 @@
       renderHiddenAssetInputs();
     }
 
+    function syncQuantitiesFromTable() {
+      var quantityInputs = tbody ? tbody.querySelectorAll('.js-item-qty') : [];
+      Array.prototype.forEach.call(quantityInputs, function (input) {
+        var index = parseInt(input.getAttribute('data-index'), 10);
+        if (Number.isNaN(index) || index < 0 || index >= selectedAssets.length) {
+          return;
+        }
+        selectedAssets[index].quantity = toPositiveInteger(input.value, selectedAssets[index].quantity || 1);
+        input.value = String(selectedAssets[index].quantity);
+      });
+    }
+
     function renderRows() {
       tbody.innerHTML = '';
       if (!selectedAssets.length) {
@@ -338,7 +351,7 @@
       });
 
       tbody.querySelectorAll('.js-item-qty').forEach(function (input) {
-        input.addEventListener('change', function () {
+        var onQuantityChange = function () {
           var index = parseInt(input.getAttribute('data-index'), 10);
           if (Number.isNaN(index) || index < 0 || index >= selectedAssets.length) {
             return;
@@ -346,7 +359,9 @@
           selectedAssets[index].quantity = toPositiveInteger(input.value, selectedAssets[index].quantity || 1);
           input.value = String(selectedAssets[index].quantity);
           syncHiddenInput();
-        });
+        };
+        input.addEventListener('change', onQuantityChange);
+        input.addEventListener('input', onQuantityChange);
       });
 
       syncHiddenInput();
@@ -497,6 +512,13 @@
         });
       });
     });
+
+    if (form) {
+      form.addEventListener('submit', function () {
+        syncQuantitiesFromTable();
+        syncHiddenInput();
+      });
+    }
 
     renderRows();
   }
