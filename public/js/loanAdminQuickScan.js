@@ -6,6 +6,10 @@
       .toUpperCase();
   }
 
+  function normalizeIdentifier(value) {
+    return normalizeCode(value).replace(/[^A-Z0-9]/g, '');
+  }
+
   function highlightRow(row) {
     if (!row) {
       return;
@@ -24,6 +28,7 @@
 
     function findRowByCode(code) {
       var normalized = normalizeCode(code);
+      var normalizedIdentifier = normalizeIdentifier(code);
       for (var i = 0; i < checkboxes.length; i += 1) {
         var checkbox = checkboxes[i];
         var row = checkbox.closest('tr');
@@ -35,7 +40,17 @@
           continue;
         }
         var inventoryText = normalizeCode(inventoryCell.textContent);
-        if (inventoryText === normalized || inventoryText.indexOf(normalized) !== -1 || normalized.indexOf(inventoryText) !== -1) {
+        var inventoryIdentifier = normalizeIdentifier(inventoryCell.textContent);
+        if (
+          inventoryText === normalized
+          || inventoryText.indexOf(normalized) !== -1
+          || normalized.indexOf(inventoryText) !== -1
+          || (inventoryIdentifier && normalizedIdentifier && (
+            inventoryIdentifier === normalizedIdentifier
+            || inventoryIdentifier.indexOf(normalizedIdentifier) !== -1
+            || normalizedIdentifier.indexOf(inventoryIdentifier) !== -1
+          ))
+        ) {
           return row;
         }
       }
@@ -78,12 +93,25 @@
       if (!option || !option.value) {
         return false;
       }
+      var normalizedIdentifier = normalizeIdentifier(normalizedCode);
       var codeFromDataset = normalizeCode(option.getAttribute('data-scan-code'));
       var labelCode = normalizeCode(option.textContent);
+      var datasetIdentifier = normalizeIdentifier(option.getAttribute('data-scan-code'));
+      var labelIdentifier = normalizeIdentifier(option.textContent);
       return codeFromDataset === normalizedCode
         || labelCode === normalizedCode
         || labelCode.indexOf(normalizedCode) !== -1
-        || normalizedCode.indexOf(codeFromDataset) !== -1;
+        || normalizedCode.indexOf(codeFromDataset) !== -1
+        || (normalizedIdentifier && datasetIdentifier && (
+          datasetIdentifier === normalizedIdentifier
+          || datasetIdentifier.indexOf(normalizedIdentifier) !== -1
+          || normalizedIdentifier.indexOf(datasetIdentifier) !== -1
+        ))
+        || (normalizedIdentifier && labelIdentifier && (
+          labelIdentifier === normalizedIdentifier
+          || labelIdentifier.indexOf(normalizedIdentifier) !== -1
+          || normalizedIdentifier.indexOf(labelIdentifier) !== -1
+        ));
     }
 
     return function handleCode(code, appendLog) {

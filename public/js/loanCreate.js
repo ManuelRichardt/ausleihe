@@ -6,6 +6,36 @@
       .toUpperCase();
   }
 
+  function normalizeIdentifier(value) {
+    return normalizeCode(value).replace(/[^A-Z0-9]/g, '');
+  }
+
+  function buildSearchCandidates(code) {
+    var raw = normalizeCode(code);
+    var candidates = [];
+
+    function pushCandidate(value) {
+      var candidate = String(value || '').trim();
+      if (!candidate) {
+        return;
+      }
+      if (candidates.indexOf(candidate) === -1) {
+        candidates.push(candidate);
+      }
+    }
+
+    pushCandidate(raw);
+
+    var identifier = normalizeIdentifier(raw);
+    pushCandidate(identifier);
+
+    if (/^[0-9]+$/.test(identifier) && identifier.length >= 5) {
+      pushCandidate(identifier.slice(0, -1) + '-' + identifier.slice(-1));
+    }
+
+    return candidates;
+  }
+
   function initBorrowerToggle() {
     var existingRadio = document.getElementById('borrowerTypeExisting');
     var guestRadio = document.getElementById('borrowerTypeGuest');
@@ -275,18 +305,42 @@
     });
 
     function handleScannedCode(code, appendLog) {
-      fetch('/admin/loans/assets/search?q=' + encodeURIComponent(code), { credentials: 'same-origin' })
-        .then(function (res) { return res.json(); })
-        .then(function (payload) {
-          var items = payload && payload.data ? payload.data : [];
+      var candidates = buildSearchCandidates(code);
+      var chain = Promise.resolve(null);
+
+      candidates.forEach(function (candidate) {
+        chain = chain.then(function (result) {
+          if (result && result.items && result.items.length) {
+            return result;
+          }
+          return fetch('/admin/loans/assets/search?q=' + encodeURIComponent(candidate), { credentials: 'same-origin' })
+            .then(function (res) { return res.json(); })
+            .then(function (payload) {
+              return {
+                candidate: candidate,
+                items: payload && payload.data ? payload.data : [],
+              };
+            });
+        });
+      });
+
+      chain
+        .then(function (result) {
+          var items = result && Array.isArray(result.items) ? result.items : [];
           if (!items.length) {
             appendLog('Nicht gefunden: ' + code, 'text-danger');
             return;
           }
           var normalized = normalizeCode(code);
+          var normalizedIdentifier = normalizeIdentifier(code);
           var exact = items.find(function (item) {
-            return normalizeCode(item.inventoryNumber) === normalized
-              || normalizeCode(item.serialNumber) === normalized;
+            var inventoryCode = normalizeCode(item.inventoryNumber);
+            var serialCode = normalizeCode(item.serialNumber);
+            var inventoryIdentifier = normalizeIdentifier(item.inventoryNumber);
+            var serialIdentifier = normalizeIdentifier(item.serialNumber);
+            return inventoryCode === normalized
+              || serialCode === normalized
+              || (normalizedIdentifier && (inventoryIdentifier === normalizedIdentifier || serialIdentifier === normalizedIdentifier));
           }) || items[0];
           if (addAsset(exact)) {
             appendLog('Hinzugefügt: ' + (exact.inventoryNumber || exact.serialNumber || exact.id), 'text-success');
