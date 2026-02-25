@@ -386,6 +386,7 @@
     var stream = null;
     var detector = null;
     var useFallbackCode128Decoder = false;
+    var isPortraitFeed = false;
     var loopTimer = null;
     var activeHandler = null;
     var lastSeen = new Map();
@@ -435,6 +436,7 @@
       if (videoEl) {
         videoEl.pause();
         videoEl.srcObject = null;
+        videoEl.classList.remove('quickscan-video-portrait');
       }
       if (stream) {
         stream.getTracks().forEach(function (track) {
@@ -444,6 +446,7 @@
       stream = null;
       detector = null;
       useFallbackCode128Decoder = false;
+      isPortraitFeed = false;
     }
 
     function shouldAccept(code) {
@@ -483,16 +486,32 @@
         return false;
       }
 
-      var maxWidth = 960;
-      var scale = sourceWidth > maxWidth ? (maxWidth / sourceWidth) : 1;
-      var targetWidth = Math.max(1, Math.round(sourceWidth * scale));
-      var targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+      var maxWidth = 1600;
+      var longestEdge = Math.max(sourceWidth, sourceHeight);
+      var scale = longestEdge > maxWidth ? (maxWidth / longestEdge) : 1;
+      var isPortraitSource = sourceHeight > sourceWidth;
+      var targetWidth = Math.max(1, Math.round((isPortraitSource ? sourceHeight : sourceWidth) * scale));
+      var targetHeight = Math.max(1, Math.round((isPortraitSource ? sourceWidth : sourceHeight) * scale));
 
       if (snapshotCanvas.width !== targetWidth || snapshotCanvas.height !== targetHeight) {
         snapshotCanvas.width = targetWidth;
         snapshotCanvas.height = targetHeight;
       }
       return true;
+    }
+
+    function updateVideoOrientationState() {
+      if (!videoEl) {
+        return;
+      }
+      var sourceWidth = videoEl.videoWidth || 0;
+      var sourceHeight = videoEl.videoHeight || 0;
+      isPortraitFeed = sourceHeight > sourceWidth;
+      if (isPortraitFeed) {
+        videoEl.classList.add('quickscan-video-portrait');
+      } else {
+        videoEl.classList.remove('quickscan-video-portrait');
+      }
     }
 
     function getDetectionSource() {
@@ -502,7 +521,21 @@
       if (!ensureSnapshotSize()) {
         return videoEl;
       }
-      snapshotContext.drawImage(videoEl, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+      if (isPortraitFeed) {
+        snapshotContext.save();
+        snapshotContext.translate(snapshotCanvas.width * 0.5, snapshotCanvas.height * 0.5);
+        snapshotContext.rotate(Math.PI * 0.5);
+        snapshotContext.drawImage(
+          videoEl,
+          -snapshotCanvas.height * 0.5,
+          -snapshotCanvas.width * 0.5,
+          snapshotCanvas.height,
+          snapshotCanvas.width
+        );
+        snapshotContext.restore();
+      } else {
+        snapshotContext.drawImage(videoEl, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+      }
       return snapshotCanvas;
     }
 
@@ -563,18 +596,51 @@
         setStatus('Kamera nicht verfügbar. Bitte Code manuell eingeben.');
         return Promise.resolve();
       }
-      return navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+
+      function tryCameraConstraints(constraintsList, index) {
+        if (index >= constraintsList.length) {
+          return Promise.reject(new Error('camera-unavailable'));
+        }
+        return navigator.mediaDevices.getUserMedia(constraintsList[index]).catch(function () {
+          return tryCameraConstraints(constraintsList, index + 1);
+        });
+      }
+
+      var constraintsList = [
+        {
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            aspectRatio: { ideal: 1.7777777778 },
+            width: { ideal: 2560 },
+            height: { ideal: 1440 },
+            advanced: [{ focusMode: 'continuous' }],
+          },
         },
-      }).then(function (mediaStream) {
+        {
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            aspectRatio: { ideal: 1.7777777778 },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+        },
+        {
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+          },
+        },
+      ];
+
+      return tryCameraConstraints(constraintsList, 0).then(function (mediaStream) {
         stream = mediaStream;
         if (videoEl) {
           videoEl.srcObject = stream;
-          return videoEl.play();
+          return videoEl.play().then(function () {
+            updateVideoOrientationState();
+          });
         }
         return null;
       }).then(function () {
@@ -681,6 +747,10 @@
         handleCode(manualInputEl.value);
         manualInputEl.value = '';
       });
+    }
+
+    if (videoEl) {
+      videoEl.addEventListener('loadedmetadata', updateVideoOrientationState);
     }
 
     return {

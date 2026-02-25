@@ -135,6 +135,16 @@
   word-break: break-word;
 }
 
+#quickScanModal .quickscan-video {
+  object-fit: cover;
+  background-color: #000;
+}
+
+#quickScanModal .quickscan-video.quickscan-video-portrait {
+  transform: rotate(90deg) scale(1.15);
+  transform-origin: center center;
+}
+
 @media (max-width: 991.98px) {
   .navbar-height {
     height: auto;
