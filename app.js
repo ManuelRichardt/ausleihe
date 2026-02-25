@@ -20,6 +20,7 @@ const db = require('./models');
 
 const app = express();
 const services = createServices(db);
+const requestBodyLimit = process.env.REQUEST_BODY_LIMIT || '2mb';
 
 function getPrivacyCleanupIntervalMs() {
   const raw = parseInt(process.env.PRIVACY_CLEANUP_INTERVAL_MINUTES || '60', 10);
@@ -144,8 +145,8 @@ app.use(
 );
 app.use(expressLayouts);
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: requestBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: requestBodyLimit, parameterLimit: 10000 }));
 app.use(cookieParser());
 app.use(session(buildSessionConfig()));
 app.use(flash());

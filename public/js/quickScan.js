@@ -27,6 +27,9 @@
   var CODE128_STOP_MATCH_THRESHOLD = 0.38;
   var FALLBACK_SCAN_INTERVAL_MS = 140;
   var DETECTOR_SCAN_INTERVAL_MS = 180;
+  var DETECTION_VOTE_WINDOW_SIZE = 7;
+  var DETECTION_VOTES_WITH_KNOWN_CODES = 2;
+  var DETECTION_VOTES_WITHOUT_KNOWN_CODES = 3;
 
   var CODE128_SYMBOLS = (function buildCode128Symbols() {
     return CODE128_PATTERNS.map(function (pattern, code) {
@@ -59,15 +62,19 @@
       .toUpperCase();
   }
 
+  function normalizeIdentifier(value) {
+    return normalizeCode(value).replace(/[^A-Z0-9]/g, '');
+  }
+
   function isPlausibleScannedCode(normalizedCode) {
-    if (!normalizedCode || normalizedCode.length < 4 || normalizedCode.length > 48) {
+    if (!normalizedCode || normalizedCode.length < 4 || normalizedCode.length > 36) {
       return false;
     }
     if (!/^[A-Z0-9-]+$/.test(normalizedCode)) {
       return false;
     }
     var digitMatches = normalizedCode.match(/[0-9]/g);
-    return Boolean(digitMatches && digitMatches.length >= 1);
+    return Boolean(digitMatches && digitMatches.length >= 4);
   }
 
   function normalizeCode128Input(value) {
@@ -770,10 +777,13 @@
     var activeHandler = null;
     var lastSeen = new Map();
     var throttleMs = 1200;
-    var pendingNormalizedCode = '';
-    var pendingNormalizedCodeCount = 0;
+    var detectionVotes = [];
+    var knownCodeByNormalized = new Map();
+    var knownCodeByIdentifier = new Map();
     var snapshotCanvas = document.createElement('canvas');
     var snapshotContext = snapshotCanvas.getContext('2d');
+    var scanRegionCanvas = document.createElement('canvas');
+    var scanRegionContext = scanRegionCanvas.getContext('2d');
     var rotatedCanvas = document.createElement('canvas');
     var rotatedContext = rotatedCanvas.getContext('2d');
 
@@ -829,8 +839,9 @@
       detector = null;
       useFallbackCode128Decoder = false;
       knownCodeCandidates = [];
-      pendingNormalizedCode = '';
-      pendingNormalizedCodeCount = 0;
+      detectionVotes = [];
+      knownCodeByNormalized = new Map();
+      knownCodeByIdentifier = new Map();
     }
 
     function shouldAccept(code) {
@@ -847,6 +858,103 @@
       return true;
     }
 
+    function hasKnownCodeCatalog() {
+      return knownCodeByNormalized.size > 0 || knownCodeByIdentifier.size > 0;
+    }
+
+    function resetKnownCodeLookup() {
+      knownCodeByNormalized = new Map();
+      knownCodeByIdentifier = new Map();
+    }
+
+    function buildKnownCodeLookup(values) {
+      resetKnownCodeLookup();
+      if (!Array.isArray(values)) {
+        return;
+      }
+      values.forEach(function (rawValue) {
+        var normalized = normalizeCode(rawValue);
+        if (!isPlausibleScannedCode(normalized)) {
+          return;
+        }
+        if (!knownCodeByNormalized.has(normalized)) {
+          knownCodeByNormalized.set(normalized, normalized);
+        }
+        var identifier = normalizeIdentifier(normalized);
+        if (identifier && !knownCodeByIdentifier.has(identifier)) {
+          knownCodeByIdentifier.set(identifier, normalized);
+        }
+      });
+    }
+
+    function resolveKnownCode(normalizedCode) {
+      if (!hasKnownCodeCatalog()) {
+        return normalizedCode;
+      }
+      if (knownCodeByNormalized.has(normalizedCode)) {
+        return knownCodeByNormalized.get(normalizedCode);
+      }
+      var identifier = normalizeIdentifier(normalizedCode);
+      if (identifier && knownCodeByIdentifier.has(identifier)) {
+        return knownCodeByIdentifier.get(identifier);
+      }
+      if (/^[0-9]+$/.test(identifier) && identifier.length >= 5) {
+        var withHyphen = identifier.slice(0, -1) + '-' + identifier.slice(-1);
+        if (knownCodeByNormalized.has(withHyphen)) {
+          return knownCodeByNormalized.get(withHyphen);
+        }
+      }
+      return null;
+    }
+
+    function registerDetectionVote(normalizedCode, strictVoteRequirement) {
+      var hasKnownCodes = hasKnownCodeCatalog();
+      var minimumVotes = hasKnownCodes
+        ? DETECTION_VOTES_WITH_KNOWN_CODES
+        : DETECTION_VOTES_WITHOUT_KNOWN_CODES;
+      if (strictVoteRequirement) {
+        minimumVotes = Math.max(minimumVotes, 4);
+      }
+
+      detectionVotes.push(normalizedCode);
+      if (detectionVotes.length > DETECTION_VOTE_WINDOW_SIZE) {
+        detectionVotes.shift();
+      }
+
+      var counts = new Map();
+      detectionVotes.forEach(function (value) {
+        counts.set(value, (counts.get(value) || 0) + 1);
+      });
+
+      var bestCode = null;
+      var bestCount = 0;
+      var secondBestCount = 0;
+      counts.forEach(function (count, value) {
+        if (count > bestCount) {
+          secondBestCount = bestCount;
+          bestCount = count;
+          bestCode = value;
+          return;
+        }
+        if (count > secondBestCount) {
+          secondBestCount = count;
+        }
+      });
+
+      if (bestCode !== normalizedCode) {
+        return null;
+      }
+      if (bestCount < minimumVotes) {
+        return null;
+      }
+      if ((bestCount - secondBestCount) < 1) {
+        return null;
+      }
+
+      detectionVotes = [];
+      return bestCode;
+    }
+
     function handleCode(code) {
       var normalized = normalizeCode(code);
       if (!normalized) {
@@ -855,22 +963,19 @@
       if (!isPlausibleScannedCode(normalized)) {
         return;
       }
-      if (pendingNormalizedCode === normalized) {
-        pendingNormalizedCodeCount += 1;
-      } else {
-        pendingNormalizedCode = normalized;
-        pendingNormalizedCodeCount = 1;
-      }
-      if (pendingNormalizedCodeCount < 2) {
+      var mappedKnownCode = resolveKnownCode(normalized);
+      var hasKnownCodes = hasKnownCodeCatalog();
+      var candidateCode = mappedKnownCode || normalized;
+      var strictVoteRequirement = hasKnownCodes && !mappedKnownCode;
+      var confirmedCode = registerDetectionVote(candidateCode, strictVoteRequirement);
+      if (!confirmedCode) {
         return;
       }
-      pendingNormalizedCode = '';
-      pendingNormalizedCodeCount = 0;
-      if (!shouldAccept(normalized)) {
+      if (!shouldAccept(confirmedCode)) {
         return;
       }
       if (typeof activeHandler === 'function') {
-        activeHandler(normalized, appendLog);
+        activeHandler(confirmedCode, appendLog);
       }
     }
 
@@ -907,12 +1012,40 @@
       return snapshotCanvas;
     }
 
+    function getScanRegionSource(source) {
+      if (!source || !scanRegionContext || !source.width || !source.height) {
+        return source;
+      }
+      var regionWidth = Math.max(1, Math.round(source.width * 0.86));
+      var regionHeight = Math.max(1, Math.round(source.height * 0.56));
+      var regionX = Math.max(0, Math.round((source.width - regionWidth) * 0.5));
+      var regionY = Math.max(0, Math.round((source.height - regionHeight) * 0.5));
+      if (scanRegionCanvas.width !== regionWidth || scanRegionCanvas.height !== regionHeight) {
+        scanRegionCanvas.width = regionWidth;
+        scanRegionCanvas.height = regionHeight;
+      }
+      scanRegionContext.drawImage(
+        source,
+        regionX,
+        regionY,
+        regionWidth,
+        regionHeight,
+        0,
+        0,
+        regionWidth,
+        regionHeight
+      );
+      return scanRegionCanvas;
+    }
+
     function runFallbackDecode(source) {
       if (!snapshotContext) {
         return;
       }
       try {
-        var imageData = snapshotContext.getImageData(0, 0, source.width, source.height);
+        var scanRegionSource = getScanRegionSource(source) || source;
+        var imageDataContext = scanRegionSource === scanRegionCanvas ? scanRegionContext : snapshotContext;
+        var imageData = imageDataContext.getImageData(0, 0, scanRegionSource.width, scanRegionSource.height);
         var decoded = null;
         if (knownCodeCandidates.length) {
           decoded = matchKnownCode128CandidatesFromImageData(imageData, knownCodeCandidates);
@@ -920,19 +1053,35 @@
         if (!decoded) {
           decoded = decodeCode128FromImageData(imageData);
         }
+        if (!decoded && scanRegionSource !== source) {
+          imageData = snapshotContext.getImageData(0, 0, source.width, source.height);
+          if (knownCodeCandidates.length) {
+            decoded = matchKnownCode128CandidatesFromImageData(imageData, knownCodeCandidates);
+          }
+          if (!decoded) {
+            decoded = decodeCode128FromImageData(imageData);
+          }
+        }
         if (decoded) {
           handleCode(decoded);
           return;
         }
         if (rotatedContext) {
-          if (rotatedCanvas.width !== source.height || rotatedCanvas.height !== source.width) {
-            rotatedCanvas.width = source.height;
-            rotatedCanvas.height = source.width;
+          if (rotatedCanvas.width !== scanRegionSource.height || rotatedCanvas.height !== scanRegionSource.width) {
+            rotatedCanvas.width = scanRegionSource.height;
+            rotatedCanvas.height = scanRegionSource.width;
           }
+          rotatedContext.clearRect(0, 0, rotatedCanvas.width, rotatedCanvas.height);
           rotatedContext.save();
           rotatedContext.translate(rotatedCanvas.width * 0.5, rotatedCanvas.height * 0.5);
           rotatedContext.rotate(Math.PI * 0.5);
-          rotatedContext.drawImage(source, -source.width * 0.5, -source.height * 0.5, source.width, source.height);
+          rotatedContext.drawImage(
+            scanRegionSource,
+            -scanRegionSource.width * 0.5,
+            -scanRegionSource.height * 0.5,
+            scanRegionSource.width,
+            scanRegionSource.height
+          );
           rotatedContext.restore();
           var rotatedImageData = rotatedContext.getImageData(0, 0, rotatedCanvas.width, rotatedCanvas.height);
           decoded = null;
@@ -961,17 +1110,32 @@
       }
 
       var source = getDetectionSource();
+      var scanRegionSource = getScanRegionSource(source) || source;
 
       if (detector) {
-        detector.detect(source)
+        detector.detect(scanRegionSource)
           .then(function (barcodes) {
-            if (Array.isArray(barcodes)) {
+            if (Array.isArray(barcodes) && barcodes.length) {
               barcodes.forEach(function (barcode) {
                 if (barcode && barcode.rawValue) {
                   handleCode(barcode.rawValue);
                 }
               });
+              return null;
             }
+            if (scanRegionSource !== source) {
+              return detector.detect(source).then(function (fallbackBarcodes) {
+                if (!Array.isArray(fallbackBarcodes)) {
+                  return;
+                }
+                fallbackBarcodes.forEach(function (barcode) {
+                  if (barcode && barcode.rawValue) {
+                    handleCode(barcode.rawValue);
+                  }
+                });
+              });
+            }
+            return null;
           })
           .catch(function () {
             // detector errors are non-fatal inside loop
@@ -1033,6 +1197,32 @@
 
       return tryCameraConstraints(constraintsList, 0).then(function (mediaStream) {
         stream = mediaStream;
+        try {
+          var videoTrack = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
+          if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
+            var capabilities = videoTrack.getCapabilities();
+            var advancedConstraint = {};
+            if (Array.isArray(capabilities.focusMode) && capabilities.focusMode.indexOf('continuous') !== -1) {
+              advancedConstraint.focusMode = 'continuous';
+            }
+            if (Array.isArray(capabilities.exposureMode) && capabilities.exposureMode.indexOf('continuous') !== -1) {
+              advancedConstraint.exposureMode = 'continuous';
+            }
+            if (Array.isArray(capabilities.whiteBalanceMode) && capabilities.whiteBalanceMode.indexOf('continuous') !== -1) {
+              advancedConstraint.whiteBalanceMode = 'continuous';
+            }
+            if (capabilities.zoom && typeof capabilities.zoom.min === 'number' && typeof capabilities.zoom.max === 'number') {
+              advancedConstraint.zoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, 1.6));
+            }
+            if (Object.keys(advancedConstraint).length && typeof videoTrack.applyConstraints === 'function') {
+              videoTrack.applyConstraints({ advanced: [advancedConstraint] }).catch(function () {
+                // constraints are best-effort only
+              });
+            }
+          }
+        } catch (err) {
+          // non-fatal camera capability errors
+        }
         if (videoEl) {
           videoEl.srcObject = stream;
           return videoEl.play();
@@ -1052,36 +1242,36 @@
                   return supportedFormats.indexOf(entry) !== -1;
                 });
                 detector = new window.BarcodeDetector({ formats: formats.length ? formats : undefined });
-                setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
+                setStatus('Scanner aktiv. Barcode im Rahmen ausrichten und kurz ruhig halten.');
                 scanLoop();
               })
               .catch(function () {
                 try {
                   detector = new window.BarcodeDetector();
-                  setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
+                  setStatus('Scanner aktiv. Barcode im Rahmen ausrichten und kurz ruhig halten.');
                   scanLoop();
                 } catch (err) {
                   useFallbackCode128Decoder = true;
-                  setStatus('Scanner aktiv (Fallback für Code128). Mehrere Labels nacheinander scannen.');
+                  setStatus('Scanner aktiv (Fallback für Code128). Barcode im Rahmen ausrichten und kurz ruhig halten.');
                   scanLoop();
                 }
               });
           }
           try {
             detector = new window.BarcodeDetector();
-            setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
+            setStatus('Scanner aktiv. Barcode im Rahmen ausrichten und kurz ruhig halten.');
             scanLoop();
             return null;
           } catch (error) {
             useFallbackCode128Decoder = true;
-            setStatus('Scanner aktiv (Fallback für Code128). Mehrere Labels nacheinander scannen.');
+            setStatus('Scanner aktiv (Fallback für Code128). Barcode im Rahmen ausrichten und kurz ruhig halten.');
             scanLoop();
             return null;
           }
         }
 
         useFallbackCode128Decoder = true;
-        setStatus('Scanner aktiv (Fallback für Code128). Mehrere Labels nacheinander scannen.');
+        setStatus('Scanner aktiv (Fallback für Code128). Barcode im Rahmen ausrichten und kurz ruhig halten.');
         scanLoop();
         return null;
       }).catch(function () {
@@ -1095,8 +1285,8 @@
       useFallbackCode128Decoder = false;
       knownCodeCandidates = [];
       lastSeen = new Map();
-      pendingNormalizedCode = '';
-      pendingNormalizedCodeCount = 0;
+      detectionVotes = [];
+      resetKnownCodeLookup();
       if (logEl) {
         logEl.innerHTML = '';
       }
@@ -1116,6 +1306,7 @@
       knownCodeCandidates = buildKnownCode128Candidates(
         config && Array.isArray(config.knownCodes) ? config.knownCodes : []
       );
+      buildKnownCodeLookup(config && Array.isArray(config.knownCodes) ? config.knownCodes : []);
       modal.show();
       startCamera();
     }
