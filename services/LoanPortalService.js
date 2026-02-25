@@ -506,32 +506,44 @@ class LoanPortalService {
       ].filter(Boolean).join(' — '),
     }));
 
-    const bulkModels = await this.models.AssetModel.findAll({
-      where: {
-        lendingLocationId,
-        trackingType: 'bulk',
-        isActive: true,
-        [this.models.Sequelize.Op.or]: [
-          { name: { [this.models.Sequelize.Op.like]: `%${q}%` } },
-          { description: { [this.models.Sequelize.Op.like]: `%${q}%` } },
-          this.models.sequelize.where(
-            this.models.sequelize.fn('LOWER', this.models.sequelize.col('manufacturer.name')),
-            { [this.models.Sequelize.Op.like]: `%${q.toLowerCase()}%` }
-          ),
-        ],
-      },
-      include: [
-        { model: this.models.Manufacturer, as: 'manufacturer' },
-        {
-          model: this.models.InventoryStock,
-          as: 'stocks',
-          required: false,
-          where: { lendingLocationId },
+    let bulkModels = [];
+    try {
+      const matchingManufacturers = await this.models.Manufacturer.findAll({
+        where: {
+          lendingLocationId,
+          name: { [this.models.Sequelize.Op.like]: `%${q}%` },
         },
-      ],
-      order: [['name', 'ASC']],
-      limit: 20,
-    });
+        attributes: ['id'],
+        limit: 50,
+      });
+      const matchingManufacturerIds = matchingManufacturers.map((manufacturer) => manufacturer.id);
+
+      bulkModels = await this.models.AssetModel.findAll({
+        where: {
+          lendingLocationId,
+          trackingType: 'bulk',
+          isActive: true,
+          [this.models.Sequelize.Op.or]: [
+            { name: { [this.models.Sequelize.Op.like]: `%${q}%` } },
+            { description: { [this.models.Sequelize.Op.like]: `%${q}%` } },
+            ...(matchingManufacturerIds.length ? [{ manufacturerId: { [this.models.Sequelize.Op.in]: matchingManufacturerIds } }] : []),
+          ],
+        },
+        include: [
+          { model: this.models.Manufacturer, as: 'manufacturer' },
+          {
+            model: this.models.InventoryStock,
+            as: 'stocks',
+            required: false,
+            where: { lendingLocationId },
+          },
+        ],
+        order: [['name', 'ASC']],
+        limit: 20,
+      });
+    } catch (err) {
+      bulkModels = [];
+    }
 
     const bulkResults = bulkModels.map((model) => {
       const stock = Array.isArray(model.stocks) ? model.stocks[0] : null;
