@@ -94,7 +94,7 @@
       codes.push(input.charCodeAt(i) - 32);
     }
 
-    var checksum = codes[0];
+    var checksum = CODE128_START_B;
     for (var c = 0; c < codes.length; c += 1) {
       checksum += codes[c] * (c + 1);
     }
@@ -398,7 +398,7 @@
     }
 
     var best = null;
-    var threshold = 0.38;
+    var threshold = 0.26;
     for (var c = 0; c < knownCandidates.length; c += 1) {
       var candidate = knownCandidates[c];
       if (!candidate || !Array.isArray(candidate.runs) || !candidate.runs.length) {
@@ -467,10 +467,18 @@
     if (!bestVote) {
       return null;
     }
-    if (bestVote.count >= 2) {
-      return bestCode;
-    }
-    if (bestVote.bestScore <= 0.20) {
+
+    var secondBestCount = 0;
+    votes.forEach(function (vote, code) {
+      if (code === bestCode) {
+        return;
+      }
+      if (vote.count > secondBestCount) {
+        secondBestCount = vote.count;
+      }
+    });
+
+    if (bestVote.count >= 3 && (bestVote.count - secondBestCount) >= 2 && bestVote.bestScore <= 0.22) {
       return bestCode;
     }
     return null;
@@ -761,6 +769,8 @@
     var throttleMs = 1200;
     var pendingNormalizedCode = '';
     var pendingNormalizedCodeCount = 0;
+    var recentDetections = [];
+    var recentDetectionWindowSize = 7;
     var snapshotCanvas = document.createElement('canvas');
     var snapshotContext = snapshotCanvas.getContext('2d');
     var rotatedCanvas = document.createElement('canvas');
@@ -820,6 +830,7 @@
       knownCodeCandidates = [];
       pendingNormalizedCode = '';
       pendingNormalizedCodeCount = 0;
+      recentDetections = [];
     }
 
     function shouldAccept(code) {
@@ -855,6 +866,40 @@
       }
       pendingNormalizedCode = '';
       pendingNormalizedCodeCount = 0;
+
+      recentDetections.push(normalized);
+      if (recentDetections.length > recentDetectionWindowSize) {
+        recentDetections.shift();
+      }
+
+      var counts = new Map();
+      recentDetections.forEach(function (item) {
+        counts.set(item, (counts.get(item) || 0) + 1);
+      });
+
+      var topCode = '';
+      var topCount = 0;
+      var secondCount = 0;
+      counts.forEach(function (count, key) {
+        if (count > topCount) {
+          secondCount = topCount;
+          topCount = count;
+          topCode = key;
+          return;
+        }
+        if (count > secondCount) {
+          secondCount = count;
+        }
+      });
+
+      if (topCode !== normalized) {
+        return;
+      }
+      if (topCount < 4 || (topCount - secondCount) < 2) {
+        return;
+      }
+
+      recentDetections = [];
       if (!shouldAccept(normalized)) {
         return;
       }
@@ -1086,6 +1131,7 @@
       lastSeen = new Map();
       pendingNormalizedCode = '';
       pendingNormalizedCodeCount = 0;
+      recentDetections = [];
       if (logEl) {
         logEl.innerHTML = '';
       }
