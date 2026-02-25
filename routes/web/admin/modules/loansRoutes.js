@@ -55,6 +55,11 @@ module.exports = function registerAdminLoanRoutes(routeContext) {
     controllers.loanController.searchAssets.bind(controllers.loanController)
   );
   router.get(
+    '/admin/loans/assets/codes',
+    ...middlewareStacks.loanScopedLocation(),
+    controllers.loanController.listAssetCodes.bind(controllers.loanController)
+  );
+  router.get(
     '/admin/loans/:id',
     ...withLoanScopePermission(controllers.loanController.show.bind(controllers.loanController))
   );

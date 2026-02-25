@@ -509,6 +509,18 @@ class LoanAdminController {
     }
   }
 
+  async listAssetCodes(req, res, next) {
+    try {
+      const results = await services.loanPortalService.listAssetCodes(
+        req.lendingLocationId,
+        req.query.limit
+      );
+      return res.json({ data: results, error: null });
+    } catch (err) {
+      return next(err);
+    }
+  }
+
   async removeItem(req, res, next) {
     try {
       await services.loanPortalService.removeItem(

@@ -154,9 +154,38 @@
     var tbody = table ? table.querySelector('tbody') : null;
     var assetSearchInput = document.getElementById('assetSearch');
     var assetSuggestions = document.getElementById('assetSuggestions');
+    var knownScanCodes = [];
+    var knownScanCodesLoaded = false;
+    var knownScanCodesPromise = null;
 
     if (!selectedAssetsInput || !tbody || !assetSearchInput || !assetSuggestions) {
       return;
+    }
+
+    function loadKnownScanCodes() {
+      if (knownScanCodesLoaded) {
+        return Promise.resolve(knownScanCodes);
+      }
+      if (knownScanCodesPromise) {
+        return knownScanCodesPromise;
+      }
+      knownScanCodesPromise = fetch('/admin/loans/assets/codes?limit=20000', { credentials: 'same-origin' })
+        .then(function (res) { return res.json(); })
+        .then(function (payload) {
+          var items = payload && Array.isArray(payload.data) ? payload.data : [];
+          knownScanCodes = items.filter(Boolean);
+          knownScanCodesLoaded = true;
+          return knownScanCodes;
+        })
+        .catch(function () {
+          knownScanCodes = [];
+          knownScanCodesLoaded = true;
+          return knownScanCodes;
+        })
+        .finally(function () {
+          knownScanCodesPromise = null;
+        });
+      return knownScanCodesPromise;
     }
 
     function renderHiddenAssetInputs() {
@@ -360,8 +389,11 @@
           alert('Quickscan ist in diesem Browser nicht verfügbar.');
           return;
         }
-        window.QuickScan.open({
-          onCode: handleScannedCode,
+        loadKnownScanCodes().finally(function () {
+          window.QuickScan.open({
+            onCode: handleScannedCode,
+            knownCodes: knownScanCodes,
+          });
         });
       });
     });

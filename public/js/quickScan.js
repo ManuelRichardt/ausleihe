@@ -183,6 +183,61 @@
     return column;
   }
 
+  function scoreLineTransitions(line) {
+    if (!Array.isArray(line) || line.length < 40) {
+      return 0;
+    }
+    var minMax = safeMinMax(line);
+    var contrast = minMax.max - minMax.min;
+    if (contrast < 28) {
+      return 0;
+    }
+    var threshold = minMax.min + (contrast * 0.5);
+    var previous = line[0] <= threshold ? 1 : 0;
+    var transitions = 0;
+    for (var i = 1; i < line.length; i += 1) {
+      var current = line[i] <= threshold ? 1 : 0;
+      if (current !== previous) {
+        transitions += 1;
+      }
+      previous = current;
+    }
+    return transitions;
+  }
+
+  function collectHighTransitionRows(imageData, maxRows) {
+    if (!imageData || !imageData.width || !imageData.height) {
+      return [];
+    }
+    var rows = [];
+    var step = Math.max(1, Math.floor(imageData.height / 72));
+    for (var y = 0; y < imageData.height; y += step) {
+      var line = buildHorizontalLine(imageData, y);
+      var score = scoreLineTransitions(line);
+      if (!score) {
+        continue;
+      }
+      rows.push({ y: y, score: score });
+    }
+
+    rows.sort(function (a, b) {
+      return b.score - a.score;
+    });
+
+    var unique = [];
+    var minDistance = Math.max(4, Math.floor(imageData.height / 40));
+    for (var i = 0; i < rows.length && unique.length < maxRows; i += 1) {
+      var candidate = rows[i];
+      var tooClose = unique.some(function (picked) {
+        return Math.abs(picked - candidate.y) < minDistance;
+      });
+      if (!tooClose) {
+        unique.push(candidate.y);
+      }
+    }
+    return unique;
+  }
+
   function smoothBinary(binary) {
     for (var i = 1; i < binary.length - 1; i += 1) {
       if (binary[i - 1] === binary[i + 1] && binary[i] !== binary[i - 1]) {
@@ -332,7 +387,7 @@
     }
 
     var best = null;
-    var threshold = 0.47;
+    var threshold = 0.72;
     for (var c = 0; c < knownCandidates.length; c += 1) {
       var candidate = knownCandidates[c];
       if (!candidate || !Array.isArray(candidate.runs) || !candidate.runs.length) {
@@ -365,9 +420,9 @@
       return null;
     }
 
-    var rowPercents = [0.2, 0.26, 0.32, 0.38, 0.44, 0.5, 0.56, 0.62, 0.68, 0.74, 0.8];
-    for (var r = 0; r < rowPercents.length; r += 1) {
-      var rowY = Math.max(0, Math.min(imageData.height - 1, Math.round(imageData.height * rowPercents[r])));
+    var preferredRows = collectHighTransitionRows(imageData, 32);
+    for (var r = 0; r < preferredRows.length; r += 1) {
+      var rowY = preferredRows[r];
       var rowLine = buildHorizontalLine(imageData, rowY);
       var rowRunData = buildRunDataFromLine(rowLine);
       var rowMatch = matchKnownCode128CandidatesFromRunData(rowRunData, knownCandidates);
@@ -577,6 +632,15 @@
   function decodeCode128FromImageData(imageData) {
     if (!imageData || !imageData.width || !imageData.height) {
       return null;
+    }
+
+    var preferredRows = collectHighTransitionRows(imageData, 24);
+    for (var p = 0; p < preferredRows.length; p += 1) {
+      var preferredY = preferredRows[p];
+      var preferredHorizontal = decodeCode128FromLine(buildHorizontalLine(imageData, preferredY));
+      if (preferredHorizontal) {
+        return preferredHorizontal;
+      }
     }
 
     var rowOffsets = [0, -2, 2, -4, 4, -6, 6, -8, 8, -12, 12, -16, 16, -22, 22, -28, 28];

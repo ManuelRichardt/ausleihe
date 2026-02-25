@@ -472,6 +472,34 @@ class LoanPortalService {
     }));
   }
 
+  async listAssetCodes(lendingLocationId, limit = 12000) {
+    const safeLimit = Math.max(100, Math.min(parseInt(limit, 10) || 12000, 30000));
+    const assets = await this.models.Asset.findAll({
+      where: {
+        lendingLocationId,
+        isActive: true,
+      },
+      attributes: ['inventoryNumber', 'serialNumber'],
+      order: [['inventoryNumber', 'ASC'], ['serialNumber', 'ASC']],
+      limit: safeLimit,
+    });
+
+    const codes = [];
+    const seen = new Set();
+    assets.forEach((asset) => {
+      const values = [asset.inventoryNumber, asset.serialNumber];
+      values.forEach((value) => {
+        const text = String(value || '').trim();
+        if (!text || text === '-' || seen.has(text)) {
+          return;
+        }
+        seen.add(text);
+        codes.push(text);
+      });
+    });
+    return codes;
+  }
+
   async removeItem(loanId, lendingLocationId, itemId) {
     await this.getForAdmin(loanId, lendingLocationId);
     return this.loanService.removeLoanItem(loanId, itemId);
