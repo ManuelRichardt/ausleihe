@@ -59,6 +59,17 @@
       .toUpperCase();
   }
 
+  function isPlausibleScannedCode(normalizedCode) {
+    if (!normalizedCode || normalizedCode.length < 4 || normalizedCode.length > 48) {
+      return false;
+    }
+    if (!/^[A-Z0-9-]+$/.test(normalizedCode)) {
+      return false;
+    }
+    var digitMatches = normalizedCode.match(/[0-9]/g);
+    return Boolean(digitMatches && digitMatches.length >= 1);
+  }
+
   function normalizeCode128Input(value) {
     return String(value || '')
       .split('')
@@ -83,7 +94,7 @@
       codes.push(input.charCodeAt(i) - 32);
     }
 
-    var checksum = CODE128_START_B;
+    var checksum = codes[0];
     for (var c = 0; c < codes.length; c += 1) {
       checksum += codes[c] * (c + 1);
     }
@@ -387,7 +398,7 @@
     }
 
     var best = null;
-    var threshold = 0.72;
+    var threshold = 0.38;
     for (var c = 0; c < knownCandidates.length; c += 1) {
       var candidate = knownCandidates[c];
       if (!candidate || !Array.isArray(candidate.runs) || !candidate.runs.length) {
@@ -412,7 +423,13 @@
         }
       }
     }
-    return best ? best.candidate.normalized : null;
+    if (!best) {
+      return null;
+    }
+    return {
+      code: best.candidate.normalized,
+      score: best.score,
+    };
   }
 
   function matchKnownCode128CandidatesFromImageData(imageData, knownCandidates) {
@@ -421,14 +438,40 @@
     }
 
     var preferredRows = collectHighTransitionRows(imageData, 32);
+    var votes = new Map();
     for (var r = 0; r < preferredRows.length; r += 1) {
       var rowY = preferredRows[r];
       var rowLine = buildHorizontalLine(imageData, rowY);
       var rowRunData = buildRunDataFromLine(rowLine);
       var rowMatch = matchKnownCode128CandidatesFromRunData(rowRunData, knownCandidates);
-      if (rowMatch) {
-        return rowMatch;
+      if (!rowMatch) {
+        continue;
       }
+      var existingVote = votes.get(rowMatch.code) || { count: 0, bestScore: Number.POSITIVE_INFINITY };
+      existingVote.count += 1;
+      if (rowMatch.score < existingVote.bestScore) {
+        existingVote.bestScore = rowMatch.score;
+      }
+      votes.set(rowMatch.code, existingVote);
+    }
+
+    var bestCode = null;
+    var bestVote = null;
+    votes.forEach(function (vote, code) {
+      if (!bestVote || vote.count > bestVote.count || (vote.count === bestVote.count && vote.bestScore < bestVote.bestScore)) {
+        bestVote = vote;
+        bestCode = code;
+      }
+    });
+
+    if (!bestVote) {
+      return null;
+    }
+    if (bestVote.count >= 2) {
+      return bestCode;
+    }
+    if (bestVote.bestScore <= 0.20) {
+      return bestCode;
     }
     return null;
   }
@@ -479,7 +522,7 @@
     var checksumCode = codes[codes.length - 1];
     var dataCodes = codes.slice(1, -1);
 
-    var checksum = CODE128_START_B;
+    var checksum = codes[0];
     for (var i = 0; i < dataCodes.length; i += 1) {
       checksum += dataCodes[i] * (i + 1);
     }
@@ -634,12 +677,36 @@
       return null;
     }
 
+    function pickConfirmed(values) {
+      if (!Array.isArray(values) || !values.length) {
+        return null;
+      }
+      var counts = new Map();
+      values.forEach(function (value) {
+        var current = counts.get(value) || 0;
+        counts.set(value, current + 1);
+      });
+      var bestCode = null;
+      var bestCount = 0;
+      counts.forEach(function (count, code) {
+        if (count > bestCount) {
+          bestCount = count;
+          bestCode = code;
+        }
+      });
+      if (bestCount >= 2) {
+        return bestCode;
+      }
+      return null;
+    }
+
+    var decodedCandidates = [];
     var preferredRows = collectHighTransitionRows(imageData, 24);
     for (var p = 0; p < preferredRows.length; p += 1) {
       var preferredY = preferredRows[p];
       var preferredHorizontal = decodeCode128FromLine(buildHorizontalLine(imageData, preferredY));
       if (preferredHorizontal) {
-        return preferredHorizontal;
+        decodedCandidates.push(preferredHorizontal);
       }
     }
 
@@ -652,7 +719,7 @@
       }
       var horizontal = decodeCode128FromLine(buildHorizontalLine(imageData, y));
       if (horizontal) {
-        return horizontal;
+        decodedCandidates.push(horizontal);
       }
     }
 
@@ -665,10 +732,10 @@
       }
       var vertical = decodeCode128FromLine(buildVerticalLine(imageData, x));
       if (vertical) {
-        return vertical;
+        decodedCandidates.push(vertical);
       }
     }
-    return null;
+    return pickConfirmed(decodedCandidates);
   }
 
   function createQuickScan() {
@@ -692,6 +759,8 @@
     var activeHandler = null;
     var lastSeen = new Map();
     var throttleMs = 1200;
+    var pendingNormalizedCode = '';
+    var pendingNormalizedCodeCount = 0;
     var snapshotCanvas = document.createElement('canvas');
     var snapshotContext = snapshotCanvas.getContext('2d');
     var rotatedCanvas = document.createElement('canvas');
@@ -749,6 +818,8 @@
       detector = null;
       useFallbackCode128Decoder = false;
       knownCodeCandidates = [];
+      pendingNormalizedCode = '';
+      pendingNormalizedCodeCount = 0;
     }
 
     function shouldAccept(code) {
@@ -770,6 +841,20 @@
       if (!normalized) {
         return;
       }
+      if (!isPlausibleScannedCode(normalized)) {
+        return;
+      }
+      if (pendingNormalizedCode === normalized) {
+        pendingNormalizedCodeCount += 1;
+      } else {
+        pendingNormalizedCode = normalized;
+        pendingNormalizedCodeCount = 1;
+      }
+      if (pendingNormalizedCodeCount < 2) {
+        return;
+      }
+      pendingNormalizedCode = '';
+      pendingNormalizedCodeCount = 0;
       if (!shouldAccept(normalized)) {
         return;
       }
@@ -817,9 +902,12 @@
       }
       try {
         var imageData = snapshotContext.getImageData(0, 0, source.width, source.height);
-        var decoded = decodeCode128FromImageData(imageData);
-        if (!decoded && knownCodeCandidates.length) {
+        var decoded = null;
+        if (knownCodeCandidates.length) {
           decoded = matchKnownCode128CandidatesFromImageData(imageData, knownCodeCandidates);
+        }
+        if (!decoded) {
+          decoded = decodeCode128FromImageData(imageData);
         }
         if (decoded) {
           handleCode(decoded);
@@ -836,9 +924,12 @@
           rotatedContext.drawImage(source, -source.width * 0.5, -source.height * 0.5, source.width, source.height);
           rotatedContext.restore();
           var rotatedImageData = rotatedContext.getImageData(0, 0, rotatedCanvas.width, rotatedCanvas.height);
-          decoded = decodeCode128FromImageData(rotatedImageData);
-          if (!decoded && knownCodeCandidates.length) {
+          decoded = null;
+          if (knownCodeCandidates.length) {
             decoded = matchKnownCode128CandidatesFromImageData(rotatedImageData, knownCodeCandidates);
+          }
+          if (!decoded) {
+            decoded = decodeCode128FromImageData(rotatedImageData);
           }
         }
         if (decoded) {
@@ -993,6 +1084,8 @@
       useFallbackCode128Decoder = false;
       knownCodeCandidates = [];
       lastSeen = new Map();
+      pendingNormalizedCode = '';
+      pendingNormalizedCodeCount = 0;
       if (logEl) {
         logEl.innerHTML = '';
       }
