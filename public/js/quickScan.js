@@ -25,6 +25,8 @@
     var activeHandler = null;
     var lastSeen = new Map();
     var throttleMs = 1200;
+    var snapshotCanvas = document.createElement('canvas');
+    var snapshotContext = snapshotCanvas.getContext('2d');
 
     function ensureModalInstance() {
       if (modal) {
@@ -91,6 +93,33 @@
       return true;
     }
 
+    function ensureSnapshotSize() {
+      if (!videoEl) {
+        return false;
+      }
+      var width = videoEl.videoWidth || 0;
+      var height = videoEl.videoHeight || 0;
+      if (!width || !height) {
+        return false;
+      }
+      if (snapshotCanvas.width !== width || snapshotCanvas.height !== height) {
+        snapshotCanvas.width = width;
+        snapshotCanvas.height = height;
+      }
+      return true;
+    }
+
+    function getDetectionSource() {
+      if (!videoEl || !snapshotContext) {
+        return videoEl;
+      }
+      if (!ensureSnapshotSize()) {
+        return videoEl;
+      }
+      snapshotContext.drawImage(videoEl, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
+      return snapshotCanvas;
+    }
+
     function handleCode(code) {
       var normalized = normalizeCode(code);
       if (!normalized) {
@@ -108,7 +137,12 @@
       if (!detector || !videoEl || !stream) {
         return;
       }
-      detector.detect(videoEl)
+      if (videoEl.readyState < 2) {
+        loopTimer = setTimeout(scanLoop, 180);
+        return;
+      }
+      var source = getDetectionSource();
+      detector.detect(source)
         .then(function (barcodes) {
           if (Array.isArray(barcodes)) {
             barcodes.forEach(function (barcode) {
@@ -135,6 +169,8 @@
         audio: false,
         video: {
           facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
       }).then(function (mediaStream) {
         stream = mediaStream;
@@ -145,19 +181,36 @@
         return null;
       }).then(function () {
         if (window.BarcodeDetector) {
-          return window.BarcodeDetector.getSupportedFormats()
-            .then(function (supportedFormats) {
-              var preferredFormats = ['code_128', 'qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e'];
-              var formats = preferredFormats.filter(function (entry) {
-                return supportedFormats.indexOf(entry) !== -1;
+          var preferredFormats = ['code_128', 'code_39', 'codabar', 'itf', 'qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'data_matrix'];
+          var hasSupportedFormatsApi = typeof window.BarcodeDetector.getSupportedFormats === 'function';
+          if (hasSupportedFormatsApi) {
+            return window.BarcodeDetector.getSupportedFormats()
+              .then(function (supportedFormats) {
+                var formats = preferredFormats.filter(function (entry) {
+                  return supportedFormats.indexOf(entry) !== -1;
+                });
+                detector = new window.BarcodeDetector({ formats: formats.length ? formats : undefined });
+                setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
+                scanLoop();
+              })
+              .catch(function () {
+                try {
+                  detector = new window.BarcodeDetector();
+                  setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
+                  scanLoop();
+                } catch (err) {
+                  setStatus('Barcode-Scanner nicht verfügbar. Bitte Code manuell eingeben.');
+                }
               });
-              detector = new window.BarcodeDetector({ formats: formats.length ? formats : undefined });
-              setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
-              scanLoop();
-            })
-            .catch(function () {
-              setStatus('Barcode-Scanner nicht verfügbar. Bitte Code manuell eingeben.');
-            });
+          }
+          try {
+            detector = new window.BarcodeDetector();
+            setStatus('Scanner aktiv. Mehrere Labels nacheinander scannen.');
+            scanLoop();
+          } catch (err) {
+            setStatus('Barcode-Scanner nicht verfügbar. Bitte Code manuell eingeben.');
+          }
+          return null;
         }
         setStatus('Barcode-Scanner nicht verfügbar. Bitte Code manuell eingeben.');
         return null;
