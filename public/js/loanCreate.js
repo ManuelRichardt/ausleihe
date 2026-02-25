@@ -36,6 +36,67 @@
     return candidates;
   }
 
+  function toPositiveInteger(value, fallbackValue) {
+    var fallback = Number.isFinite(Number(fallbackValue)) ? parseInt(fallbackValue, 10) : 1;
+    if (Number.isNaN(fallback) || fallback < 1) {
+      fallback = 1;
+    }
+    var parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      return fallback;
+    }
+    return parsed;
+  }
+
+  function buildItemKey(entry) {
+    if (!entry || typeof entry !== 'object') {
+      return '';
+    }
+    if (entry.kind === 'bulk') {
+      return 'bulk:' + String(entry.assetModelId || '');
+    }
+    return 'serialized:' + String(entry.id || entry.assetId || '');
+  }
+
+  function normalizeSelectedEntry(rawEntry) {
+    if (!rawEntry) {
+      return null;
+    }
+    var kind = String(rawEntry.kind || rawEntry.trackingType || '').toLowerCase();
+    if (kind === 'bulk' || (!rawEntry.assetId && rawEntry.assetModelId)) {
+      var bulkModelId = String(rawEntry.assetModelId || rawEntry.modelId || rawEntry.id || '').trim();
+      if (!bulkModelId) {
+        return null;
+      }
+      return {
+        kind: 'bulk',
+        id: bulkModelId,
+        assetModelId: bulkModelId,
+        inventoryNumber: '',
+        serialNumber: '',
+        modelName: rawEntry.modelName || rawEntry.name || '',
+        manufacturerName: rawEntry.manufacturerName || '',
+        quantity: toPositiveInteger(rawEntry.quantity, 1),
+        availableQuantity: toPositiveInteger(rawEntry.availableQuantity, 0),
+      };
+    }
+
+    var assetId = String(rawEntry.id || rawEntry.assetId || '').trim();
+    if (!assetId) {
+      return null;
+    }
+    return {
+      kind: 'serialized',
+      id: assetId,
+      assetId: assetId,
+      inventoryNumber: rawEntry.inventoryNumber || '',
+      serialNumber: rawEntry.serialNumber || '',
+      modelName: rawEntry.modelName || '',
+      manufacturerName: rawEntry.manufacturerName || '',
+      quantity: 1,
+    };
+  }
+
   function initBorrowerToggle() {
     var existingRadio = document.getElementById('borrowerTypeExisting');
     var guestRadio = document.getElementById('borrowerTypeGuest');
@@ -147,7 +208,9 @@
   }
 
   function initAssetSelection() {
-    var selectedAssets = parseJsonNode('loanCreateSelectedAssetsSeed');
+    var selectedAssets = parseJsonNode('loanCreateSelectedAssetsSeed')
+      .map(normalizeSelectedEntry)
+      .filter(Boolean);
     var selectedAssetsInput = document.getElementById('selectedAssetsJson');
     var selectedAssetHiddenInputs = document.getElementById('selectedAssetHiddenInputs');
     var table = document.getElementById('selectedAssetsTable');
@@ -194,6 +257,9 @@
       }
       selectedAssetHiddenInputs.innerHTML = '';
       selectedAssets.forEach(function (entry) {
+        if (entry.kind === 'bulk') {
+          return;
+        }
         var input = document.createElement('input');
         input.type = 'hidden';
         input.name = 'assetIds';
@@ -204,7 +270,18 @@
 
     function syncHiddenInput() {
       selectedAssetsInput.value = JSON.stringify(selectedAssets.map(function (entry) {
+        if (entry.kind === 'bulk') {
+          return {
+            kind: 'bulk',
+            id: entry.id || entry.assetModelId,
+            assetModelId: entry.assetModelId || entry.id,
+            modelName: entry.modelName || '',
+            manufacturerName: entry.manufacturerName || '',
+            quantity: toPositiveInteger(entry.quantity, 1),
+          };
+        }
         return {
+          kind: 'serialized',
           assetId: entry.id || entry.assetId,
           id: entry.id || entry.assetId,
           inventoryNumber: entry.inventoryNumber || '',
@@ -221,20 +298,26 @@
       if (!selectedAssets.length) {
         var emptyRow = document.createElement('tr');
         emptyRow.className = 'empty-row';
-        emptyRow.innerHTML = '<td colspan="5" class="text-center text-muted py-3">Noch keine Assets ausgewählt.</td>';
+        emptyRow.innerHTML = '<td colspan="7" class="text-center text-muted py-3">Noch keine Assets ausgewählt.</td>';
         tbody.appendChild(emptyRow);
         syncHiddenInput();
         return;
       }
 
       selectedAssets.forEach(function (asset, index) {
+        var isBulk = asset.kind === 'bulk';
+        var quantityInput = isBulk
+          ? '<input type="number" min="1" step="1" class="form-control form-control-sm js-item-qty" data-index="' + index + '" value="' + toPositiveInteger(asset.quantity, 1) + '">'
+          : '<span class="badge text-bg-light border">1</span>';
         var row = document.createElement('tr');
-        row.dataset.assetId = asset.id || asset.assetId;
+        row.dataset.itemKey = buildItemKey(asset);
         row.innerHTML = ''
-          + '<td>' + (asset.inventoryNumber || '-') + '</td>'
-          + '<td>' + (asset.serialNumber || '-') + '</td>'
+          + '<td><span class="badge ' + (isBulk ? 'text-bg-warning' : 'text-bg-primary') + '">' + (isBulk ? 'Bulk' : 'Asset') + '</span></td>'
+          + '<td>' + (isBulk ? '-' : (asset.inventoryNumber || '-')) + '</td>'
+          + '<td>' + (isBulk ? '-' : (asset.serialNumber || '-')) + '</td>'
           + '<td>' + (asset.modelName || '-') + '</td>'
           + '<td>' + (asset.manufacturerName || '-') + '</td>'
+          + '<td>' + quantityInput + '</td>'
           + '<td class="text-end">'
           + '  <button type="button" class="btn btn-outline-danger btn-sm remove-asset-button" data-index="' + index + '">'
           + '    <i class="bi bi-trash3-fill"></i>'
@@ -254,27 +337,37 @@
         });
       });
 
+      tbody.querySelectorAll('.js-item-qty').forEach(function (input) {
+        input.addEventListener('change', function () {
+          var index = parseInt(input.getAttribute('data-index'), 10);
+          if (Number.isNaN(index) || index < 0 || index >= selectedAssets.length) {
+            return;
+          }
+          selectedAssets[index].quantity = toPositiveInteger(input.value, selectedAssets[index].quantity || 1);
+          input.value = String(selectedAssets[index].quantity);
+          syncHiddenInput();
+        });
+      });
+
       syncHiddenInput();
     }
 
-    function hasAsset(assetId) {
+    function hasAsset(item) {
+      var key = buildItemKey(item);
+      if (!key) {
+        return false;
+      }
       return selectedAssets.some(function (entry) {
-        return (entry.id || entry.assetId) === assetId;
+        return buildItemKey(entry) === key;
       });
     }
 
     function addAsset(asset) {
-      var assetId = asset && (asset.id || asset.assetId);
-      if (!assetId || hasAsset(assetId)) {
+      var normalized = normalizeSelectedEntry(asset);
+      if (!normalized || hasAsset(normalized)) {
         return false;
       }
-      selectedAssets.push({
-        id: assetId,
-        inventoryNumber: asset.inventoryNumber || '',
-        serialNumber: asset.serialNumber || '',
-        modelName: asset.modelName || '',
-        manufacturerName: asset.manufacturerName || '',
-      });
+      selectedAssets.push(normalized);
       renderRows();
       return true;
     }
@@ -294,7 +387,11 @@
         var button = document.createElement('button');
         button.type = 'button';
         button.className = 'list-group-item list-group-item-action';
-        button.textContent = item.label || [item.inventoryNumber, item.modelName, item.manufacturerName].filter(Boolean).join(' — ');
+        var labelParts = [item.label || [item.inventoryNumber, item.modelName, item.manufacturerName].filter(Boolean).join(' — ')];
+        if (item.kind === 'bulk') {
+          labelParts.push('Bulk');
+        }
+        button.textContent = labelParts.filter(Boolean).join(' · ');
         button.addEventListener('click', function () {
           addAsset(item);
           assetSearchInput.value = '';
@@ -363,6 +460,9 @@
           var normalized = normalizeCode(code);
           var normalizedIdentifier = normalizeIdentifier(code);
           var exact = items.find(function (item) {
+            if (item.kind === 'bulk') {
+              return false;
+            }
             var inventoryCode = normalizeCode(item.inventoryNumber);
             var serialCode = normalizeCode(item.serialNumber);
             var inventoryIdentifier = normalizeIdentifier(item.inventoryNumber);
@@ -370,7 +470,7 @@
             return inventoryCode === normalized
               || serialCode === normalized
               || (normalizedIdentifier && (inventoryIdentifier === normalizedIdentifier || serialIdentifier === normalizedIdentifier));
-          }) || items[0];
+          }) || items.find(function (item) { return item.kind !== 'bulk'; }) || items[0];
           if (addAsset(exact)) {
             appendLog('Hinzugefügt: ' + (exact.inventoryNumber || exact.serialNumber || exact.id), 'text-success');
           } else {

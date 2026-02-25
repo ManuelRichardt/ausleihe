@@ -52,35 +52,60 @@ class LoanAdminController {
   }
 
   parseSelectedItems(raw) {
+    const normalizeQuantity = (value) => {
+      const parsed = parseInt(value, 10);
+      return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+    };
+    const normalizeEntry = (entry) => {
+      if (!entry) {
+        return null;
+      }
+      if (typeof entry === 'string') {
+        return { kind: 'serialized', assetId: entry };
+      }
+      if (typeof entry !== 'object') {
+        return null;
+      }
+      const kind = String(entry.kind || '').toLowerCase();
+      if (kind === 'bulk' || entry.trackingType === 'bulk' || (!entry.assetId && entry.assetModelId)) {
+        const assetModelId = entry.assetModelId || entry.modelId || entry.id || null;
+        if (!assetModelId) {
+          return null;
+        }
+        return {
+          kind: 'bulk',
+          assetModelId,
+          quantity: normalizeQuantity(entry.quantity),
+          modelName: entry.modelName || '',
+          manufacturerName: entry.manufacturerName || '',
+        };
+      }
+      return {
+        kind: 'serialized',
+        assetId: entry.assetId || entry.id || null,
+        inventoryNumber: entry.inventoryNumber || '',
+        serialNumber: entry.serialNumber || '',
+        modelName: entry.modelName || '',
+        manufacturerName: entry.manufacturerName || '',
+      };
+    };
+
     if (Array.isArray(raw)) {
       return raw
-        .map((entry) => {
-          if (!entry) {
-            return null;
-          }
-          if (typeof entry === 'string') {
-            return { assetId: entry };
-          }
-          if (typeof entry === 'object') {
-            return {
-              assetId: entry.assetId || entry.id || null,
-            };
-          }
-          return null;
-        })
+        .map(normalizeEntry)
         .filter(Boolean)
-        .filter((entry) => entry.assetId);
+        .filter((entry) => (entry.kind === 'bulk' ? entry.assetModelId : entry.assetId));
     }
     if (raw && typeof raw === 'object') {
-      const assetId = raw.assetId || raw.id || null;
-      return assetId ? [{ assetId }] : [];
+      const normalized = normalizeEntry(raw);
+      return normalized ? [normalized] : [];
     }
     if (!raw) {
       return [];
     }
     try {
       const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      return this.parseSelectedItems(parsed);
     } catch (err) {
       return [];
     }
@@ -195,9 +220,20 @@ class LoanAdminController {
         reservedFrom: formData.reservedFrom,
         reservedUntil: formData.reservedUntil,
         notes: formData.notes || null,
-        items: selectedAssets.map((entry) => ({
-          assetId: entry.assetId || entry.id,
-        })),
+        items: selectedAssets.map((entry) => {
+          if (entry.kind === 'bulk') {
+            return {
+              kind: 'bulk',
+              assetModelId: entry.assetModelId,
+              quantity: entry.quantity,
+            };
+          }
+          return {
+            kind: 'serialized',
+            assetId: entry.assetId || entry.id,
+            quantity: 1,
+          };
+        }),
       });
 
       if (typeof req.flash === 'function') {

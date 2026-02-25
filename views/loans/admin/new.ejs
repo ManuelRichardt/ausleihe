@@ -107,27 +107,32 @@
         <table class="table table-hover align-middle" id="selectedAssetsTable">
           <thead class="table-light">
             <tr>
+              <th>Typ</th>
               <th>Inventarnummer</th>
               <th>Seriennummer</th>
               <th>Modell</th>
               <th>Hersteller</th>
+              <th>Menge</th>
               <th class="text-end">Aktion</th>
             </tr>
           </thead>
           <tbody>
             <% if (safeSelectedAssets.length) { %>
               <% safeSelectedAssets.forEach(function (asset) { %>
+                <% const isBulk = String(asset.kind || asset.trackingType || '').toLowerCase() === 'bulk'; %>
                 <tr>
-                  <td><%= asset.inventoryNumber || '-' %></td>
-                  <td><%= asset.serialNumber || '-' %></td>
+                  <td><span class="badge <%= isBulk ? 'text-bg-warning' : 'text-bg-primary' %>"><%= isBulk ? 'Bulk' : 'Asset' %></span></td>
+                  <td><%= isBulk ? '-' : (asset.inventoryNumber || '-') %></td>
+                  <td><%= isBulk ? '-' : (asset.serialNumber || '-') %></td>
                   <td><%= asset.modelName || '-' %></td>
                   <td><%= asset.manufacturerName || '-' %></td>
+                  <td><%= isBulk ? (asset.quantity || 1) : 1 %></td>
                   <td class="text-end"><span class="text-muted small">Wird beim Laden aktualisiert</span></td>
                 </tr>
               <% }) %>
             <% } else { %>
               <tr class="empty-row">
-                <td colspan="5" class="text-center text-muted py-3">Noch keine Assets ausgewählt.</td>
+                <td colspan="7" class="text-center text-muted py-3">Noch keine Assets ausgewählt.</td>
               </tr>
             <% } %>
           </tbody>

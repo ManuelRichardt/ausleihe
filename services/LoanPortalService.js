@@ -19,25 +19,59 @@ class LoanPortalService {
     return parsed;
   }
 
+  #parsePositiveQuantity(value, fallback = 1) {
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      return fallback;
+    }
+    return parsed;
+  }
+
   #normalizeSelectedItems(items) {
     const rawItems = Array.isArray(items) ? items : [];
-    const itemMap = new Map();
+    const normalizedItems = [];
+    const normalizedItemIndexByKey = new Map();
     rawItems.forEach((entry) => {
-      if (!entry) {
+      if (!entry || typeof entry !== 'object') {
         return;
       }
+
+      const kind = String(entry.kind || '').toLowerCase();
+      if (kind === 'bulk' || (!entry.assetId && entry.assetModelId)) {
+        const assetModelId = String(entry.assetModelId || entry.modelId || '').trim();
+        if (!assetModelId) {
+          return;
+        }
+        const key = `bulk:${assetModelId}`;
+        const nextItem = {
+          kind: 'bulk',
+          assetModelId,
+          quantity: this.#parsePositiveQuantity(entry.quantity, 1),
+        };
+        if (normalizedItemIndexByKey.has(key)) {
+          normalizedItems[normalizedItemIndexByKey.get(key)] = nextItem;
+          return;
+        }
+        normalizedItemIndexByKey.set(key, normalizedItems.length);
+        normalizedItems.push(nextItem);
+        return;
+      }
+
       const assetId = String(entry.assetId || entry.id || '').trim();
       if (!assetId) {
         return;
       }
-      if (!itemMap.has(assetId)) {
-        itemMap.set(assetId, {
+      const key = `serialized:${assetId}`;
+      if (!normalizedItemIndexByKey.has(key)) {
+        normalizedItemIndexByKey.set(key, normalizedItems.length);
+        normalizedItems.push({
+          kind: 'serialized',
           assetId,
           quantity: 1,
         });
       }
     });
-    return Array.from(itemMap.values());
+    return normalizedItems;
   }
 
   #buildGuestUsername(firstName, lastName, email) {
@@ -457,7 +491,8 @@ class LoanPortalService {
         order: [['inventoryNumber', 'ASC'], ['serialNumber', 'ASC']],
       }
     );
-    return assets.map((asset) => ({
+    const serializedResults = assets.map((asset) => ({
+      kind: 'serialized',
       id: asset.id,
       inventoryNumber: asset.inventoryNumber || '',
       serialNumber: asset.serialNumber || '',
@@ -470,6 +505,60 @@ class LoanPortalService {
         asset.model && asset.model.manufacturer ? asset.model.manufacturer.name : null,
       ].filter(Boolean).join(' — '),
     }));
+
+    const bulkModels = await this.models.AssetModel.findAll({
+      where: {
+        lendingLocationId,
+        trackingType: 'bulk',
+        isActive: true,
+        [this.models.Sequelize.Op.or]: [
+          { name: { [this.models.Sequelize.Op.like]: `%${q}%` } },
+          { description: { [this.models.Sequelize.Op.like]: `%${q}%` } },
+          this.models.sequelize.where(
+            this.models.sequelize.fn('LOWER', this.models.sequelize.col('manufacturer.name')),
+            { [this.models.Sequelize.Op.like]: `%${q.toLowerCase()}%` }
+          ),
+        ],
+      },
+      include: [
+        { model: this.models.Manufacturer, as: 'manufacturer' },
+        {
+          model: this.models.InventoryStock,
+          as: 'stocks',
+          required: false,
+          where: { lendingLocationId },
+        },
+      ],
+      order: [['name', 'ASC']],
+      limit: 20,
+    });
+
+    const bulkResults = bulkModels.map((model) => {
+      const stock = Array.isArray(model.stocks) ? model.stocks[0] : null;
+      const availableQuantity = stock ? Math.max(parseInt(stock.quantityAvailable, 10) || 0, 0) : 0;
+      return {
+        kind: 'bulk',
+        id: model.id,
+        assetModelId: model.id,
+        inventoryNumber: '',
+        serialNumber: '',
+        modelId: model.id,
+        modelName: model.name || '',
+        manufacturerName: model.manufacturer ? model.manufacturer.name : '',
+        availableQuantity,
+        label: [
+          model.name || null,
+          model.manufacturer ? model.manufacturer.name : null,
+          `Bulk (${availableQuantity} verfügbar)`,
+        ].filter(Boolean).join(' — '),
+      };
+    });
+
+    const combined = serializedResults.concat(bulkResults);
+    if (combined.length > 20) {
+      return combined.slice(0, 20);
+    }
+    return combined;
   }
 
   async listAssetCodes(lendingLocationId, limit = 12000) {
