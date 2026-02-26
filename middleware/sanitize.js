@@ -45,7 +45,8 @@ function sanitizeValue(value, key) {
         key === 'returnTo' ||
         key === 'csrfToken' ||
         key === 'signatureBase64' ||
-        key === 'signatureData'
+        key === 'signatureData' ||
+        key === 'selectedAssetsJson'
       ) {
         result[key] = value[key];
         return;

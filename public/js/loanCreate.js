@@ -72,8 +72,8 @@
         kind: 'bulk',
         id: bulkModelId,
         assetModelId: bulkModelId,
-        inventoryNumber: '',
-        serialNumber: '',
+        inventoryNumber: rawEntry.inventoryNumber || '',
+        serialNumber: rawEntry.serialNumber || '',
         modelName: rawEntry.modelName || rawEntry.name || '',
         manufacturerName: rawEntry.manufacturerName || '',
         quantity: toPositiveInteger(rawEntry.quantity, 1),
@@ -276,6 +276,8 @@
             kind: 'bulk',
             id: entry.id || entry.assetModelId,
             assetModelId: entry.assetModelId || entry.id,
+            inventoryNumber: entry.inventoryNumber || '',
+            serialNumber: entry.serialNumber || '',
             modelName: entry.modelName || '',
             manufacturerName: entry.manufacturerName || '',
             quantity: toPositiveInteger(entry.quantity, 1),
@@ -311,7 +313,7 @@
       if (!selectedAssets.length) {
         var emptyRow = document.createElement('tr');
         emptyRow.className = 'empty-row';
-        emptyRow.innerHTML = '<td colspan="7" class="text-center text-muted py-3">Noch keine Assets ausgewählt.</td>';
+        emptyRow.innerHTML = '<td colspan="6" class="text-center text-muted py-3">Noch keine Assets ausgewählt.</td>';
         tbody.appendChild(emptyRow);
         syncHiddenInput();
         return;
@@ -325,9 +327,8 @@
         var row = document.createElement('tr');
         row.dataset.itemKey = buildItemKey(asset);
         row.innerHTML = ''
-          + '<td><span class="badge ' + (isBulk ? 'text-bg-warning' : 'text-bg-primary') + '">' + (isBulk ? 'Bulk' : 'Asset') + '</span></td>'
-          + '<td>' + (isBulk ? '-' : (asset.inventoryNumber || '-')) + '</td>'
-          + '<td>' + (isBulk ? '-' : (asset.serialNumber || '-')) + '</td>'
+          + '<td>' + (asset.inventoryNumber || '-') + '</td>'
+          + '<td>' + (asset.serialNumber || '-') + '</td>'
           + '<td>' + (asset.modelName || '-') + '</td>'
           + '<td>' + (asset.manufacturerName || '-') + '</td>'
           + '<td>' + quantityInput + '</td>'
@@ -402,11 +403,7 @@
         var button = document.createElement('button');
         button.type = 'button';
         button.className = 'list-group-item list-group-item-action';
-        var labelParts = [item.label || [item.inventoryNumber, item.modelName, item.manufacturerName].filter(Boolean).join(' — ')];
-        if (item.kind === 'bulk') {
-          labelParts.push('Bulk');
-        }
-        button.textContent = labelParts.filter(Boolean).join(' · ');
+        button.textContent = item.label || [item.inventoryNumber, item.modelName, item.manufacturerName].filter(Boolean).join(' — ');
         button.addEventListener('click', function () {
           addAsset(item);
           assetSearchInput.value = '';

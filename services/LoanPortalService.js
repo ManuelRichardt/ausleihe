@@ -491,86 +491,57 @@ class LoanPortalService {
         order: [['inventoryNumber', 'ASC'], ['serialNumber', 'ASC']],
       }
     );
-    const serializedResults = assets.map((asset) => ({
-      kind: 'serialized',
-      id: asset.id,
-      inventoryNumber: asset.inventoryNumber || '',
-      serialNumber: asset.serialNumber || '',
-      modelId: asset.assetModelId,
-      modelName: asset.model ? asset.model.name : '',
-      manufacturerName: asset.model && asset.model.manufacturer ? asset.model.manufacturer.name : '',
-      label: [
-        asset.inventoryNumber || asset.serialNumber || asset.id,
-        asset.model ? asset.model.name : null,
-        asset.model && asset.model.manufacturer ? asset.model.manufacturer.name : null,
-      ].filter(Boolean).join(' — '),
-    }));
+    const bulkModelIds = Array.from(
+      new Set(
+        assets
+          .filter((asset) => asset && asset.model && asset.model.trackingType === 'bulk')
+          .map((asset) => asset.assetModelId)
+          .filter(Boolean)
+      )
+    );
 
-    let bulkModels = [];
-    try {
-      const matchingManufacturers = await this.models.Manufacturer.findAll({
+    let bulkStockByModelId = new Map();
+    if (bulkModelIds.length) {
+      const stocks = await this.models.InventoryStock.findAll({
         where: {
           lendingLocationId,
-          name: { [this.models.Sequelize.Op.like]: `%${q}%` },
+          assetModelId: { [this.models.Sequelize.Op.in]: bulkModelIds },
         },
-        attributes: ['id'],
-        limit: 50,
+        attributes: ['assetModelId', 'quantityAvailable'],
       });
-      const matchingManufacturerIds = matchingManufacturers.map((manufacturer) => manufacturer.id);
-
-      bulkModels = await this.models.AssetModel.findAll({
-        where: {
-          lendingLocationId,
-          trackingType: 'bulk',
-          isActive: true,
-          [this.models.Sequelize.Op.or]: [
-            { name: { [this.models.Sequelize.Op.like]: `%${q}%` } },
-            { description: { [this.models.Sequelize.Op.like]: `%${q}%` } },
-            ...(matchingManufacturerIds.length ? [{ manufacturerId: { [this.models.Sequelize.Op.in]: matchingManufacturerIds } }] : []),
-          ],
-        },
-        include: [
-          { model: this.models.Manufacturer, as: 'manufacturer' },
-          {
-            model: this.models.InventoryStock,
-            as: 'stocks',
-            required: false,
-            where: { lendingLocationId },
-          },
-        ],
-        order: [['name', 'ASC']],
-        limit: 20,
-      });
-    } catch (err) {
-      bulkModels = [];
+      bulkStockByModelId = new Map(
+        stocks.map((stock) => [
+          stock.assetModelId,
+          Math.max(parseInt(stock.quantityAvailable, 10) || 0, 0),
+        ])
+      );
     }
 
-    const bulkResults = bulkModels.map((model) => {
-      const stock = Array.isArray(model.stocks) ? model.stocks[0] : null;
-      const availableQuantity = stock ? Math.max(parseInt(stock.quantityAvailable, 10) || 0, 0) : 0;
+    return assets.map((asset) => {
+      const model = asset.model || null;
+      const manufacturerName = model && model.manufacturer ? model.manufacturer.name : '';
+      const isBulk = Boolean(model && model.trackingType === 'bulk');
+      const availableQuantity = isBulk ? (bulkStockByModelId.get(asset.assetModelId) || 0) : 1;
+
       return {
-        kind: 'bulk',
-        id: model.id,
-        assetModelId: model.id,
-        inventoryNumber: '',
-        serialNumber: '',
-        modelId: model.id,
-        modelName: model.name || '',
-        manufacturerName: model.manufacturer ? model.manufacturer.name : '',
+        kind: isBulk ? 'bulk' : 'serialized',
+        id: asset.id,
+        assetId: isBulk ? null : asset.id,
+        assetModelId: asset.assetModelId,
+        inventoryNumber: asset.inventoryNumber || '',
+        serialNumber: asset.serialNumber || '',
+        modelId: asset.assetModelId,
+        modelName: model ? model.name : '',
+        manufacturerName,
         availableQuantity,
         label: [
-          model.name || null,
-          model.manufacturer ? model.manufacturer.name : null,
-          `Bulk (${availableQuantity} verfügbar)`,
+          asset.inventoryNumber || asset.serialNumber || asset.id,
+          model ? model.name : null,
+          manufacturerName || null,
+          isBulk ? `${availableQuantity} verfügbar` : null,
         ].filter(Boolean).join(' — '),
       };
     });
-
-    const combined = serializedResults.concat(bulkResults);
-    if (combined.length > 20) {
-      return combined.slice(0, 20);
-    }
-    return combined;
   }
 
   async listAssetCodes(lendingLocationId, limit = 12000) {
