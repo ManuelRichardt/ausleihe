@@ -1,10 +1,19 @@
 module.exports = function buildComponents({ ErrorResponse }) {
   return {
     securitySchemes: {
-      BearerAuth: {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
+      SessionAuth: {
+        type: 'apiKey',
+        in: 'cookie',
+        name: 'sid',
+        description:
+          'Session-Cookie nach Login. Hinweis: Der Cookie-Name kann per SESSION_COOKIE_NAME angepasst werden.',
+      },
+      CsrfToken: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-csrf-token',
+        description:
+          'Für nicht-GET Requests erforderlich (Double-Submit CSRF Schutz).',
       },
     },
     schemas: {

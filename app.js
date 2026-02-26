@@ -11,6 +11,7 @@ const sanitize = require('./middleware/sanitize');
 const defaultLocals = require('./middleware/defaultLocals');
 const { csrfProtectionMiddleware } = require('./config/csrf');
 const buildSessionConfig = require('./config/session');
+const { createSessionStore } = require('./config/sessionStore');
 const { createServices } = require('./services');
 
 const webRouter = require('./routes/web');
@@ -148,7 +149,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json({ limit: requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: requestBodyLimit, parameterLimit: 10000 }));
 app.use(cookieParser());
-app.use(session(buildSessionConfig()));
+const sessionStore = createSessionStore({ sessionModel: db.SessionRecord });
+app.use(session(buildSessionConfig({ store: sessionStore })));
 app.use(flash());
 app.use(sanitize);
 app.use(csrfProtectionMiddleware({ ignorePaths: ['/auth/saml/callback'] }));

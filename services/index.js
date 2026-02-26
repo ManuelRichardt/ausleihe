@@ -4,7 +4,6 @@ const UserService = require('./UserService');
 const RoleService = require('./RoleService');
 const PermissionService = require('./PermissionService');
 const AuthzService = require('./AuthzService');
-const AuthService = require('./AuthService');
 const LendingLocationService = require('./LendingLocationService');
 const OpeningHourService = require('./OpeningHourService');
 const ManufacturerService = require('./ManufacturerService');
@@ -55,7 +54,6 @@ function createServices(customModels = models) {
   const notificationService = new NotificationService(customModels);
   const privacyService = new PrivacyService(customModels);
   return {
-    authService: new AuthService(customModels),
     userService: new UserService(customModels),
     roleService: new RoleService(customModels),
     permissionService: new PermissionService(customModels),
@@ -130,7 +128,6 @@ module.exports = {
   LoanItemService,
   LoanSignatureService,
   AuditLogService,
-  AuthService,
   ConfigService,
   AuthSessionService,
   LocalAuthService,

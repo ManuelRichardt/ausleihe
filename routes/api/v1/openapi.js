@@ -9,7 +9,8 @@ module.exports = {
   info: {
     title: 'Inventory Loan API',
     version: '1.0.0',
-    description: 'API for device and room lending system',
+    description:
+      'API for device and room lending system. Authentication is session-cookie based (no bearer token).',
   },
   servers: [{ url: apiBase }],
   tags,

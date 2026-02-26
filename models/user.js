@@ -95,7 +95,6 @@ module.exports = (sequelize, DataTypes) => {
     });
     User.hasMany(models.Loan, { foreignKey: 'userId', as: 'loans' });
     User.hasMany(models.LoanSignature, { foreignKey: 'userId', as: 'loanSignatures' });
-    User.hasMany(models.Jwt, { foreignKey: 'userId', as: 'jwtTokens' });
     User.hasMany(models.AuditLog, { foreignKey: 'userId', as: 'auditLogs' });
     User.hasMany(models.LoanEvent, { foreignKey: 'userId', as: 'loanEvents' });
     User.hasMany(models.Installation, { foreignKey: 'installedByUserId', as: 'installations' });
