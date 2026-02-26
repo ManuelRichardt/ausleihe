@@ -1,4 +1,27 @@
-const { spawn } = require('child_process');
+function getNodemailerModule() {
+  try {
+    // Lazy-load keeps application boot independent from optional mail dependency resolution.
+    return require('nodemailer');
+  } catch (err) {
+    const wrapped = new Error(
+      'Nodemailer ist nicht installiert. Bitte Abhängigkeiten neu installieren (npm install).'
+    );
+    wrapped.cause = err;
+    throw wrapped;
+  }
+}
+
+function normalizePort(value, fallback = 587) {
+  const parsed = parseInt(String(value || '').trim(), 10);
+  if (Number.isNaN(parsed) || parsed < 1 || parsed > 65535) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function trimString(value) {
+  return String(value || '').trim();
+}
 
 class MailService {
   constructor(models, mailConfigService, mailTemplateService, notificationService) {
@@ -6,6 +29,10 @@ class MailService {
     this.mailConfigService = mailConfigService;
     this.mailTemplateService = mailTemplateService;
     this.notificationService = notificationService;
+    this.smtpTransportCache = {
+      key: null,
+      transporter: null,
+    };
   }
 
   resolveLocale(value) {
@@ -14,7 +41,7 @@ class MailService {
 
   async sendTemplate(templateKey, payload = {}) {
     const locale = this.resolveLocale(payload.locale);
-    const email = String(payload.email || '').trim();
+    const email = trimString(payload.email);
     if (!email) {
       const err = new Error('Empfänger-E-Mail fehlt');
       err.status = 422;
@@ -49,6 +76,108 @@ class MailService {
     return notification;
   }
 
+  validateSmtpConfig(config) {
+    const smtpHost = trimString(config.smtpHost);
+    if (!smtpHost) {
+      const err = new Error('SMTP-Host ist nicht konfiguriert');
+      err.status = 422;
+      throw err;
+    }
+
+    const smtpPort = normalizePort(config.smtpPort, NaN);
+    if (!Number.isFinite(smtpPort)) {
+      const err = new Error('SMTP-Port ist ungültig');
+      err.status = 422;
+      throw err;
+    }
+
+    const smtpUser = trimString(config.smtpUser);
+    const smtpPass = trimString(config.smtpPass);
+    if (smtpUser && !smtpPass) {
+      const err = new Error('SMTP-Passwort fehlt');
+      err.status = 422;
+      throw err;
+    }
+
+    const fromAddress = trimString(config.fromEmail);
+    if (!fromAddress) {
+      const err = new Error('Absenderadresse ist nicht konfiguriert');
+      err.status = 422;
+      throw err;
+    }
+
+    return {
+      smtpHost,
+      smtpPort,
+      smtpSecure: Boolean(config.smtpSecure),
+      smtpUser,
+      smtpPass,
+      fromAddress,
+      fromName: trimString(config.fromName),
+      replyTo: trimString(config.replyTo),
+    };
+  }
+
+  buildTransportCacheKey(config) {
+    return JSON.stringify({
+      host: config.smtpHost,
+      port: config.smtpPort,
+      secure: config.smtpSecure,
+      user: config.smtpUser,
+      pass: config.smtpPass,
+    });
+  }
+
+  getSmtpTransporter(validatedConfig) {
+    const cacheKey = this.buildTransportCacheKey(validatedConfig);
+    if (this.smtpTransportCache.transporter && this.smtpTransportCache.key === cacheKey) {
+      return this.smtpTransportCache.transporter;
+    }
+
+    const nodemailer = getNodemailerModule();
+    const transportOptions = {
+      host: validatedConfig.smtpHost,
+      port: validatedConfig.smtpPort,
+      secure: validatedConfig.smtpSecure,
+    };
+    if (validatedConfig.smtpUser) {
+      transportOptions.auth = {
+        user: validatedConfig.smtpUser,
+        pass: validatedConfig.smtpPass,
+      };
+    }
+
+    const transporter = nodemailer.createTransport(transportOptions);
+    this.smtpTransportCache = {
+      key: cacheKey,
+      transporter,
+    };
+    return transporter;
+  }
+
+  buildFromField(validatedConfig) {
+    if (!validatedConfig.fromName) {
+      return validatedConfig.fromAddress;
+    }
+    return {
+      name: validatedConfig.fromName,
+      address: validatedConfig.fromAddress,
+    };
+  }
+
+  async sendViaSmtp({ config, notification }) {
+    const validatedConfig = this.validateSmtpConfig(config);
+    const transporter = this.getSmtpTransporter(validatedConfig);
+
+    await transporter.sendMail({
+      from: this.buildFromField(validatedConfig),
+      to: notification.email,
+      replyTo: validatedConfig.replyTo || undefined,
+      subject: notification.subject,
+      text: notification.body || '',
+    });
+  }
+
   async dispatchNotification(notificationId) {
     const notification = await this.notificationService.getById(notificationId);
     const config = await this.mailConfigService.getConfig({ createIfMissing: true });
@@ -56,27 +185,9 @@ class MailService {
       await this.notificationService.markFailed(notification.id, 'Mail-System ist deaktiviert');
       return notification;
     }
-    if (config.transport !== 'sendmail') {
-      await this.notificationService.markFailed(notification.id, 'Nicht unterstützter Mail-Transport');
-      return notification;
-    }
-
-    const fromAddress = String(config.fromEmail || '').trim();
-    if (!fromAddress) {
-      await this.notificationService.markFailed(notification.id, 'Absenderadresse ist nicht konfiguriert');
-      return notification;
-    }
 
     try {
-      await this.sendViaSendmail({
-        sendmailPath: config.sendmailPath || '/usr/sbin/sendmail',
-        fromEmail: fromAddress,
-        fromName: config.fromName || '',
-        replyTo: config.replyTo || '',
-        to: notification.email,
-        subject: notification.subject,
-        body: notification.body,
-      });
+      await this.sendViaSmtp({ config, notification });
       await this.notificationService.markSent(notification.id);
     } catch (err) {
       await this.notificationService.markFailed(notification.id, err.message || 'Versand fehlgeschlagen');
@@ -220,47 +331,6 @@ class MailService {
     }
 
     return created;
-  }
-
-  async sendViaSendmail(payload = {}) {
-    return new Promise((resolve, reject) => {
-      const sendmailPath = payload.sendmailPath || '/usr/sbin/sendmail';
-      const child = spawn(sendmailPath, ['-t', '-i']);
-      const fromHeader = payload.fromName
-        ? `"${String(payload.fromName).replace(/\"/g, '')}" <${payload.fromEmail}>`
-        : payload.fromEmail;
-
-      const headers = [
-        `From: ${fromHeader}`,
-        `To: ${payload.to}`,
-        payload.replyTo ? `Reply-To: ${payload.replyTo}` : '',
-        `Subject: ${payload.subject}`,
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=UTF-8',
-        'Content-Transfer-Encoding: 8bit',
-      ].filter(Boolean).join('\n');
-
-      const message = `${headers}\n\n${payload.body || ''}\n`;
-
-      let stderr = '';
-      child.stderr.on('data', (chunk) => {
-        stderr += chunk.toString();
-      });
-
-      child.on('error', (err) => {
-        reject(err);
-      });
-      child.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-          return;
-        }
-        reject(new Error(stderr.trim() || `sendmail exited with code ${code}`));
-      });
-
-      child.stdin.write(message);
-      child.stdin.end();
-    });
   }
 }
 

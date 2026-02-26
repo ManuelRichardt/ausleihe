@@ -13,9 +13,9 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: false,
       },
       transport: {
-        type: DataTypes.ENUM('sendmail'),
+        type: DataTypes.ENUM('smtp', 'sendmail'),
         allowNull: false,
-        defaultValue: 'sendmail',
+        defaultValue: 'smtp',
       },
       fromEmail: {
         type: DataTypes.STRING(191),
@@ -29,9 +29,36 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(191),
         allowNull: true,
       },
+      smtpHost: {
+        type: DataTypes.STRING(191),
+        allowNull: true,
+        field: 'smtp_host',
+      },
+      smtpPort: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: false,
+        defaultValue: 587,
+        field: 'smtp_port',
+      },
+      smtpSecure: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'smtp_secure',
+      },
+      smtpUser: {
+        type: DataTypes.STRING(191),
+        allowNull: true,
+        field: 'smtp_user',
+      },
+      smtpPass: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'smtp_pass',
+      },
       sendmailPath: {
         type: DataTypes.STRING(255),
-        allowNull: false,
+        allowNull: true,
         defaultValue: '/usr/sbin/sendmail',
       },
     },

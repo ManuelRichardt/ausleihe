@@ -31,11 +31,15 @@ class MailAdminController {
     try {
       await services.mailConfigService.updateConfig({
         isEnabled: req.body.isEnabled === 'on' || req.body.isEnabled === 'true',
-        transport: 'sendmail',
+        transport: 'smtp',
         fromEmail: req.body.fromEmail,
         fromName: req.body.fromName,
         replyTo: req.body.replyTo,
-        sendmailPath: req.body.sendmailPath,
+        smtpHost: req.body.smtpHost,
+        smtpPort: req.body.smtpPort,
+        smtpSecure: req.body.smtpSecure === 'on' || req.body.smtpSecure === 'true',
+        smtpUser: req.body.smtpUser,
+        smtpPass: req.body.smtpPass,
       });
       if (typeof req.flash === 'function') {
         req.flash('success', 'Mail-Konfiguration gespeichert');

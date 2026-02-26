@@ -413,18 +413,25 @@ class InstallationService {
       await this.seedAuthProviders(transaction);
       await this.seedUiTexts(transaction);
 
-      await this.models.MailConfig.findOrCreate({
-        where: { transport: 'sendmail' },
-        defaults: {
-          isEnabled: false,
-          transport: 'sendmail',
-          fromEmail: '',
-          fromName: '',
-          replyTo: '',
-          sendmailPath: '/usr/sbin/sendmail',
-        },
-        transaction,
-      });
+      const existingMailConfig = await this.models.MailConfig.findOne({ transaction });
+      if (!existingMailConfig) {
+        await this.models.MailConfig.create(
+          {
+            isEnabled: false,
+            transport: 'smtp',
+            fromEmail: '',
+            fromName: '',
+            replyTo: '',
+            smtpHost: '',
+            smtpPort: 587,
+            smtpSecure: false,
+            smtpUser: '',
+            smtpPass: '',
+            sendmailPath: '/usr/sbin/sendmail',
+          },
+          { transaction }
+        );
+      }
 
       const existingPrivacyConfig = await this.models.PrivacyConfig.findOne({ transaction });
       if (!existingPrivacyConfig) {
