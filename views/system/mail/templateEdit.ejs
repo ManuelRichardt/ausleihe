@@ -15,6 +15,14 @@
   <form method="post" action="/system/mail/templates/<%= tpl.id %>" class="card shadow-sm">
     <input type="hidden" name="csrfToken" value="<%= csrfToken || '' %>">
     <div class="card-body">
+      <div class="alert alert-light border mb-3" role="note">
+        <div class="small fw-semibold mb-1">Verfügbare Platzhalter</div>
+        <div class="small">
+          <code>{{firstName}}</code>, <code>{{lastName}}</code>, <code>{{loanId}}</code>,
+          <code>{{lendingLocation}}</code>, <code>{{reservedFrom}}</code>, <code>{{reservedUntil}}</code>,
+          <code>{{assets}}</code>, <code>{{assetNames}}</code>, <code>{{assetCount}}</code>, <code>{{assetDistinctCount}}</code>
+        </div>
+      </div>
       <div class="row g-3">
         <div class="col-md-4">
           <label class="form-label" for="key">Key</label>

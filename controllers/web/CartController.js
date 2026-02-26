@@ -93,8 +93,10 @@ class CartController {
               userId: req.user.id,
               email: req.user.email,
               locale: req.locale || 'de',
+              loanId: loan.id,
               variables: {
                 firstName: req.user.firstName || req.user.username || '',
+                lastName: req.user.lastName || '',
                 loanId: loan.id,
                 lendingLocation: location ? location.name : '-',
                 reservedFrom: formatDateTime(loan.reservedFrom),

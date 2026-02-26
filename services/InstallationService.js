@@ -1,5 +1,6 @@
 const DEFAULT_PERMISSION_SCOPE = 'both';
 const INSTALLATION_KEY = 'primary';
+const MailTemplateService = require('./MailTemplateService');
 
 const permissionsSeed = [
   { key: 'admin.access', description: 'Zugriff auf Admin-Bereich (Ausleihe)', scope: 'ausleihe' },
@@ -167,43 +168,9 @@ function createInstallationAlreadyCompletedError() {
   return err;
 }
 
-const mailTemplateSeed = [
-  {
-    key: 'reservation_confirmation',
-    subjectDe: 'Reservierungsbestätigung {{loanId}}',
-    subjectEn: 'Reservation confirmation {{loanId}}',
-    bodyDe: 'Hallo {{firstName}},\n\nIhre Reservierung {{loanId}} wurde erfasst.\nAusleihe: {{lendingLocation}}\nVon: {{reservedFrom}}\nBis: {{reservedUntil}}\n\nViele Grüße',
-    bodyEn: 'Hello {{firstName}},\n\nyour reservation {{loanId}} has been created.\nLending location: {{lendingLocation}}\nFrom: {{reservedFrom}}\nUntil: {{reservedUntil}}\n\nBest regards',
-  },
-  {
-    key: 'pickup_reminder',
-    subjectDe: 'Abhol-Erinnerung {{loanId}}',
-    subjectEn: 'Pickup reminder {{loanId}}',
-    bodyDe: 'Hallo {{firstName}},\n\ndiese Nachricht erinnert an die Abholung für Reservierung {{loanId}}.',
-    bodyEn: 'Hello {{firstName}},\n\nthis is a pickup reminder for reservation {{loanId}}.',
-  },
-  {
-    key: 'return_reminder',
-    subjectDe: 'Rückgabe-Erinnerung {{loanId}}',
-    subjectEn: 'Return reminder {{loanId}}',
-    bodyDe: 'Hallo {{firstName}},\n\ndiese Nachricht erinnert an die Rückgabe für Ausleihe {{loanId}} bis {{reservedUntil}}.',
-    bodyEn: 'Hello {{firstName}},\n\nthis is a return reminder for loan {{loanId}} until {{reservedUntil}}.',
-  },
-  {
-    key: 'overdue_notice',
-    subjectDe: 'Überfällige Rückgabe {{loanId}}',
-    subjectEn: 'Overdue return {{loanId}}',
-    bodyDe: 'Hallo {{firstName}},\n\nAusleihe {{loanId}} ist überfällig. Bitte geben Sie die Gegenstände zurück.',
-    bodyEn: 'Hello {{firstName}},\n\nloan {{loanId}} is overdue. Please return the items.',
-  },
-  {
-    key: 'reservation_cancelled',
-    subjectDe: 'Storno-Info {{loanId}}',
-    subjectEn: 'Cancellation info {{loanId}}',
-    bodyDe: 'Hallo {{firstName}},\n\nReservierung {{loanId}} wurde storniert.',
-    bodyEn: 'Hello {{firstName}},\n\nreservation {{loanId}} has been cancelled.',
-  },
-];
+const mailTemplateSeed = (MailTemplateService.DEFAULT_TEMPLATES || []).map((template) => ({
+  ...template,
+}));
 
 class InstallationService {
   constructor(models) {

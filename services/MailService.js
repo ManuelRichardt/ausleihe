@@ -1,3 +1,5 @@
+const { LOAN_ITEM_TYPE } = require('../config/dbConstants');
+
 function getNodemailerModule() {
   try {
     // Lazy-load keeps application boot independent from optional mail dependency resolution.
@@ -29,6 +31,7 @@ class MailService {
     this.mailConfigService = mailConfigService;
     this.mailTemplateService = mailTemplateService;
     this.notificationService = notificationService;
+    this.templateDefaultsReadyPromise = null;
     this.smtpTransportCache = {
       key: null,
       transporter: null,
@@ -39,7 +42,155 @@ class MailService {
     return String(value || '').toLowerCase() === 'en' ? 'en' : 'de';
   }
 
+  getLoanMailInclude() {
+    return [
+      { model: this.models.User, as: 'user' },
+      { model: this.models.LendingLocation, as: 'lendingLocation' },
+      {
+        model: this.models.LoanItem,
+        as: 'loanItems',
+        include: [
+          {
+            model: this.models.AssetModel,
+            as: 'assetModel',
+            include: [{ model: this.models.Manufacturer, as: 'manufacturer' }],
+          },
+          {
+            model: this.models.Asset,
+            as: 'asset',
+            include: [
+              {
+                model: this.models.AssetModel,
+                as: 'model',
+                include: [{ model: this.models.Manufacturer, as: 'manufacturer' }],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+  }
+
+  normalizeQuantity(value) {
+    if (!Number.isFinite(Number(value))) {
+      return 1;
+    }
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed) || parsed < 1) {
+      return 1;
+    }
+    return parsed;
+  }
+
+  buildAssetLabelFromLoanItem(item) {
+    const model = item.assetModel || (item.asset && item.asset.model) || null;
+    const manufacturerName = model && model.manufacturer ? String(model.manufacturer.name || '').trim() : '';
+    const modelName = model ? String(model.name || '').trim() : '';
+    const merged = [manufacturerName, modelName].filter(Boolean).join(' ').trim();
+    return merged || 'Unbekanntes Asset';
+  }
+
+  collectLoanAssetSummary(loanItems = []) {
+    const groups = new Map();
+    let totalQuantity = 0;
+
+    (Array.isArray(loanItems) ? loanItems : []).forEach((item) => {
+      if (!item || item.itemType === LOAN_ITEM_TYPE.BUNDLE_ROOT) {
+        return;
+      }
+      const label = this.buildAssetLabelFromLoanItem(item);
+      const quantity = this.normalizeQuantity(item.quantity);
+      totalQuantity += quantity;
+      groups.set(label, (groups.get(label) || 0) + quantity);
+    });
+
+    const lines = Array.from(groups.entries())
+      .map(([label, quantity]) => (quantity > 1 ? `- ${label} x${quantity}` : `- ${label}`))
+      .sort((a, b) => a.localeCompare(b, 'de'));
+
+    const namesInline = lines.map((line) => line.replace(/^- /, '')).join(', ');
+
+    return {
+      lines,
+      text: lines.join('\n'),
+      namesInline,
+      totalQuantity,
+      distinctCount: groups.size,
+    };
+  }
+
+  async resolveLoanForTemplate(payload = {}, baseVariables = {}) {
+    if (payload.loan && typeof payload.loan === 'object') {
+      return payload.loan;
+    }
+
+    const metadata = payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {};
+    const loanId = trimString(payload.loanId || baseVariables.loanId || metadata.loanId);
+    if (!loanId) {
+      return null;
+    }
+
+    return this.models.Loan.findByPk(loanId, {
+      include: this.getLoanMailInclude(),
+    });
+  }
+
+  async buildTemplateVariables(payload = {}) {
+    const baseVariables =
+      payload.variables && typeof payload.variables === 'object' ? { ...payload.variables } : {};
+    const loan = await this.resolveLoanForTemplate(payload, baseVariables);
+
+    if (loan) {
+      if (!baseVariables.loanId) {
+        baseVariables.loanId = loan.id;
+      }
+      if (!baseVariables.lendingLocation && loan.lendingLocation && loan.lendingLocation.name) {
+        baseVariables.lendingLocation = loan.lendingLocation.name;
+      }
+      if (!baseVariables.firstName && loan.user) {
+        baseVariables.firstName = loan.user.firstName || loan.user.username || '';
+      }
+      if (!baseVariables.lastName && loan.user) {
+        baseVariables.lastName = loan.user.lastName || '';
+      }
+
+      const assets = this.collectLoanAssetSummary(loan.loanItems || []);
+      if (!baseVariables.assets) {
+        baseVariables.assets = assets.text || '-';
+      }
+      if (!baseVariables.assetNames) {
+        baseVariables.assetNames = assets.namesInline || '-';
+      }
+      if (!baseVariables.assetCount) {
+        baseVariables.assetCount = String(assets.totalQuantity || 0);
+      }
+      if (!baseVariables.assetDistinctCount) {
+        baseVariables.assetDistinctCount = String(assets.distinctCount || 0);
+      }
+    }
+
+    if (!baseVariables.lastName && Object.prototype.hasOwnProperty.call(baseVariables, 'lastname')) {
+      baseVariables.lastName = baseVariables.lastname;
+    }
+    if (!baseVariables.firstname && Object.prototype.hasOwnProperty.call(baseVariables, 'firstName')) {
+      baseVariables.firstname = baseVariables.firstName;
+    }
+    if (!baseVariables.lastname && Object.prototype.hasOwnProperty.call(baseVariables, 'lastName')) {
+      baseVariables.lastname = baseVariables.lastName;
+    }
+
+    return baseVariables;
+  }
+
   async sendTemplate(templateKey, payload = {}) {
+    if (!this.templateDefaultsReadyPromise) {
+      this.templateDefaultsReadyPromise = this.mailTemplateService.ensureDefaults().catch((err) => {
+        this.templateDefaultsReadyPromise = null;
+        throw err;
+      });
+    }
+    await this.templateDefaultsReadyPromise;
+
     const locale = this.resolveLocale(payload.locale);
     const email = trimString(payload.email);
     if (!email) {
@@ -55,7 +206,8 @@ class MailService {
       throw err;
     }
 
-    const rendered = this.mailTemplateService.render(template, locale, payload.variables || {});
+    const templateVariables = await this.buildTemplateVariables(payload);
+    const rendered = this.mailTemplateService.render(template, locale, templateVariables);
     const metadataText = payload.metadata ? JSON.stringify(payload.metadata) : null;
     const notification = await this.notificationService.createNotification({
       userId: payload.userId || null,
@@ -277,10 +429,7 @@ class MailService {
           [this.models.Sequelize.Op.lte]: next24h,
         },
       },
-      include: [
-        { model: this.models.User, as: 'user' },
-        { model: this.models.LendingLocation, as: 'lendingLocation' },
-      ],
+      include: this.getLoanMailInclude(),
       limit: options.limit || 200,
     });
     for (const loan of reserved) {
@@ -295,8 +444,10 @@ class MailService {
         email: loan.user.email,
         locale: loan.user.locale || 'de',
         sendNow: false,
+        loan,
         variables: {
           firstName: loan.user.firstName || loan.user.username || '',
+          lastName: loan.user.lastName || '',
           loanId: loan.id,
           lendingLocation: loan.lendingLocation ? loan.lendingLocation.name : '-',
           reservedFrom: loan.reservedFrom,
@@ -314,10 +465,7 @@ class MailService {
       where: {
         status: ['handed_over', 'overdue'],
       },
-      include: [
-        { model: this.models.User, as: 'user' },
-        { model: this.models.LendingLocation, as: 'lendingLocation' },
-      ],
+      include: this.getLoanMailInclude(),
       limit: options.limit || 200,
     });
     for (const loan of handedOver) {
@@ -333,8 +481,10 @@ class MailService {
           email: loan.user.email,
           locale: loan.user.locale || 'de',
           sendNow: false,
+          loan,
           variables: {
             firstName: loan.user.firstName || loan.user.username || '',
+            lastName: loan.user.lastName || '',
             loanId: loan.id,
             lendingLocation: loan.lendingLocation ? loan.lendingLocation.name : '-',
             reservedUntil: loan.reservedUntil,
@@ -359,8 +509,10 @@ class MailService {
             email: loan.user.email,
             locale: loan.user.locale || 'de',
             sendNow: false,
+            loan,
             variables: {
               firstName: loan.user.firstName || loan.user.username || '',
+              lastName: loan.user.lastName || '',
               loanId: loan.id,
               lendingLocation: loan.lendingLocation ? loan.lendingLocation.name : '-',
               reservedUntil: loan.reservedUntil,

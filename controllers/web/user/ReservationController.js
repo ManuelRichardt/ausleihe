@@ -48,8 +48,10 @@ class UserReservationController {
             userId: req.user.id,
             email: req.user.email,
             locale: req.locale || 'de',
+            loanId: reservation.id,
             variables: {
               firstName: req.user.firstName || req.user.username || '',
+              lastName: req.user.lastName || '',
               loanId: reservation.id,
               reservedFrom: formatDateTime(reservation.reservedFrom),
               reservedUntil: formatDateTime(reservation.reservedUntil),

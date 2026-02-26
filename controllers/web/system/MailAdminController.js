@@ -98,10 +98,12 @@ class MailAdminController {
         locale: req.locale || 'de',
         variables: {
           firstName: 'Test',
+          lastName: 'Benutzer',
           loanId: 'TEST-123',
           lendingLocation: 'Testausleihe',
           reservedFrom: '-',
           reservedUntil: '-',
+          assets: '- Kamera Sony FX3 x1\n- Stativ Manfrotto x1',
         },
       });
       if (typeof req.flash === 'function') {
