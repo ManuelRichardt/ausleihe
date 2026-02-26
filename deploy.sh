@@ -328,10 +328,10 @@ if ! "${DOCKER_COMPOSE_CMD[@]}" exec -T app sh -lc 'set -e; mkdir -p /app/public
 fi
 
 # 7. App-Verfügbarkeit prüfen, bevor Nginx gestartet wird
-echo "Warte auf App-Start auf http://127.0.0.1:3000/login ..."
+echo "Warte auf App-Start auf http://127.0.0.1:3000/healthz ..."
 APP_READY=0
 for i in $(seq 1 30); do
-    if curl -fsS http://127.0.0.1:3000/login > /dev/null 2>&1; then
+    if curl -fsS http://127.0.0.1:3000/healthz > /dev/null 2>&1; then
         APP_READY=1
         break
     fi

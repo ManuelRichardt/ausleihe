@@ -156,6 +156,10 @@ app.use(sanitize);
 app.use(csrfProtectionMiddleware({ ignorePaths: ['/auth/saml/callback'] }));
 app.use(defaultLocals);
 
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ ok: true });
+});
+
 app.use('/', webRouter);
 app.use('/api/v1', apiV1Router);
 
