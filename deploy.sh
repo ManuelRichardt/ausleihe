@@ -301,6 +301,24 @@ cd "$APP_DIR"
 # npm install auf dem Host ist nicht nötig: der Docker-Build installiert Node-Dependencies.
 "${DOCKER_COMPOSE_CMD[@]}" up -d --build
 
+# 6a. Datenbank-Verfügbarkeit prüfen
+echo "Warte auf Datenbank-Start ..."
+DB_READY=0
+for i in $(seq 1 60); do
+    if "${DOCKER_COMPOSE_CMD[@]}" exec -T db sh -lc 'mariadb-admin ping -h 127.0.0.1 -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" --silent' > /dev/null 2>&1; then
+        DB_READY=1
+        break
+    fi
+    sleep 2
+done
+
+if [ "$DB_READY" -ne 1 ]; then
+    echo "Fehler: Datenbank ist nicht erreichbar."
+    "${DOCKER_COMPOSE_CMD[@]}" ps || true
+    "${DOCKER_COMPOSE_CMD[@]}" logs --tail=100 db || true
+    exit 1
+fi
+
 # 6b. Schreibrechte für Uploadpfade im Container prüfen
 echo "Prüfe Schreibrechte in Upload-Verzeichnissen ..."
 if ! "${DOCKER_COMPOSE_CMD[@]}" exec -T app sh -lc 'set -e; mkdir -p /app/public/uploads/asset-models /app/uploads/signatures; touch /app/public/uploads/asset-models/.perm-test; touch /app/uploads/signatures/.perm-test; rm -f /app/public/uploads/asset-models/.perm-test /app/uploads/signatures/.perm-test'; then
@@ -310,10 +328,10 @@ if ! "${DOCKER_COMPOSE_CMD[@]}" exec -T app sh -lc 'set -e; mkdir -p /app/public
 fi
 
 # 7. App-Verfügbarkeit prüfen, bevor Nginx gestartet wird
-echo "Warte auf App-Start auf http://127.0.0.1:3000 ..."
+echo "Warte auf App-Start auf http://127.0.0.1:3000/login ..."
 APP_READY=0
 for i in $(seq 1 30); do
-    if curl -fsS http://127.0.0.1:3000/ > /dev/null 2>&1; then
+    if curl -fsS http://127.0.0.1:3000/login > /dev/null 2>&1; then
         APP_READY=1
         break
     fi
@@ -321,8 +339,9 @@ for i in $(seq 1 30); do
 done
 
 if [ "$APP_READY" -ne 1 ]; then
-    echo "Fehler: App ist auf Port 3000 nicht erreichbar."
+    echo "Fehler: App ist auf Port 3000 nicht betriebsbereit."
     "${DOCKER_COMPOSE_CMD[@]}" ps || true
+    "${DOCKER_COMPOSE_CMD[@]}" logs --tail=100 db || true
     "${DOCKER_COMPOSE_CMD[@]}" logs --tail=100 app || true
     exit 1
 fi

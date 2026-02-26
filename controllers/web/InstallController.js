@@ -4,6 +4,24 @@ const { renderPage, handleError } = require('./controllerUtils');
 const models = require('../../models');
 
 class InstallController {
+  isMissingInstallationsTableError(err) {
+    const code = err && (err.code || (err.original && err.original.code) || (err.parent && err.parent.code));
+    const errno = Number(
+      err && (
+        err.errno ||
+        (err.original && err.original.errno) ||
+        (err.parent && err.parent.errno)
+      )
+    );
+    const message = String((err && err.message) || '').toLowerCase();
+    return (
+      code === 'ER_NO_SUCH_TABLE' ||
+      errno === 1146 ||
+      message.includes("table 'inventory.installations' doesn't exist") ||
+      message.includes('relation "installations" does not exist')
+    );
+  }
+
   buildDefaultFormData() {
     return {
       adminUsername: '',
@@ -14,11 +32,19 @@ class InstallController {
   }
 
   async isInstallationCompleted() {
-    const existingInstallation = await models.Installation.findOne({
-      where: { key: INSTALLATION_KEY },
-      attributes: ['id'],
-    });
-    return Boolean(existingInstallation);
+    try {
+      const existingInstallation = await models.Installation.findOne({
+        where: { key: INSTALLATION_KEY },
+        attributes: ['id'],
+      });
+      return Boolean(existingInstallation);
+    } catch (err) {
+      // Fresh databases may not have the table yet; that means setup has not run.
+      if (this.isMissingInstallationsTableError(err)) {
+        return false;
+      }
+      throw err;
+    }
   }
 
   redirectAlreadyInstalled(req, res) {

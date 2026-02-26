@@ -6,19 +6,26 @@ services:
       - "3000:3000"
     env_file: .env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - app_public_uploads:/app/public/uploads
       - app_signature_uploads:/app/uploads/signatures
 
   db:
-    image: mariadb:latest
+    image: mariadb:11.4
     restart: always
     environment:
       MARIADB_ROOT_PASSWORD: root_password
       MARIADB_DATABASE: inventory
       MARIADB_USER: inventory
       MARIADB_PASSWORD: inventory_password
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u$$MARIADB_USER -p$$MARIADB_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
     volumes:
       - db_data:/var/lib/mysql
 
