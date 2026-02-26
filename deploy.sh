@@ -165,6 +165,41 @@ validate_session_secret() {
     fi
 }
 
+validate_compose_env_values() {
+    local env_file="$APP_DIR/.env"
+    python3 - "$env_file" <<'PY'
+import sys
+
+env_path = sys.argv[1]
+invalid = []
+
+with open(env_path, "r", encoding="utf-8") as fh:
+    for lineno, raw_line in enumerate(fh, 1):
+        line = raw_line.rstrip("\n")
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        idx = 0
+        while idx < len(value):
+            if value[idx] != "$":
+                idx += 1
+                continue
+            if idx + 1 < len(value) and value[idx + 1] == "$":
+                idx += 2
+                continue
+            invalid.append((lineno, key.strip()))
+            break
+
+if invalid:
+    print("Fehler: .env enthält unescapete '$'-Zeichen. Docker Compose interpretiert diese als Variablen.")
+    print("Bitte '$' als '$$' escapen oder Secrets ohne '$' verwenden.")
+    for lineno, key in invalid:
+        print(f"  Zeile {lineno}: {key}")
+    raise SystemExit(1)
+PY
+}
+
 # 1. System-Updates & Docker
 sudo apt update && sudo apt install -y curl git nginx openssl python3-certbot-nginx
 if ! command -v docker &> /dev/null; then
@@ -199,6 +234,7 @@ fi
 
 prepare_env_file
 validate_session_secret
+validate_compose_env_values
 
 # 4. SSL Zertifikate generieren (Modus-Abhängig)
 sudo systemctl stop nginx
@@ -267,7 +303,7 @@ cd "$APP_DIR"
 
 # 6b. Schreibrechte für Uploadpfade im Container prüfen
 echo "Prüfe Schreibrechte in Upload-Verzeichnissen ..."
-if ! "${DOCKER_COMPOSE_CMD[@]}" exec -T app sh -lc 'set -e; mkdir -p /app/public/uploads/asset-models /app/uploads/signatures; f1="/app/public/uploads/asset-models/.perm-test-$$"; f2="/app/uploads/signatures/.perm-test-$$"; touch "$f1" "$f2"; rm -f "$f1" "$f2"'; then
+if ! "${DOCKER_COMPOSE_CMD[@]}" exec -T app sh -lc 'set -e; mkdir -p /app/public/uploads/asset-models /app/uploads/signatures; touch /app/public/uploads/asset-models/.perm-test; touch /app/uploads/signatures/.perm-test; rm -f /app/public/uploads/asset-models/.perm-test /app/uploads/signatures/.perm-test'; then
     echo "Fehler: Upload-Verzeichnisse im App-Container sind nicht beschreibbar."
     "${DOCKER_COMPOSE_CMD[@]}" logs --tail=100 app || true
     exit 1

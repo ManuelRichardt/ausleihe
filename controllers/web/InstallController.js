@@ -1,4 +1,4 @@
-const { InstallationService } = require('../../services/InstallationService');
+const { InstallationService, INSTALLATION_KEY } = require('../../services/InstallationService');
 const { validatePasswordPolicy } = require('../../utils/passwordPolicy');
 const { renderPage, handleError } = require('./controllerUtils');
 const models = require('../../models');
@@ -13,8 +13,26 @@ class InstallController {
     };
   }
 
+  async isInstallationCompleted() {
+    const existingInstallation = await models.Installation.findOne({
+      where: { key: INSTALLATION_KEY },
+      attributes: ['id'],
+    });
+    return Boolean(existingInstallation);
+  }
+
+  redirectAlreadyInstalled(req, res) {
+    if (typeof req.flash === 'function') {
+      req.flash('info', 'Installation ist bereits abgeschlossen.');
+    }
+    return res.redirect('/login');
+  }
+
   async show(req, res, next) {
     try {
+      if (await this.isInstallationCompleted()) {
+        return this.redirectAlreadyInstalled(req, res);
+      }
       return renderPage(res, 'system/install', req, {
         breadcrumbs: [{ label: 'Installation', href: '/install' }],
         formData: this.buildDefaultFormData(),
@@ -26,6 +44,10 @@ class InstallController {
 
   async submit(req, res, next) {
     try {
+      if (await this.isInstallationCompleted()) {
+        return this.redirectAlreadyInstalled(req, res);
+      }
+
       const admin = {
         username: req.body.adminUsername || '',
         email: req.body.adminEmail || '',
@@ -69,6 +91,9 @@ class InstallController {
       }
       return res.redirect('/login');
     } catch (err) {
+      if (err && (err.code === 'INSTALLATION_ALREADY_COMPLETED' || err.message === 'Installation already completed')) {
+        return this.redirectAlreadyInstalled(req, res);
+      }
       return handleError(res, next, req, err);
     }
   }

@@ -160,6 +160,13 @@ const uiTextSeed = [
   { key: 'admin.sidebar.privacy', de: 'Datenschutz', en: 'Privacy' },
 ];
 
+function createInstallationAlreadyCompletedError() {
+  const err = new Error('Installation already completed');
+  err.code = 'INSTALLATION_ALREADY_COMPLETED';
+  err.status = 409;
+  return err;
+}
+
 const mailTemplateSeed = [
   {
     key: 'reservation_confirmation',
@@ -395,7 +402,7 @@ class InstallationService {
       where: { key: INSTALLATION_KEY },
     });
     if (existingInstallation) {
-      throw new Error('Installation already completed');
+      throw createInstallationAlreadyCompletedError();
     }
 
     await sequelize.transaction(async (transaction) => {
