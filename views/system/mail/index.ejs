@@ -61,6 +61,11 @@
               <label class="form-label" for="smtpPass">SMTP Passwort</label>
               <input type="password" class="form-control" id="smtpPass" name="smtpPass" value="" autocomplete="new-password" placeholder="Leer lassen, um unverändert zu lassen">
             </div>
+            <div class="col-12">
+              <div class="form-text">
+                SMTP: Port 587 mit <code>Secure aus</code> (STARTTLS) oder Port 465 mit <code>Secure an</code>. Für Gmail ein App-Passwort verwenden.
+              </div>
+            </div>
             <div class="col-12 d-flex gap-2">
               <button type="submit" class="btn btn-primary">Konfiguration speichern</button>
               <button type="submit" formaction="/system/mail/process-pending" class="btn btn-outline-secondary">Ausstehende senden</button>

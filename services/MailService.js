@@ -90,6 +90,17 @@ class MailService {
       err.status = 422;
       throw err;
     }
+    const smtpSecure = Boolean(config.smtpSecure);
+    if (smtpSecure && smtpPort === 587) {
+      const err = new Error('SMTP-Konfiguration ungültig: Port 587 benötigt SMTP Secure=false (STARTTLS).');
+      err.status = 422;
+      throw err;
+    }
+    if (!smtpSecure && smtpPort === 465) {
+      const err = new Error('SMTP-Konfiguration ungültig: Port 465 benötigt SMTP Secure=true.');
+      err.status = 422;
+      throw err;
+    }
 
     const smtpUser = trimString(config.smtpUser);
     const smtpPass = trimString(config.smtpPass);
@@ -109,13 +120,44 @@ class MailService {
     return {
       smtpHost,
       smtpPort,
-      smtpSecure: Boolean(config.smtpSecure),
+      smtpSecure,
       smtpUser,
       smtpPass,
       fromAddress,
       fromName: trimString(config.fromName),
       replyTo: trimString(config.replyTo),
     };
+  }
+
+  mapTransportError(err, config) {
+    const rawMessage = String((err && err.message) || '').trim();
+    const lower = rawMessage.toLowerCase();
+    const smtpPort = normalizePort(config && config.smtpPort, 0);
+    const smtpSecure = Boolean(config && config.smtpSecure);
+
+    if (
+      lower.includes('wrong version number') ||
+      lower.includes('ssl routines:tls_validate_record_header')
+    ) {
+      if (smtpSecure && smtpPort === 587) {
+        return 'SMTP TLS-Fehler: Port 587 benötigt SMTP Secure=false (STARTTLS).';
+      }
+      if (!smtpSecure && smtpPort === 465) {
+        return 'SMTP TLS-Fehler: Port 465 benötigt SMTP Secure=true.';
+      }
+      return 'SMTP TLS-Handshake fehlgeschlagen. Prüfe Port/Secure-Kombination (587+false oder 465+true).';
+    }
+
+    if (
+      lower.includes('invalid login') ||
+      lower.includes('authentication failed') ||
+      lower.includes('535-5.7.8') ||
+      lower.includes('535 5.7.8')
+    ) {
+      return 'SMTP-Authentifizierung fehlgeschlagen. Bei Gmail bitte ein App-Passwort verwenden.';
+    }
+
+    return rawMessage || 'Versand fehlgeschlagen';
   }
 
   buildTransportCacheKey(config) {
@@ -190,7 +232,10 @@ class MailService {
       await this.sendViaSmtp({ config, notification });
       await this.notificationService.markSent(notification.id);
     } catch (err) {
-      await this.notificationService.markFailed(notification.id, err.message || 'Versand fehlgeschlagen');
+      await this.notificationService.markFailed(
+        notification.id,
+        this.mapTransportError(err, config)
+      );
     }
     return notification;
   }
