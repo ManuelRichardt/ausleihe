@@ -165,17 +165,8 @@
 }
 
 #quickScanModal .quickscan-video {
-  background-color: #000;
-}
-
-#quickScanModal #quickScanReader video {
-  width: 100% !important;
-  height: 100% !important;
   object-fit: cover;
-}
-
-#quickScanModal #quickScanReader__dashboard {
-  display: none;
+  background-color: #000;
 }
 
 #quickScanModal .quickscan-preview {
