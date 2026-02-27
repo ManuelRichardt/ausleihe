@@ -1,4 +1,11 @@
+const { Op } = require('sequelize');
+const { LOAN_STATUS, LOAN_ITEM_STATUS, LOAN_ITEM_TYPE } = require('../config/dbConstants');
 const { pickDefined, buildListOptions, findByPkOrThrow } = require('./serviceUtils');
+
+const OPEN_LOAN_ITEM_STATUSES = Object.freeze([
+  LOAN_ITEM_STATUS.RESERVED,
+  LOAN_ITEM_STATUS.HANDED_OVER,
+]);
 
 class LoanItemService {
   constructor(models) {
@@ -22,11 +29,41 @@ class LoanItemService {
       if (asset.lendingLocationId !== loan.lendingLocationId) {
         throw new Error('Asset does not belong to lending location');
       }
+      const existingOpenAssignment = await LoanItem.findOne({
+        where: {
+          assetId,
+          status: { [Op.in]: OPEN_LOAN_ITEM_STATUSES },
+        },
+        include: [
+          {
+            model: Loan,
+            as: 'loan',
+            where: {
+              [Op.or]: [
+                { status: { [Op.in]: [LOAN_STATUS.HANDED_OVER, LOAN_STATUS.OVERDUE] } },
+                {
+                  status: LOAN_STATUS.RESERVED,
+                  reservedFrom: { [Op.lt]: loan.reservedUntil },
+                  reservedUntil: { [Op.gt]: loan.reservedFrom },
+                },
+              ],
+            },
+            required: true,
+          },
+        ],
+        transaction,
+      });
+      if (existingOpenAssignment) {
+        throw new Error('Asset ist im gewählten Zeitraum bereits ausgeliehen oder reserviert');
+      }
       const item = await LoanItem.create(
         {
           loanId,
           assetId,
-          status: 'reserved',
+          assetModelId: asset.assetModelId,
+          quantity: 1,
+          itemType: LOAN_ITEM_TYPE.SERIALIZED,
+          status: LOAN_ITEM_STATUS.RESERVED,
           conditionOnHandover: conditionOnHandover || null,
         },
         { transaction }

@@ -27,6 +27,7 @@ const EXPORT_COLUMN_SCHEMAS = Object.freeze({
     { key: 'status', header: 'Status' },
     { key: 'condition', header: 'Condition' },
     { key: 'lendingLocation', header: 'LendingLocation' },
+    { key: 'storageLocation', header: 'StorageLocation' },
     { key: 'quantityTotal', header: 'QuantityTotal' },
     { key: 'quantityAvailable', header: 'QuantityAvailable' },
     { key: 'bundleName', header: 'BundleName' },
@@ -168,6 +169,7 @@ class CsvExportService {
       serialNumber: asset.serialNumber || '',
       status: this.resolveStatusLabel(asset.isActive),
       condition: asset.condition || '',
+      storageLocation: asset.storageLocation ? asset.storageLocation.name : '',
     }));
   }
 
@@ -204,6 +206,7 @@ class CsvExportService {
       status: this.resolveStatusLabel(Boolean(model && model.isActive)),
       condition: '',
       lendingLocation: model && model.lendingLocation ? model.lendingLocation.name : '',
+      storageLocation: '',
       quantityTotal: '',
       quantityAvailable: '',
       bundleName: '',
@@ -237,6 +240,7 @@ class CsvExportService {
           model: this.models.Asset,
           as: 'assets',
           required: false,
+          include: [{ model: this.models.StorageLocation, as: 'storageLocation', required: false }],
         },
       ],
       order: [['name', 'ASC']],

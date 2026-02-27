@@ -132,14 +132,50 @@
   display: block;
 }
 
+.asset-card-image,
+.asset-card-image-placeholder {
+  height: 400px;
+}
+
+.asset-card-image {
+  width: 100%;
+  object-fit: contain;
+  background-color: #f8f9fa;
+}
+
+.asset-card-image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f8f9fa;
+}
+
+#assetGalleryModal .asset-gallery-modal-image {
+  width: auto;
+  max-width: 100%;
+  height: 1000px;
+  max-height: calc(100vh - 180px);
+  object-fit: contain;
+  margin: 0 auto;
+}
+
 .preserve-text-format {
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 #quickScanModal .quickscan-video {
-  object-fit: cover;
   background-color: #000;
+}
+
+#quickScanModal #quickScanReader video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+
+#quickScanModal #quickScanReader__dashboard {
+  display: none;
 }
 
 #quickScanModal .quickscan-preview {

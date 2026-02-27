@@ -44,12 +44,41 @@ class ReservationAdminController {
 
   async cancel(req, res, next) {
     try {
-      await services.reservationPortalService.cancelForAdmin(
+      const reservation = await services.reservationPortalService.cancelForAdmin(
         req.params.id,
         req.lendingLocationId,
         req.user.id,
         req.body.note || null
       );
+
+      const reservationUser = reservation && reservation.user ? reservation.user : null;
+      if (reservationUser && reservationUser.email) {
+        try {
+          await services.mailService.sendTemplate('reservation_cancelled', {
+            userId: reservationUser.id || null,
+            email: reservationUser.email,
+            locale: req.locale || 'de',
+            loanId: reservation.id,
+            variables: {
+              firstName: reservationUser.firstName || reservationUser.username || '',
+              lastName: reservationUser.lastName || '',
+              loanId: reservation.id,
+              reservedFrom: formatDateTime(reservation.reservedFrom),
+              reservedUntil: formatDateTime(reservation.reservedUntil),
+              lendingLocation: reservation.lendingLocation ? reservation.lendingLocation.name : '-',
+            },
+            metadata: {
+              loanId: reservation.id,
+              type: 'reservation_cancelled',
+              actorUserId: req.user && req.user.id ? req.user.id : null,
+            },
+          });
+        } catch (mailErr) {
+          if (typeof req.flash === 'function') {
+            req.flash('error', 'Storno gespeichert, Benachrichtigung konnte nicht versendet werden.');
+          }
+        }
+      }
       if (typeof req.flash === 'function') {
         req.flash('success', 'Reservierung wurde storniert.');
       }

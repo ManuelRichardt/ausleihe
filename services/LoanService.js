@@ -293,6 +293,52 @@ class LoanService {
     );
   }
 
+  async #assertSerializedAssetNotReserved(assetId, reservedFrom, reservedUntil, transaction, ignoreLoanItemId = null) {
+    if (!assetId) {
+      return;
+    }
+
+    const { LoanItem, Loan } = this.models;
+    const itemWhere = {
+      assetId,
+      status: { [Op.in]: OPEN_LOAN_ITEM_STATUSES },
+    };
+    if (ignoreLoanItemId) {
+      itemWhere.id = { [Op.ne]: ignoreLoanItemId };
+    }
+
+    const reservationOverlapWhere = (reservedFrom && reservedUntil)
+      ? {
+        status: LOAN_STATUS.RESERVED,
+        reservedFrom: { [Op.lt]: reservedUntil },
+        reservedUntil: { [Op.gt]: reservedFrom },
+      }
+      : { status: LOAN_STATUS.RESERVED };
+    const loanWhere = {
+      [Op.or]: [
+        { status: { [Op.in]: [LOAN_STATUS.HANDED_OVER, LOAN_STATUS.OVERDUE] } },
+        reservationOverlapWhere,
+      ],
+    };
+
+    const existing = await LoanItem.findOne({
+      where: itemWhere,
+      include: [
+        {
+          model: Loan,
+          as: 'loan',
+          where: loanWhere,
+          required: true,
+        },
+      ],
+      transaction,
+    });
+
+    if (existing) {
+      throw new Error('Asset ist im gewählten Zeitraum bereits ausgeliehen oder reserviert');
+    }
+  }
+
   async #resolveReservationItemTarget(item, reservationCommand, transaction) {
     const { Asset } = this.models;
     let selectedAssetId = item.assetId || null;
@@ -383,6 +429,12 @@ class LoanService {
       quantity
     );
     if (selectedAssetId) {
+      await this.#assertSerializedAssetNotReserved(
+        selectedAssetId,
+        reservationContext.reservedFrom,
+        reservationContext.reservedUntil,
+        reservationContext.transaction
+      );
       quantity = DEFAULT_ITEM_QUANTITY;
     }
     for (let index = 0; index < quantity; index += 1) {
@@ -616,6 +668,13 @@ class LoanService {
           throw new Error('Asset is required for handover');
         }
         await this.#assertHandoverAssetCompatibility({ assetId, item, loan, transaction });
+        await this.#assertSerializedAssetNotReserved(
+          assetId,
+          loan.reservedFrom,
+          loan.reservedUntil,
+          transaction,
+          item.id
+        );
       } else {
         assetId = null;
       }

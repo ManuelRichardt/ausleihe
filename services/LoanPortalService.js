@@ -1,4 +1,4 @@
-const { LOAN_ITEM_TYPE } = require('../config/dbConstants');
+const { LOAN_ITEM_TYPE, LOAN_ITEM_STATUS, LOAN_STATUS } = require('../config/dbConstants');
 
 class LoanPortalService {
   constructor(models, loanService, assetModelService, assetInstanceService) {
@@ -215,6 +215,47 @@ class LoanPortalService {
     return stripFromLoan(loansOrLoan);
   }
 
+  async #getUnavailableSerializedAssetIdsForLoan(loan) {
+    if (!loan || !loan.id || !loan.lendingLocationId || !loan.reservedFrom || !loan.reservedUntil) {
+      return new Set();
+    }
+
+    const { Op } = this.models.Sequelize;
+    const { LoanItem, Loan } = this.models;
+    const blockingItems = await LoanItem.findAll({
+      where: {
+        assetId: { [Op.ne]: null },
+        status: { [Op.in]: [LOAN_ITEM_STATUS.RESERVED, LOAN_ITEM_STATUS.HANDED_OVER] },
+      },
+      attributes: ['assetId'],
+      include: [
+        {
+          model: Loan,
+          as: 'loan',
+          required: true,
+          where: {
+            id: { [Op.ne]: loan.id },
+            lendingLocationId: loan.lendingLocationId,
+            [Op.or]: [
+              { status: { [Op.in]: [LOAN_STATUS.HANDED_OVER, LOAN_STATUS.OVERDUE] } },
+              {
+                status: LOAN_STATUS.RESERVED,
+                reservedFrom: { [Op.lt]: loan.reservedUntil },
+                reservedUntil: { [Op.gt]: loan.reservedFrom },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    return new Set(
+      blockingItems
+        .map((item) => item.assetId)
+        .filter(Boolean)
+    );
+  }
+
   async listForUser(userId, filter = {}) {
     const loans = await this.loanService.getAll(
       {
@@ -307,6 +348,7 @@ class LoanPortalService {
 
   async getAdminContext(loanId, lendingLocationId) {
     const loan = await this.getForAdmin(loanId, lendingLocationId);
+    const unavailableSerializedAssetIds = await this.#getUnavailableSerializedAssetIdsForLoan(loan);
     const modelIds = Array.from(
       new Set(
         (loan.loanItems || [])
@@ -326,7 +368,10 @@ class LoanPortalService {
         )
       );
       modelIds.forEach((modelId, index) => {
-        assetsByModelId[modelId] = groups[index] || [];
+        const assets = groups[index] || [];
+        assetsByModelId[modelId] = assets.filter(
+          (asset) => asset && !unavailableSerializedAssetIds.has(asset.id)
+        );
       });
     }
 

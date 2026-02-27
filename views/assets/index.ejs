@@ -139,11 +139,11 @@
             <div class="card h-100 shadow-sm">
               <% if (imageUrl) { %>
                 <a href="/assets/<%= model.id %>">
-                  <img src="<%= imageUrl %>" class="card-img-top" alt="<%= model.name %>">
+                  <img src="<%= imageUrl %>" class="card-img-top asset-card-image" alt="<%= model.name %>">
                 </a>
               <% } else { %>
                 <a href="/assets/<%= model.id %>" class="text-decoration-none">
-                  <div class="ratio ratio-4x3 bg-light d-flex align-items-center justify-content-center text-muted">Kein Bild</div>
+                  <div class="asset-card-image-placeholder text-muted">Kein Bild</div>
                 </a>
               <% } %>
               <div class="card-body">

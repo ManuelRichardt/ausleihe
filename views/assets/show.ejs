@@ -302,7 +302,7 @@
             <div class="carousel-inner">
               <% galleryImages.forEach(function (img, idx) { %>
                 <div class="carousel-item <%= idx === 0 ? 'active' : '' %>" data-gallery-index="<%= idx %>">
-                  <img src="<%= img.url %>" class="d-block w-100" alt="<%= model.name || 'Asset Bild' %> <%= idx + 1 %>">
+                  <img src="<%= img.url %>" class="d-block asset-gallery-modal-image" alt="<%= model.name || 'Asset Bild' %> <%= idx + 1 %>">
                 </div>
               <% }) %>
             </div>

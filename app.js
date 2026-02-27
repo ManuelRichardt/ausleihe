@@ -146,6 +146,7 @@ app.use(
 );
 app.use(expressLayouts);
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/vendor/html5-qrcode', express.static(path.join(__dirname, 'node_modules', 'html5-qrcode')));
 app.use(express.json({ limit: requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: requestBodyLimit, parameterLimit: 10000 }));
 app.use(cookieParser());

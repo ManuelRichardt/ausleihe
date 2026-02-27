@@ -1,59 +1,11 @@
 (function () {
-  var CODE128_PATTERNS = [
-    '11011001100', '11001101100', '11001100110', '10010011000', '10010001100', '10001001100', '10011001000',
-    '10011000100', '10001100100', '11001001000', '11001000100', '11000100100', '10110011100', '10011011100',
-    '10011001110', '10111001100', '10011101100', '10011100110', '11001110010', '11001011100', '11001001110',
-    '11011100100', '11001110100', '11101101110', '11101001100', '11100101100', '11100100110', '11101100100',
-    '11100110100', '11100110010', '11011011000', '11011000110', '11000110110', '10100011000', '10001011000',
-    '10001000110', '10110001000', '10001101000', '10001100010', '11010001000', '11000101000', '11000100010',
-    '10110111000', '10110001110', '10001101110', '10111011000', '10111000110', '10001110110', '11101110110',
-    '11010001110', '11000101110', '11011101000', '11011100010', '11011101110', '11101011000', '11101000110',
-    '11100010110', '11101101000', '11101100010', '11100011010', '11101111010', '11001000010', '11110001010',
-    '10100110000', '10100001100', '10010110000', '10010000110', '10000101100', '10000100110', '10110010000',
-    '10110000100', '10011010000', '10011000010', '10000110100', '10000110010', '11000010010', '11001010000',
-    '11110111010', '11000010100', '10001111010', '10100111100', '10010111100', '10010011110', '10111100100',
-    '10011110100', '10011110010', '11110100100', '11110010100', '11110010010', '11011011110', '11011110110',
-    '11110110110', '10101111000', '10100011110', '10001011110', '10111101000', '10111100010', '11110101000',
-    '11110100010', '10111011110', '10111101110', '11101011110', '11110101110', '11010000100', '11010010000',
-    '11010011100', '1100011101011',
+  var HTML5_QRCODE_SCRIPT_SOURCES = [
+    '/vendor/html5-qrcode/html5-qrcode.min.js',
+    '/vendor/html5-qrcode/minified/html5-qrcode.min.js',
+    '/vendor/html5-qrcode/dist/html5-qrcode.min.js',
   ];
-
-  var CODE128_START_A = 103;
-  var CODE128_START_B = 104;
-  var CODE128_START_C = 105;
-  var CODE128_STOP = 106;
-  var CODE128_DATA_MAX = 95;
-  var CODE128_NORMAL_MATCH_THRESHOLD = 0.34;
-  var CODE128_STOP_MATCH_THRESHOLD = 0.38;
-  var FALLBACK_SCAN_INTERVAL_MS = 140;
-  var DETECTOR_SCAN_INTERVAL_MS = 180;
-  var DETECTION_VOTE_WINDOW_SIZE = 7;
-  var DETECTION_VOTES_WITH_KNOWN_CODES = 2;
-  var DETECTION_VOTES_WITHOUT_KNOWN_CODES = 3;
-
-  var CODE128_SYMBOLS = (function buildCode128Symbols() {
-    return CODE128_PATTERNS.map(function (pattern, code) {
-      var runs = [];
-      var current = pattern.charAt(0);
-      var runLength = 1;
-      for (var i = 1; i < pattern.length; i += 1) {
-        if (pattern.charAt(i) === current) {
-          runLength += 1;
-          continue;
-        }
-        runs.push(runLength);
-        current = pattern.charAt(i);
-        runLength = 1;
-      }
-      runs.push(runLength);
-      return {
-        code: code,
-        pattern: pattern,
-        modules: pattern.length,
-        runs: runs,
-      };
-    });
-  })();
+  var SCAN_THROTTLE_MS = 1200;
+  var html5QrcodeLoadPromise = null;
 
   function normalizeCode(value) {
     return String(value || '')
@@ -67,725 +19,96 @@
   }
 
   function isPlausibleScannedCode(normalizedCode) {
-    if (!normalizedCode || normalizedCode.length < 4 || normalizedCode.length > 36) {
+    if (!normalizedCode || normalizedCode.length < 3 || normalizedCode.length > 64) {
       return false;
     }
     if (!/^[A-Z0-9-]+$/.test(normalizedCode)) {
       return false;
     }
     var digitMatches = normalizedCode.match(/[0-9]/g);
-    return Boolean(digitMatches && digitMatches.length >= 4);
+    return Boolean(digitMatches && digitMatches.length >= 2);
   }
 
-  function normalizeCode128Input(value) {
-    return String(value || '')
-      .split('')
-      .map(function (char) {
-        var code = char.charCodeAt(0);
-        if (code >= 32 && code <= 126) {
-          return char;
+  function loadHtml5QrcodeScript() {
+    if (window.Html5Qrcode) {
+      return Promise.resolve();
+    }
+    if (html5QrcodeLoadPromise) {
+      return html5QrcodeLoadPromise;
+    }
+
+    function loadSource(index) {
+      if (index >= HTML5_QRCODE_SCRIPT_SOURCES.length) {
+        return Promise.reject(new Error('html5-qrcode-load-failed'));
+      }
+
+      var source = HTML5_QRCODE_SCRIPT_SOURCES[index];
+      var selector = 'script[data-html5-qrcode-source="' + source + '"]';
+      var existingScript = document.querySelector(selector);
+      var existingState = existingScript ? existingScript.getAttribute('data-html5-qrcode-state') : '';
+      if (existingScript && (window.Html5Qrcode || existingState === 'loaded')) {
+        return Promise.resolve();
+      }
+      if (existingScript && existingState === 'error') {
+        return loadSource(index + 1);
+      }
+
+      return new Promise(function (resolve, reject) {
+        var script = existingScript || document.createElement('script');
+        if (!existingScript) {
+          script.src = source;
+          script.async = true;
+          script.defer = true;
+          script.setAttribute('data-html5-qrcode-source', source);
+          script.setAttribute('data-html5-qrcode-state', 'loading');
+          document.head.appendChild(script);
         }
-        return ' ';
-      })
-      .join('')
-      .trim();
-  }
 
-  function encodeCode128BPattern(value) {
-    var input = normalizeCode128Input(value);
-    if (!input) {
-      return '';
-    }
-    var codes = [];
-    for (var i = 0; i < input.length; i += 1) {
-      codes.push(input.charCodeAt(i) - 32);
-    }
-
-    var checksum = CODE128_START_B;
-    for (var c = 0; c < codes.length; c += 1) {
-      checksum += codes[c] * (c + 1);
-    }
-    var checkCode = checksum % 103;
-    var sequence = [CODE128_START_B].concat(codes).concat([checkCode, CODE128_STOP]);
-    var pattern = '';
-    for (var s = 0; s < sequence.length; s += 1) {
-      pattern += CODE128_PATTERNS[sequence[s]];
-    }
-    return pattern;
-  }
-
-  function pad2(value) {
-    return String(value).padStart(2, '0');
-  }
-
-  function patternToRuns(pattern) {
-    if (!pattern) {
-      return [];
-    }
-    var runs = [];
-    var current = pattern.charAt(0);
-    var runLength = 1;
-    for (var i = 1; i < pattern.length; i += 1) {
-      if (pattern.charAt(i) === current) {
-        runLength += 1;
-        continue;
-      }
-      runs.push(runLength);
-      current = pattern.charAt(i);
-      runLength = 1;
-    }
-    runs.push(runLength);
-    return runs;
-  }
-
-  function buildKnownCode128Candidates(values) {
-    if (!Array.isArray(values)) {
-      return [];
-    }
-    var seen = new Set();
-    var candidates = [];
-    values.forEach(function (rawValue) {
-      var normalized = normalizeCode(rawValue);
-      if (!normalized || normalized === '-' || seen.has(normalized)) {
-        return;
-      }
-      seen.add(normalized);
-      var pattern = encodeCode128BPattern(normalized);
-      if (!pattern) {
-        return;
-      }
-      candidates.push({
-        raw: rawValue,
-        normalized: normalized,
-        pattern: pattern,
-        runs: patternToRuns(pattern),
-        modules: pattern.length,
-      });
-    });
-    return candidates;
-  }
-
-  function safeMinMax(line) {
-    var min = 255;
-    var max = 0;
-    for (var i = 0; i < line.length; i += 1) {
-      if (line[i] < min) {
-        min = line[i];
-      }
-      if (line[i] > max) {
-        max = line[i];
-      }
-    }
-    return { min: min, max: max };
-  }
-
-  function luminanceFromImageData(imageData, x, y) {
-    var index = ((y * imageData.width) + x) * 4;
-    var data = imageData.data;
-    return (0.299 * data[index]) + (0.587 * data[index + 1]) + (0.114 * data[index + 2]);
-  }
-
-  function buildHorizontalLine(imageData, y) {
-    var row = new Array(imageData.width);
-    for (var x = 0; x < imageData.width; x += 1) {
-      row[x] = luminanceFromImageData(imageData, x, y);
-    }
-    return row;
-  }
-
-  function buildVerticalLine(imageData, x) {
-    var column = new Array(imageData.height);
-    for (var y = 0; y < imageData.height; y += 1) {
-      column[y] = luminanceFromImageData(imageData, x, y);
-    }
-    return column;
-  }
-
-  function scoreLineTransitions(line) {
-    if (!Array.isArray(line) || line.length < 40) {
-      return 0;
-    }
-    var minMax = safeMinMax(line);
-    var contrast = minMax.max - minMax.min;
-    if (contrast < 28) {
-      return 0;
-    }
-    var threshold = minMax.min + (contrast * 0.5);
-    var previous = line[0] <= threshold ? 1 : 0;
-    var transitions = 0;
-    for (var i = 1; i < line.length; i += 1) {
-      var current = line[i] <= threshold ? 1 : 0;
-      if (current !== previous) {
-        transitions += 1;
-      }
-      previous = current;
-    }
-    return transitions;
-  }
-
-  function collectHighTransitionRows(imageData, maxRows) {
-    if (!imageData || !imageData.width || !imageData.height) {
-      return [];
-    }
-    var rows = [];
-    var step = Math.max(1, Math.floor(imageData.height / 72));
-    for (var y = 0; y < imageData.height; y += step) {
-      var line = buildHorizontalLine(imageData, y);
-      var score = scoreLineTransitions(line);
-      if (!score) {
-        continue;
-      }
-      rows.push({ y: y, score: score });
-    }
-
-    rows.sort(function (a, b) {
-      return b.score - a.score;
-    });
-
-    var unique = [];
-    var minDistance = Math.max(4, Math.floor(imageData.height / 40));
-    for (var i = 0; i < rows.length && unique.length < maxRows; i += 1) {
-      var candidate = rows[i];
-      var tooClose = unique.some(function (picked) {
-        return Math.abs(picked - candidate.y) < minDistance;
-      });
-      if (!tooClose) {
-        unique.push(candidate.y);
-      }
-    }
-    return unique;
-  }
-
-  function smoothBinary(binary) {
-    for (var i = 1; i < binary.length - 1; i += 1) {
-      if (binary[i - 1] === binary[i + 1] && binary[i] !== binary[i - 1]) {
-        binary[i] = binary[i - 1];
-      }
-    }
-  }
-
-  function buildRuns(binary, fromIndex, toIndex) {
-    var runs = [];
-    var colors = [];
-    if (fromIndex >= toIndex) {
-      return { runs: runs, colors: colors };
-    }
-
-    var current = binary[fromIndex];
-    var runLength = 1;
-    for (var i = fromIndex + 1; i <= toIndex; i += 1) {
-      if (binary[i] === current) {
-        runLength += 1;
-        continue;
-      }
-      colors.push(current);
-      runs.push(runLength);
-      current = binary[i];
-      runLength = 1;
-    }
-    colors.push(current);
-    runs.push(runLength);
-    return { runs: runs, colors: colors };
-  }
-
-  function collapseTinyRuns(runData) {
-    var runs = runData.runs;
-    var colors = runData.colors;
-    if (runs.length < 7) {
-      return runData;
-    }
-
-    var total = 0;
-    for (var i = 0; i < runs.length; i += 1) {
-      total += runs[i];
-    }
-    var average = total / runs.length;
-    var tinyThreshold = Math.max(1, Math.floor(average * 0.14));
-    var changed = true;
-
-    while (changed && runs.length >= 7) {
-      changed = false;
-
-      if (runs.length > 1 && runs[0] <= tinyThreshold) {
-        runs[1] += runs[0];
-        runs.shift();
-        colors.shift();
-        changed = true;
-      }
-
-      if (runs.length > 1 && runs[runs.length - 1] <= tinyThreshold) {
-        runs[runs.length - 2] += runs[runs.length - 1];
-        runs.pop();
-        colors.pop();
-        changed = true;
-      }
-
-      for (var idx = 1; idx < runs.length - 1; idx += 1) {
-        if (runs[idx] > tinyThreshold) {
-          continue;
-        }
-        runs[idx - 1] += runs[idx] + runs[idx + 1];
-        runs.splice(idx, 2);
-        colors.splice(idx, 2);
-        changed = true;
-        break;
-      }
-    }
-    return { runs: runs, colors: colors };
-  }
-
-  function buildRunDataFromLine(line) {
-    if (!Array.isArray(line) || line.length < 80) {
-      return null;
-    }
-
-    var minMax = safeMinMax(line);
-    if ((minMax.max - minMax.min) < 40) {
-      return null;
-    }
-    var threshold = minMax.min + ((minMax.max - minMax.min) * 0.5);
-
-    var binary = new Uint8Array(line.length);
-    for (var i = 0; i < line.length; i += 1) {
-      binary[i] = line[i] <= threshold ? 1 : 0;
-    }
-    smoothBinary(binary);
-
-    var firstBlack = 0;
-    while (firstBlack < binary.length && binary[firstBlack] === 0) {
-      firstBlack += 1;
-    }
-    if (firstBlack >= binary.length) {
-      return null;
-    }
-    var lastBlack = binary.length - 1;
-    while (lastBlack >= 0 && binary[lastBlack] === 0) {
-      lastBlack -= 1;
-    }
-    if ((lastBlack - firstBlack) < 50) {
-      return null;
-    }
-
-    var runData = buildRuns(binary, firstBlack, lastBlack);
-    if (!runData.runs.length) {
-      return null;
-    }
-    return collapseTinyRuns(runData);
-  }
-
-  function scoreCandidateRuns(observedRuns, candidateRuns, candidateModules) {
-    if (!Array.isArray(observedRuns) || !Array.isArray(candidateRuns) || observedRuns.length !== candidateRuns.length) {
-      return Number.POSITIVE_INFINITY;
-    }
-
-    var observedSum = 0;
-    for (var i = 0; i < observedRuns.length; i += 1) {
-      observedSum += observedRuns[i];
-    }
-    if (!observedSum || !candidateModules) {
-      return Number.POSITIVE_INFINITY;
-    }
-
-    var scale = observedSum / candidateModules;
-    var error = 0;
-    for (var r = 0; r < observedRuns.length; r += 1) {
-      error += Math.abs(observedRuns[r] - (candidateRuns[r] * scale));
-    }
-    return error / observedSum;
-  }
-
-  function matchKnownCode128CandidatesFromRunData(runData, knownCandidates) {
-    if (!runData || !Array.isArray(knownCandidates) || !knownCandidates.length) {
-      return null;
-    }
-    var runs = runData.runs;
-    var colors = runData.colors;
-    if (!Array.isArray(runs) || !Array.isArray(colors) || !runs.length) {
-      return null;
-    }
-
-    var best = null;
-    var threshold = 0.26;
-    for (var c = 0; c < knownCandidates.length; c += 1) {
-      var candidate = knownCandidates[c];
-      if (!candidate || !Array.isArray(candidate.runs) || !candidate.runs.length) {
-        continue;
-      }
-      var requiredLength = candidate.runs.length;
-      if (runs.length < requiredLength) {
-        continue;
-      }
-
-      for (var start = 0; start <= runs.length - requiredLength; start += 1) {
-        if (colors[start] !== 1) {
-          continue;
-        }
-        var observed = runs.slice(start, start + requiredLength);
-        var score = scoreCandidateRuns(observed, candidate.runs, candidate.modules);
-        if (score > threshold) {
-          continue;
-        }
-        if (!best || score < best.score) {
-          best = { candidate: candidate, score: score };
-        }
-      }
-    }
-    if (!best) {
-      return null;
-    }
-    return {
-      code: best.candidate.normalized,
-      score: best.score,
-    };
-  }
-
-  function matchKnownCode128CandidatesFromImageData(imageData, knownCandidates) {
-    if (!imageData || !imageData.width || !imageData.height || !knownCandidates || !knownCandidates.length) {
-      return null;
-    }
-
-    var preferredRows = collectHighTransitionRows(imageData, 32);
-    var votes = new Map();
-    for (var r = 0; r < preferredRows.length; r += 1) {
-      var rowY = preferredRows[r];
-      var rowLine = buildHorizontalLine(imageData, rowY);
-      var rowRunData = buildRunDataFromLine(rowLine);
-      var rowMatch = matchKnownCode128CandidatesFromRunData(rowRunData, knownCandidates);
-      if (!rowMatch) {
-        continue;
-      }
-      var existingVote = votes.get(rowMatch.code) || { count: 0, bestScore: Number.POSITIVE_INFINITY };
-      existingVote.count += 1;
-      if (rowMatch.score < existingVote.bestScore) {
-        existingVote.bestScore = rowMatch.score;
-      }
-      votes.set(rowMatch.code, existingVote);
-    }
-
-    var bestCode = null;
-    var bestVote = null;
-    votes.forEach(function (vote, code) {
-      if (!bestVote || vote.count > bestVote.count || (vote.count === bestVote.count && vote.bestScore < bestVote.bestScore)) {
-        bestVote = vote;
-        bestCode = code;
-      }
-    });
-
-    if (!bestVote) {
-      return null;
-    }
-
-    var secondBestCount = 0;
-    votes.forEach(function (vote, code) {
-      if (code === bestCode) {
-        return;
-      }
-      if (vote.count > secondBestCount) {
-        secondBestCount = vote.count;
-      }
-    });
-
-    if (bestVote.count >= 3 && (bestVote.count - secondBestCount) >= 1 && bestVote.bestScore <= 0.26) {
-      return bestCode;
-    }
-    if (bestVote.count >= 2 && (bestVote.count - secondBestCount) >= 1 && bestVote.bestScore <= 0.16) {
-      return bestCode;
-    }
-    return null;
-  }
-
-  function matchRunsToSymbol(observedRuns, symbols, maxError) {
-    var observedSum = 0;
-    for (var i = 0; i < observedRuns.length; i += 1) {
-      observedSum += observedRuns[i];
-    }
-    if (!observedSum) {
-      return null;
-    }
-
-    var best = null;
-    for (var idx = 0; idx < symbols.length; idx += 1) {
-      var symbol = symbols[idx];
-      if (!symbol || symbol.runs.length !== observedRuns.length) {
-        continue;
-      }
-      var scale = observedSum / symbol.modules;
-      var error = 0;
-      for (var r = 0; r < observedRuns.length; r += 1) {
-        error += Math.abs(observedRuns[r] - (symbol.runs[r] * scale));
-      }
-      var normalizedError = error / observedSum;
-      if (!best || normalizedError < best.error) {
-        best = { symbol: symbol, error: normalizedError };
-      }
-    }
-
-    if (!best || best.error > maxError) {
-      return null;
-    }
-    return {
-      code: best.symbol.code,
-      error: best.error,
-    };
-  }
-
-  function decodeCode128(codes) {
-    if (!Array.isArray(codes) || codes.length < 3) {
-      return null;
-    }
-    if (codes[0] !== CODE128_START_A && codes[0] !== CODE128_START_B && codes[0] !== CODE128_START_C) {
-      return null;
-    }
-
-    var checksumCode = codes[codes.length - 1];
-    var dataCodes = codes.slice(1, -1);
-
-    var checksum = codes[0];
-    for (var i = 0; i < dataCodes.length; i += 1) {
-      checksum += dataCodes[i] * (i + 1);
-    }
-    if ((checksum % 103) !== checksumCode) {
-      return null;
-    }
-
-    var output = '';
-    var activeSet = codes[0];
-    var pendingShiftSet = null;
-    for (var j = 0; j < dataCodes.length; j += 1) {
-      var code = dataCodes[j];
-
-      if (code === 99) {
-        activeSet = CODE128_START_C;
-        pendingShiftSet = null;
-        continue;
-      }
-      if (code === 100) {
-        activeSet = CODE128_START_B;
-        pendingShiftSet = null;
-        continue;
-      }
-      if (code === 101) {
-        activeSet = CODE128_START_A;
-        pendingShiftSet = null;
-        continue;
-      }
-      if (code === 98) {
-        if (activeSet === CODE128_START_A) {
-          pendingShiftSet = CODE128_START_B;
-        } else if (activeSet === CODE128_START_B) {
-          pendingShiftSet = CODE128_START_A;
-        } else {
-          pendingShiftSet = null;
-        }
-        continue;
-      }
-      if (code === 96 || code === 97 || code === 102) {
-        pendingShiftSet = null;
-        continue;
-      }
-      if (code < 0 || code > CODE128_DATA_MAX) {
-        return null;
-      }
-
-      var codeSetForValue = pendingShiftSet || activeSet;
-      pendingShiftSet = null;
-
-      if (codeSetForValue === CODE128_START_C) {
-        output += pad2(code);
-        continue;
-      }
-
-      if (codeSetForValue === CODE128_START_A) {
-        if (code <= 63) {
-          output += String.fromCharCode(code + 32);
-        } else if (code <= 95) {
-          output += String.fromCharCode(code - 64);
-        } else {
-          return null;
-        }
-        continue;
-      }
-
-      if (codeSetForValue === CODE128_START_B) {
-        if (code <= 95) {
-          output += String.fromCharCode(code + 32);
-          continue;
-        }
-        return null;
-      }
-    }
-    return output || null;
-  }
-
-  function decodeRunsAsCode128(runData) {
-    var runs = runData.runs;
-    var colors = runData.colors;
-    if (!Array.isArray(runs) || !Array.isArray(colors) || runs.length < 20) {
-      return null;
-    }
-
-    var normalSymbols = CODE128_SYMBOLS.slice(0, CODE128_STOP);
-    var stopSymbol = [CODE128_SYMBOLS[CODE128_STOP]];
-
-    for (var startIndex = 0; startIndex <= runs.length - 20; startIndex += 1) {
-      if (colors[startIndex] !== 1) {
-        continue;
-      }
-      var startMatch = matchRunsToSymbol(
-        runs.slice(startIndex, startIndex + 6),
-        normalSymbols,
-        CODE128_NORMAL_MATCH_THRESHOLD
-      );
-      if (!startMatch || (
-        startMatch.code !== CODE128_START_A
-        && startMatch.code !== CODE128_START_B
-        && startMatch.code !== CODE128_START_C
-      )) {
-        continue;
-      }
-
-      var cursor = startIndex + 6;
-      var decodedCodes = [startMatch.code];
-      var guard = 0;
-
-      while (cursor + 6 <= runs.length && guard < 96) {
-        guard += 1;
-        if (cursor + 7 <= runs.length) {
-          var stopMatch = matchRunsToSymbol(
-            runs.slice(cursor, cursor + 7),
-            stopSymbol,
-            CODE128_STOP_MATCH_THRESHOLD
-          );
-          if (stopMatch && stopMatch.code === CODE128_STOP) {
-            var value = decodeCode128(decodedCodes);
-            if (value) {
-              return value;
-            }
-            break;
+        script.addEventListener('load', function () {
+          script.setAttribute('data-html5-qrcode-state', 'loaded');
+          if (window.Html5Qrcode) {
+            resolve();
+            return;
           }
-        }
+          reject(new Error('html5-qrcode-load-failed'));
+        }, { once: true });
 
-        var symbolMatch = matchRunsToSymbol(
-          runs.slice(cursor, cursor + 6),
-          normalSymbols,
-          CODE128_NORMAL_MATCH_THRESHOLD
-        );
-        if (!symbolMatch) {
-          break;
-        }
-
-        decodedCodes.push(symbolMatch.code);
-        cursor += 6;
-      }
-    }
-
-    return null;
-  }
-
-  function decodeCode128FromLine(line) {
-    var runData = buildRunDataFromLine(line);
-    if (!runData) {
-      return null;
-    }
-    return decodeRunsAsCode128(runData);
-  }
-
-  function decodeCode128FromImageData(imageData) {
-    if (!imageData || !imageData.width || !imageData.height) {
-      return null;
-    }
-
-    function pickConfirmed(values) {
-      if (!Array.isArray(values) || !values.length) {
-        return null;
-      }
-      var counts = new Map();
-      values.forEach(function (value) {
-        var current = counts.get(value) || 0;
-        counts.set(value, current + 1);
+        script.addEventListener('error', function () {
+          script.setAttribute('data-html5-qrcode-state', 'error');
+          reject(new Error('html5-qrcode-load-failed'));
+        }, { once: true });
+      }).catch(function () {
+        return loadSource(index + 1);
       });
-      var bestCode = null;
-      var bestCount = 0;
-      counts.forEach(function (count, code) {
-        if (count > bestCount) {
-          bestCount = count;
-          bestCode = code;
-        }
-      });
-      if (bestCount >= 2) {
-        return bestCode;
-      }
-      return null;
     }
 
-    var decodedCandidates = [];
-    var preferredRows = collectHighTransitionRows(imageData, 24);
-    for (var p = 0; p < preferredRows.length; p += 1) {
-      var preferredY = preferredRows[p];
-      var preferredHorizontal = decodeCode128FromLine(buildHorizontalLine(imageData, preferredY));
-      if (preferredHorizontal) {
-        decodedCandidates.push(preferredHorizontal);
-      }
-    }
-
-    var rowOffsets = [0, -2, 2, -4, 4, -6, 6, -8, 8, -12, 12, -16, 16, -22, 22, -28, 28];
-    var centerY = Math.floor(imageData.height / 2);
-    for (var r = 0; r < rowOffsets.length; r += 1) {
-      var y = centerY + rowOffsets[r];
-      if (y < 0 || y >= imageData.height) {
-        continue;
-      }
-      var horizontal = decodeCode128FromLine(buildHorizontalLine(imageData, y));
-      if (horizontal) {
-        decodedCandidates.push(horizontal);
-      }
-    }
-
-    var colOffsets = [0, -2, 2, -4, 4, -6, 6, -8, 8, -12, 12, -16, 16, -22, 22];
-    var centerX = Math.floor(imageData.width / 2);
-    for (var c = 0; c < colOffsets.length; c += 1) {
-      var x = centerX + colOffsets[c];
-      if (x < 0 || x >= imageData.width) {
-        continue;
-      }
-      var vertical = decodeCode128FromLine(buildVerticalLine(imageData, x));
-      if (vertical) {
-        decodedCandidates.push(vertical);
-      }
-    }
-    return pickConfirmed(decodedCandidates);
+    html5QrcodeLoadPromise = loadSource(0).finally(function () {
+      html5QrcodeLoadPromise = null;
+    });
+    return html5QrcodeLoadPromise;
   }
 
   function createQuickScan() {
     var modalEl = document.getElementById('quickScanModal');
-    if (!modalEl) {
+    var readerEl = document.getElementById('quickScanReader');
+    if (!modalEl || !readerEl) {
       return null;
     }
 
     var modal = null;
-    var videoEl = document.getElementById('quickScanVideo');
     var statusEl = document.getElementById('quickScanStatus');
     var logEl = document.getElementById('quickScanLog');
     var manualInputEl = document.getElementById('quickScanManualInput');
     var manualAddEl = document.getElementById('quickScanManualAdd');
 
-    var stream = null;
-    var detector = null;
-    var useFallbackCode128Decoder = false;
-    var knownCodeCandidates = [];
-    var loopTimer = null;
+    var scanner = null;
+    var scannerRunning = false;
+    var startPromise = null;
     var activeHandler = null;
+    var openToken = 0;
     var lastSeen = new Map();
-    var throttleMs = 1200;
-    var detectionVotes = [];
     var knownCodeByNormalized = new Map();
     var knownCodeByIdentifier = new Map();
-    var snapshotCanvas = document.createElement('canvas');
-    var snapshotContext = snapshotCanvas.getContext('2d');
-    var scanRegionCanvas = document.createElement('canvas');
-    var scanRegionContext = scanRegionCanvas.getContext('2d');
-    var rotatedCanvas = document.createElement('canvas');
-    var rotatedContext = rotatedCanvas.getContext('2d');
 
     function ensureModalInstance() {
       if (modal) {
@@ -817,51 +140,6 @@
       }
     }
 
-    function stopLoop() {
-      if (loopTimer) {
-        clearTimeout(loopTimer);
-        loopTimer = null;
-      }
-    }
-
-    function stopCamera() {
-      stopLoop();
-      if (videoEl) {
-        videoEl.pause();
-        videoEl.srcObject = null;
-      }
-      if (stream) {
-        stream.getTracks().forEach(function (track) {
-          track.stop();
-        });
-      }
-      stream = null;
-      detector = null;
-      useFallbackCode128Decoder = false;
-      knownCodeCandidates = [];
-      detectionVotes = [];
-      knownCodeByNormalized = new Map();
-      knownCodeByIdentifier = new Map();
-    }
-
-    function shouldAccept(code) {
-      var normalized = normalizeCode(code);
-      if (!normalized) {
-        return false;
-      }
-      var now = Date.now();
-      var last = lastSeen.get(normalized) || 0;
-      if (now - last < throttleMs) {
-        return false;
-      }
-      lastSeen.set(normalized, now);
-      return true;
-    }
-
-    function hasKnownCodeCatalog() {
-      return knownCodeByNormalized.size > 0 || knownCodeByIdentifier.size > 0;
-    }
-
     function resetKnownCodeLookup() {
       knownCodeByNormalized = new Map();
       knownCodeByIdentifier = new Map();
@@ -874,7 +152,7 @@
       }
       values.forEach(function (rawValue) {
         var normalized = normalizeCode(rawValue);
-        if (!isPlausibleScannedCode(normalized)) {
+        if (!normalized || normalized === '-') {
           return;
         }
         if (!knownCodeByNormalized.has(normalized)) {
@@ -887,6 +165,10 @@
       });
     }
 
+    function hasKnownCodeCatalog() {
+      return knownCodeByNormalized.size > 0 || knownCodeByIdentifier.size > 0;
+    }
+
     function resolveKnownCode(normalizedCode) {
       if (!hasKnownCodeCatalog()) {
         return normalizedCode;
@@ -894,398 +176,239 @@
       if (knownCodeByNormalized.has(normalizedCode)) {
         return knownCodeByNormalized.get(normalizedCode);
       }
+
       var identifier = normalizeIdentifier(normalizedCode);
       if (identifier && knownCodeByIdentifier.has(identifier)) {
         return knownCodeByIdentifier.get(identifier);
       }
+
       if (/^[0-9]+$/.test(identifier) && identifier.length >= 5) {
         var withHyphen = identifier.slice(0, -1) + '-' + identifier.slice(-1);
         if (knownCodeByNormalized.has(withHyphen)) {
           return knownCodeByNormalized.get(withHyphen);
         }
       }
+
       return null;
     }
 
-    function registerDetectionVote(normalizedCode, strictVoteRequirement) {
-      var hasKnownCodes = hasKnownCodeCatalog();
-      var minimumVotes = hasKnownCodes
-        ? DETECTION_VOTES_WITH_KNOWN_CODES
-        : DETECTION_VOTES_WITHOUT_KNOWN_CODES;
-      if (strictVoteRequirement) {
-        minimumVotes = Math.max(minimumVotes, 4);
-      }
-
-      detectionVotes.push(normalizedCode);
-      if (detectionVotes.length > DETECTION_VOTE_WINDOW_SIZE) {
-        detectionVotes.shift();
-      }
-
-      var counts = new Map();
-      detectionVotes.forEach(function (value) {
-        counts.set(value, (counts.get(value) || 0) + 1);
-      });
-
-      var bestCode = null;
-      var bestCount = 0;
-      var secondBestCount = 0;
-      counts.forEach(function (count, value) {
-        if (count > bestCount) {
-          secondBestCount = bestCount;
-          bestCount = count;
-          bestCode = value;
-          return;
-        }
-        if (count > secondBestCount) {
-          secondBestCount = count;
-        }
-      });
-
-      if (bestCode !== normalizedCode) {
-        return null;
-      }
-      if (bestCount < minimumVotes) {
-        return null;
-      }
-      if ((bestCount - secondBestCount) < 1) {
-        return null;
-      }
-
-      detectionVotes = [];
-      return bestCode;
-    }
-
-    function handleCode(code) {
+    function shouldAccept(code) {
       var normalized = normalizeCode(code);
       if (!normalized) {
-        return;
-      }
-      if (!isPlausibleScannedCode(normalized)) {
-        return;
-      }
-      var mappedKnownCode = resolveKnownCode(normalized);
-      var hasKnownCodes = hasKnownCodeCatalog();
-      var candidateCode = mappedKnownCode || normalized;
-      var strictVoteRequirement = hasKnownCodes && !mappedKnownCode;
-      var confirmedCode = registerDetectionVote(candidateCode, strictVoteRequirement);
-      if (!confirmedCode) {
-        return;
-      }
-      if (!shouldAccept(confirmedCode)) {
-        return;
-      }
-      if (typeof activeHandler === 'function') {
-        activeHandler(confirmedCode, appendLog);
-      }
-    }
-
-    function ensureSnapshotSize() {
-      if (!videoEl) {
         return false;
       }
-      var sourceWidth = videoEl.videoWidth || 0;
-      var sourceHeight = videoEl.videoHeight || 0;
-      if (!sourceWidth || !sourceHeight) {
+      var now = Date.now();
+      var last = lastSeen.get(normalized) || 0;
+      if (now - last < SCAN_THROTTLE_MS) {
         return false;
       }
-
-      var maxWidth = 1600;
-      var scale = sourceWidth > maxWidth ? (maxWidth / sourceWidth) : 1;
-      var targetWidth = Math.max(1, Math.round(sourceWidth * scale));
-      var targetHeight = Math.max(1, Math.round(sourceHeight * scale));
-
-      if (snapshotCanvas.width !== targetWidth || snapshotCanvas.height !== targetHeight) {
-        snapshotCanvas.width = targetWidth;
-        snapshotCanvas.height = targetHeight;
-      }
+      lastSeen.set(normalized, now);
       return true;
     }
 
-    function getDetectionSource() {
-      if (!videoEl || !snapshotContext) {
-        return videoEl;
-      }
-      if (!ensureSnapshotSize()) {
-        return videoEl;
-      }
-      snapshotContext.drawImage(videoEl, 0, 0, snapshotCanvas.width, snapshotCanvas.height);
-      return snapshotCanvas;
-    }
-
-    function getScanRegionSource(source) {
-      if (!source || !scanRegionContext || !source.width || !source.height) {
-        return source;
-      }
-      var regionWidth = Math.max(1, Math.round(source.width * 0.86));
-      var regionHeight = Math.max(1, Math.round(source.height * 0.56));
-      var regionX = Math.max(0, Math.round((source.width - regionWidth) * 0.5));
-      var regionY = Math.max(0, Math.round((source.height - regionHeight) * 0.5));
-      if (scanRegionCanvas.width !== regionWidth || scanRegionCanvas.height !== regionHeight) {
-        scanRegionCanvas.width = regionWidth;
-        scanRegionCanvas.height = regionHeight;
-      }
-      scanRegionContext.drawImage(
-        source,
-        regionX,
-        regionY,
-        regionWidth,
-        regionHeight,
-        0,
-        0,
-        regionWidth,
-        regionHeight
-      );
-      return scanRegionCanvas;
-    }
-
-    function runFallbackDecode(source) {
-      if (!snapshotContext) {
-        return;
-      }
-      try {
-        var scanRegionSource = getScanRegionSource(source) || source;
-        var imageDataContext = scanRegionSource === scanRegionCanvas ? scanRegionContext : snapshotContext;
-        var imageData = imageDataContext.getImageData(0, 0, scanRegionSource.width, scanRegionSource.height);
-        var decoded = null;
-        if (knownCodeCandidates.length) {
-          decoded = matchKnownCode128CandidatesFromImageData(imageData, knownCodeCandidates);
-        }
-        if (!decoded) {
-          decoded = decodeCode128FromImageData(imageData);
-        }
-        if (!decoded && scanRegionSource !== source) {
-          imageData = snapshotContext.getImageData(0, 0, source.width, source.height);
-          if (knownCodeCandidates.length) {
-            decoded = matchKnownCode128CandidatesFromImageData(imageData, knownCodeCandidates);
-          }
-          if (!decoded) {
-            decoded = decodeCode128FromImageData(imageData);
-          }
-        }
-        if (decoded) {
-          handleCode(decoded);
-          return;
-        }
-        if (rotatedContext) {
-          if (rotatedCanvas.width !== scanRegionSource.height || rotatedCanvas.height !== scanRegionSource.width) {
-            rotatedCanvas.width = scanRegionSource.height;
-            rotatedCanvas.height = scanRegionSource.width;
-          }
-          rotatedContext.clearRect(0, 0, rotatedCanvas.width, rotatedCanvas.height);
-          rotatedContext.save();
-          rotatedContext.translate(rotatedCanvas.width * 0.5, rotatedCanvas.height * 0.5);
-          rotatedContext.rotate(Math.PI * 0.5);
-          rotatedContext.drawImage(
-            scanRegionSource,
-            -scanRegionSource.width * 0.5,
-            -scanRegionSource.height * 0.5,
-            scanRegionSource.width,
-            scanRegionSource.height
-          );
-          rotatedContext.restore();
-          var rotatedImageData = rotatedContext.getImageData(0, 0, rotatedCanvas.width, rotatedCanvas.height);
-          decoded = null;
-          if (knownCodeCandidates.length) {
-            decoded = matchKnownCode128CandidatesFromImageData(rotatedImageData, knownCodeCandidates);
-          }
-          if (!decoded) {
-            decoded = decodeCode128FromImageData(rotatedImageData);
-          }
-        }
-        if (decoded) {
-          handleCode(decoded);
-        }
-      } catch (err) {
-        // non-fatal fallback decode errors
-      }
-    }
-
-    function scanLoop() {
-      if (!videoEl || !stream) {
-        return;
-      }
-      if (videoEl.readyState < 2) {
-        loopTimer = setTimeout(scanLoop, useFallbackCode128Decoder ? FALLBACK_SCAN_INTERVAL_MS : DETECTOR_SCAN_INTERVAL_MS);
+    function handleCode(rawCode) {
+      var normalized = normalizeCode(rawCode);
+      if (!normalized) {
         return;
       }
 
-      var source = getDetectionSource();
-      var scanRegionSource = getScanRegionSource(source) || source;
+      var resolvedCode = resolveKnownCode(normalized);
+      if (!resolvedCode) {
+        return;
+      }
+      if (!isPlausibleScannedCode(resolvedCode)) {
+        return;
+      }
+      if (!shouldAccept(resolvedCode)) {
+        return;
+      }
 
-      if (detector) {
-        detector.detect(scanRegionSource)
-          .then(function (barcodes) {
-            if (Array.isArray(barcodes) && barcodes.length) {
-              barcodes.forEach(function (barcode) {
-                if (barcode && barcode.rawValue) {
-                  handleCode(barcode.rawValue);
-                }
-              });
-              return null;
-            }
-            if (scanRegionSource !== source) {
-              return detector.detect(source).then(function (fallbackBarcodes) {
-                if (!Array.isArray(fallbackBarcodes)) {
-                  return;
-                }
-                fallbackBarcodes.forEach(function (barcode) {
-                  if (barcode && barcode.rawValue) {
-                    handleCode(barcode.rawValue);
-                  }
-                });
-              });
-            }
-            return null;
-          })
-          .catch(function () {
-            // detector errors are non-fatal inside loop
-          })
-          .finally(function () {
-            loopTimer = setTimeout(scanLoop, DETECTOR_SCAN_INTERVAL_MS);
+      if (typeof activeHandler === 'function') {
+        activeHandler(resolvedCode, appendLog);
+      }
+    }
+
+    function getFormatSupportList() {
+      var formats = window.Html5QrcodeSupportedFormats || {};
+      var entries = [
+        formats.CODE_128,
+        formats.CODE_39,
+        formats.CODABAR,
+        formats.ITF,
+        formats.QR_CODE,
+        formats.EAN_13,
+        formats.EAN_8,
+        formats.UPC_A,
+        formats.UPC_E,
+        formats.DATA_MATRIX,
+      ].filter(function (value) {
+        return typeof value !== 'undefined';
+      });
+      return entries.length ? entries : null;
+    }
+
+    function createScannerInstance() {
+      var formats = getFormatSupportList();
+      var config = { verbose: false };
+      if (formats) {
+        config.formatsToSupport = formats;
+      }
+      return new window.Html5Qrcode('quickScanReader', config);
+    }
+
+    function getStartConfig() {
+      return {
+        fps: 10,
+        aspectRatio: 1.7777777778,
+        disableFlip: false,
+        qrbox: function (viewfinderWidth, viewfinderHeight) {
+          var width = Math.max(140, Math.floor(viewfinderWidth * 0.86));
+          var height = Math.max(100, Math.floor(viewfinderHeight * 0.56));
+          return {
+            width: Math.min(width, viewfinderWidth),
+            height: Math.min(height, viewfinderHeight),
+          };
+        },
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      };
+    }
+
+    function startWithCameraConfigs(cameraConfigs, index, sessionToken) {
+      if (!scanner) {
+        return Promise.reject(new Error('scanner-missing'));
+      }
+      if (!Array.isArray(cameraConfigs) || index >= cameraConfigs.length) {
+        return Promise.reject(new Error('camera-config-exhausted'));
+      }
+
+      return scanner.start(
+        cameraConfigs[index],
+        getStartConfig(),
+        function (decodedText) {
+          handleCode(decodedText);
+        },
+        function () {
+          // decoding failures are expected while scanning continuously
+        }
+      ).then(function () {
+        if (sessionToken !== openToken) {
+          return stopScanner();
+        }
+        scannerRunning = true;
+        setStatus('Scanner aktiv. Barcode im Rahmen ausrichten und kurz ruhig halten.');
+        return null;
+      }).catch(function () {
+        return startWithCameraConfigs(cameraConfigs, index + 1, sessionToken);
+      });
+    }
+
+    function startWithEnumeratedCameras(sessionToken) {
+      if (!window.Html5Qrcode || typeof window.Html5Qrcode.getCameras !== 'function') {
+        return Promise.reject(new Error('camera-list-not-available'));
+      }
+      if (!scanner) {
+        return Promise.reject(new Error('scanner-missing'));
+      }
+
+      return window.Html5Qrcode.getCameras().then(function (cameras) {
+        if (!Array.isArray(cameras) || !cameras.length) {
+          throw new Error('no-cameras-found');
+        }
+
+        var preferred = cameras.find(function (camera) {
+          var label = String(camera && camera.label ? camera.label : '').toLowerCase();
+          return label.indexOf('back') !== -1
+            || label.indexOf('rear') !== -1
+            || label.indexOf('environment') !== -1;
+        }) || cameras[0];
+
+        return scanner.start(
+          preferred.id,
+          getStartConfig(),
+          function (decodedText) {
+            handleCode(decodedText);
+          },
+          function () {
+            // decoding failures are expected while scanning continuously
+          }
+        );
+      }).then(function () {
+        if (sessionToken !== openToken) {
+          return stopScanner();
+        }
+        scannerRunning = true;
+        setStatus('Scanner aktiv. Barcode im Rahmen ausrichten und kurz ruhig halten.');
+        return null;
+      });
+    }
+
+    function startScanner(sessionToken) {
+      if (startPromise) {
+        return startPromise;
+      }
+
+      setStatus('Kamera wird initialisiert …');
+      startPromise = loadHtml5QrcodeScript()
+        .then(function () {
+          if (!window.Html5Qrcode) {
+            throw new Error('html5-qrcode-not-available');
+          }
+
+          return stopScanner().finally(function () {
+            scanner = createScannerInstance();
           });
-        return;
-      }
+        })
+        .then(function () {
+          var cameraConfigs = [
+            { facingMode: { exact: 'environment' } },
+            { facingMode: { ideal: 'environment' } },
+            { facingMode: 'environment' },
+          ];
+          return startWithCameraConfigs(cameraConfigs, 0, sessionToken)
+            .catch(function () {
+              return startWithEnumeratedCameras(sessionToken);
+            });
+        })
+        .catch(function () {
+          setStatus('Kamera konnte nicht geöffnet werden. Bitte Code manuell eingeben.');
+        })
+        .finally(function () {
+          startPromise = null;
+        });
 
-      if (useFallbackCode128Decoder && source && source.width && source.height) {
-        runFallbackDecode(source);
-      }
-      loopTimer = setTimeout(scanLoop, FALLBACK_SCAN_INTERVAL_MS);
+      return startPromise;
     }
 
-    function startCamera() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus('Kamera nicht verfügbar. Bitte Code manuell eingeben.');
+    function stopScanner() {
+      if (!scanner) {
+        scannerRunning = false;
         return Promise.resolve();
       }
 
-      function tryCameraConstraints(constraintsList, index) {
-        if (index >= constraintsList.length) {
-          return Promise.reject(new Error('camera-unavailable'));
-        }
-        return navigator.mediaDevices.getUserMedia(constraintsList[index]).catch(function () {
-          return tryCameraConstraints(constraintsList, index + 1);
-        });
-      }
+      var currentScanner = scanner;
+      scanner = null;
+      var stopPromise = scannerRunning && typeof currentScanner.stop === 'function'
+        ? currentScanner.stop().catch(function () {
+          // best effort
+        })
+        : Promise.resolve();
 
-      var constraintsList = [
-        {
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            aspectRatio: { ideal: 1.7777777778 },
-            width: { ideal: 2560 },
-            height: { ideal: 1440 },
-            advanced: [{ focusMode: 'continuous' }],
-          },
-        },
-        {
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            aspectRatio: { ideal: 1.7777777778 },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-          },
-        },
-        {
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-          },
-        },
-      ];
-
-      return tryCameraConstraints(constraintsList, 0).then(function (mediaStream) {
-        stream = mediaStream;
-        try {
-          var videoTrack = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
-          if (videoTrack && typeof videoTrack.getCapabilities === 'function') {
-            var capabilities = videoTrack.getCapabilities();
-            var advancedConstraint = {};
-            if (Array.isArray(capabilities.focusMode) && capabilities.focusMode.indexOf('continuous') !== -1) {
-              advancedConstraint.focusMode = 'continuous';
-            }
-            if (Array.isArray(capabilities.exposureMode) && capabilities.exposureMode.indexOf('continuous') !== -1) {
-              advancedConstraint.exposureMode = 'continuous';
-            }
-            if (Array.isArray(capabilities.whiteBalanceMode) && capabilities.whiteBalanceMode.indexOf('continuous') !== -1) {
-              advancedConstraint.whiteBalanceMode = 'continuous';
-            }
-            if (capabilities.zoom && typeof capabilities.zoom.min === 'number' && typeof capabilities.zoom.max === 'number') {
-              advancedConstraint.zoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, 1.6));
-            }
-            if (Object.keys(advancedConstraint).length && typeof videoTrack.applyConstraints === 'function') {
-              videoTrack.applyConstraints({ advanced: [advancedConstraint] }).catch(function () {
-                // constraints are best-effort only
-              });
-            }
-          }
-        } catch (err) {
-          // non-fatal camera capability errors
-        }
-        if (videoEl) {
-          videoEl.srcObject = stream;
-          return videoEl.play();
+      return stopPromise.then(function () {
+        scannerRunning = false;
+        if (typeof currentScanner.clear === 'function') {
+          return currentScanner.clear().catch(function () {
+            // best effort
+          });
         }
         return null;
-      }).then(function () {
-        if (window.BarcodeDetector) {
-          var preferredFormats = [
-            'code_128', 'code_39', 'codabar', 'itf',
-            'qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'data_matrix',
-          ];
-          var hasSupportedFormatsApi = typeof window.BarcodeDetector.getSupportedFormats === 'function';
-          if (hasSupportedFormatsApi) {
-            return window.BarcodeDetector.getSupportedFormats()
-              .then(function (supportedFormats) {
-                var formats = preferredFormats.filter(function (entry) {
-                  return supportedFormats.indexOf(entry) !== -1;
-                });
-                detector = new window.BarcodeDetector({ formats: formats.length ? formats : undefined });
-                setStatus('Scanner aktiv. Barcode im Rahmen ausrichten und kurz ruhig halten.');
-                scanLoop();
-              })
-              .catch(function () {
-                try {
-                  detector = new window.BarcodeDetector();
-                  setStatus('Scanner aktiv. Barcode im Rahmen ausrichten und kurz ruhig halten.');
-                  scanLoop();
-                } catch (err) {
-                  useFallbackCode128Decoder = true;
-                  setStatus('Scanner aktiv (Fallback für Code128). Barcode im Rahmen ausrichten und kurz ruhig halten.');
-                  scanLoop();
-                }
-              });
-          }
-          try {
-            detector = new window.BarcodeDetector();
-            setStatus('Scanner aktiv. Barcode im Rahmen ausrichten und kurz ruhig halten.');
-            scanLoop();
-            return null;
-          } catch (error) {
-            useFallbackCode128Decoder = true;
-            setStatus('Scanner aktiv (Fallback für Code128). Barcode im Rahmen ausrichten und kurz ruhig halten.');
-            scanLoop();
-            return null;
-          }
-        }
-
-        useFallbackCode128Decoder = true;
-        setStatus('Scanner aktiv (Fallback für Code128). Barcode im Rahmen ausrichten und kurz ruhig halten.');
-        scanLoop();
-        return null;
-      }).catch(function () {
-        setStatus('Kamera konnte nicht geöffnet werden. Bitte Code manuell eingeben.');
       });
     }
 
     function resetState() {
       activeHandler = null;
-      detector = null;
-      useFallbackCode128Decoder = false;
-      knownCodeCandidates = [];
       lastSeen = new Map();
-      detectionVotes = [];
       resetKnownCodeLookup();
       if (logEl) {
         logEl.innerHTML = '';
@@ -1299,30 +422,34 @@
       if (!ensureModalInstance()) {
         return;
       }
+
       resetState();
+      openToken += 1;
+      var sessionToken = openToken;
       activeHandler = config && typeof config.onCode === 'function'
         ? config.onCode
         : function () {};
-      knownCodeCandidates = buildKnownCode128Candidates(
-        config && Array.isArray(config.knownCodes) ? config.knownCodes : []
-      );
+
       buildKnownCodeLookup(config && Array.isArray(config.knownCodes) ? config.knownCodes : []);
       modal.show();
-      startCamera();
+      startScanner(sessionToken);
     }
 
     function close() {
       if (!ensureModalInstance()) {
         return;
       }
+      openToken += 1;
       modal.hide();
-      stopCamera();
+      void stopScanner();
       resetState();
     }
 
     modalEl.addEventListener('hidden.bs.modal', function () {
-      stopCamera();
-      resetState();
+      openToken += 1;
+      void stopScanner().finally(function () {
+        resetState();
+      });
     });
 
     if (manualAddEl && manualInputEl) {
@@ -1331,6 +458,7 @@
         manualInputEl.value = '';
         manualInputEl.focus();
       });
+
       manualInputEl.addEventListener('keydown', function (event) {
         if (event.key !== 'Enter') {
           return;

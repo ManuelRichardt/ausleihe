@@ -19,6 +19,7 @@ const CSV_HEADERS = Object.freeze({
   IS_ACTIVE: ['IsActive'],
   STATUS: ['Status'],
   CONDITION: ['Condition'],
+  STORAGE_LOCATION: ['StorageLocation', 'Lagerort'],
   QUANTITY_TOTAL: ['QuantityTotal'],
   QUANTITY_AVAILABLE: ['QuantityAvailable'],
   BUNDLE_NAME: ['BundleName'],
@@ -352,6 +353,20 @@ class CsvImportService {
     return category;
   }
 
+  async createOrFindStorageLocation({ name, lendingLocationId }, transaction) {
+    let storageLocation = await this.models.StorageLocation.findOne({
+      where: { name, lendingLocationId },
+      transaction,
+    });
+    if (!storageLocation) {
+      storageLocation = await this.models.StorageLocation.create(
+        { name, lendingLocationId, isActive: true },
+        { transaction }
+      );
+    }
+    return storageLocation;
+  }
+
   async createOrFindModel({
     name,
     manufacturerId,
@@ -416,26 +431,35 @@ class CsvImportService {
       });
     }
     if (asset) {
+      const updatePayload = {
+        assetModelId: data.assetModelId,
+        serialNumber: data.serialNumber || null,
+        condition: data.condition || asset.condition,
+        isActive: data.isActive !== undefined ? data.isActive : asset.isActive,
+      };
+      if (Object.prototype.hasOwnProperty.call(data, 'storageLocationId')) {
+        updatePayload.storageLocationId = data.storageLocationId;
+      }
       await asset.update(
-        {
-          assetModelId: data.assetModelId,
-          serialNumber: data.serialNumber || null,
-          condition: data.condition || asset.condition,
-          isActive: data.isActive !== undefined ? data.isActive : asset.isActive,
-        },
+        updatePayload,
         { transaction }
       );
       return { asset, created: false };
     }
+    const createPayload = {
+      assetModelId: data.assetModelId,
+      lendingLocationId: data.lendingLocationId,
+      inventoryNumber: data.inventoryNumber || null,
+      serialNumber: data.serialNumber || null,
+      condition: data.condition || 'good',
+      isActive: data.isActive !== undefined ? data.isActive : true,
+      storageLocationId: null,
+    };
+    if (Object.prototype.hasOwnProperty.call(data, 'storageLocationId')) {
+      createPayload.storageLocationId = data.storageLocationId;
+    }
     const created = await this.models.Asset.create(
-      {
-        assetModelId: data.assetModelId,
-        lendingLocationId: data.lendingLocationId,
-        inventoryNumber: data.inventoryNumber || null,
-        serialNumber: data.serialNumber || null,
-        condition: data.condition || 'good',
-        isActive: data.isActive !== undefined ? data.isActive : true,
-      },
+      createPayload,
       { transaction }
     );
     return { asset: created, created: true };
@@ -471,6 +495,7 @@ class CsvImportService {
       trackingType: this.parseTrackingType(row),
       inventoryNumber: String(this.readColumn(row, ...CSV_HEADERS.INVENTORY_NUMBER) || '').trim(),
       serialNumber: String(this.readColumn(row, ...CSV_HEADERS.SERIAL_NUMBER) || '').trim(),
+      rawStorageLocation: this.readColumn(row, ...CSV_HEADERS.STORAGE_LOCATION),
     };
   }
 
@@ -592,6 +617,24 @@ class CsvImportService {
       ? assetStatus
       : this.parseBoolean(this.readColumn(rowContext.row, ...CSV_HEADERS.IS_ACTIVE));
 
+    let storageLocationId;
+    const hasStorageLocationColumn = rowContext.rawStorageLocation !== undefined;
+    if (hasStorageLocationColumn) {
+      const storageLocationName = String(rowContext.rawStorageLocation || '').trim();
+      if (storageLocationName) {
+        const storageLocation = await this.createOrFindStorageLocation(
+          {
+            name: storageLocationName,
+            lendingLocationId: rowContext.lendingLocationId,
+          },
+          transaction
+        );
+        storageLocationId = storageLocation.id;
+      } else {
+        storageLocationId = null;
+      }
+    }
+
     const { asset, created } = await this.createOrUpdateAssetInstance(
       {
         assetModelId: model.id,
@@ -600,6 +643,7 @@ class CsvImportService {
         serialNumber: rowContext.serialNumber,
         condition: this.readColumn(rowContext.row, ...CSV_HEADERS.CONDITION),
         isActive: assetActive,
+        ...(hasStorageLocationColumn ? { storageLocationId } : {}),
       },
       transaction
     );
