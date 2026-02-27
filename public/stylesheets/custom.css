@@ -164,27 +164,6 @@
   word-break: break-word;
 }
 
-#quickScanModal .quickscan-video {
-  object-fit: cover;
-  background-color: #000;
-}
-
-#quickScanModal .quickscan-preview {
-  position: relative;
-}
-
-#quickScanModal .quickscan-guide {
-  position: absolute;
-  left: 7%;
-  top: 22%;
-  width: 86%;
-  height: 56%;
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  border-radius: 12px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.12) inset;
-  pointer-events: none;
-}
-
 @media (max-width: 991.98px) {
   .navbar-height {
     height: auto;

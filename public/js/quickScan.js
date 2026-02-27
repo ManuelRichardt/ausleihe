@@ -12,8 +12,7 @@
     var manualInputEl = document.getElementById('quickScanManualInput');
     var manualAddEl = document.getElementById('quickScanManualAdd');
 
-    var scanner = null;
-    var scannerRunning = false;
+    var scannerInstance = null;
     var activeHandler = function () {};
 
     function ensureModalInstance() {
@@ -61,86 +60,53 @@
     }
 
     function stopScanner() {
-      if (!scanner) {
-        scannerRunning = false;
+      if (!scannerInstance || typeof scannerInstance.clear !== 'function') {
+        scannerInstance = null;
         readerEl.innerHTML = '';
         return Promise.resolve();
       }
 
-      var currentScanner = scanner;
-      scanner = null;
-
-      var stopPromise = scannerRunning && typeof currentScanner.stop === 'function'
-        ? currentScanner.stop().catch(function () {
-          // best effort shutdown
-        })
-        : Promise.resolve();
-
-      return stopPromise.then(function () {
-        scannerRunning = false;
-        if (typeof currentScanner.clear === 'function') {
-          return currentScanner.clear().catch(function () {
-            // best effort cleanup
-          });
-        }
-        return null;
+      var instance = scannerInstance;
+      scannerInstance = null;
+      return instance.clear().catch(function () {
+        // best effort cleanup
       }).finally(function () {
         readerEl.innerHTML = '';
       });
     }
 
     function startScanner() {
-      if (!window.Html5Qrcode) {
+      if (!window.Html5QrcodeScanner) {
         setStatus('html5-qrcode ist nicht geladen. Bitte Seite neu laden.');
         return Promise.resolve();
       }
 
       return stopScanner().then(function () {
-        setStatus('Kamera wird initialisiert …');
-        scanner = new window.Html5Qrcode('quickScanReader', { verbose: false });
+        setStatus('Scanner wird bereitgestellt …');
 
-        return scanner.start(
-          { facingMode: 'environment' },
-          {
-            fps: 10,
-            qrbox: { width: 320, height: 180 },
-          },
+        var config = {
+          fps: 10,
+          qrbox: { width: 320, height: 180 },
+          rememberLastUsedCamera: true,
+        };
+        if (window.Html5QrcodeScanType && typeof window.Html5QrcodeScanType.SCAN_TYPE_CAMERA !== 'undefined') {
+          config.supportedScanTypes = [window.Html5QrcodeScanType.SCAN_TYPE_CAMERA];
+        }
+
+        scannerInstance = new window.Html5QrcodeScanner('quickScanReader', config, false);
+        scannerInstance.render(
           function onScanSuccess(decodedText) {
             if (typeof activeHandler === 'function') {
               activeHandler(String(decodedText || ''), appendLog);
             }
           },
-          function onScanFailure() {
+          function onScanError() {
             // ignore per-frame decode failures
           }
-        ).then(function () {
-          scannerRunning = true;
-          setStatus('Scanner aktiv. Barcode im Rahmen ausrichten.');
-        }).catch(function () {
-          setStatus('Kamera konnte nicht geöffnet werden. Bitte Code manuell eingeben.');
-        });
+        );
+
+        setStatus('Scanner aktiv. Kamera auswählen und Scan starten.');
       });
-    }
-
-    function open(config) {
-      if (!ensureModalInstance()) {
-        return;
-      }
-      resetState();
-      activeHandler = config && typeof config.onCode === 'function'
-        ? config.onCode
-        : function () {};
-      modal.show();
-      void startScanner();
-    }
-
-    function close() {
-      if (!ensureModalInstance()) {
-        return;
-      }
-      modal.hide();
-      void stopScanner();
-      resetState();
     }
 
     function handleManualSubmit() {
@@ -153,6 +119,29 @@
       }
       manualInputEl.value = '';
       manualInputEl.focus();
+    }
+
+    function open(config) {
+      if (!ensureModalInstance()) {
+        return;
+      }
+
+      resetState();
+      activeHandler = config && typeof config.onCode === 'function'
+        ? config.onCode
+        : function () {};
+
+      modal.show();
+      void startScanner();
+    }
+
+    function close() {
+      if (!ensureModalInstance()) {
+        return;
+      }
+      modal.hide();
+      void stopScanner();
+      resetState();
     }
 
     modalEl.addEventListener('hidden.bs.modal', function () {
