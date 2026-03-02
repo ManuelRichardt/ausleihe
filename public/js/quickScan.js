@@ -16,6 +16,7 @@
 
     var html5QrCode = null;
     var activeHandler = function () {};
+    var shouldStartOnShow = false;
     var currentCameraId = '';
     var cameraOptions = [];
     var feedbackTimer = null;
@@ -135,6 +136,17 @@
         });
     }
 
+    function enforceVideoInlinePlayback() {
+      var videoEl = readerEl ? readerEl.querySelector('video') : null;
+      if (!videoEl) {
+        return;
+      }
+      videoEl.setAttribute('playsinline', 'true');
+      videoEl.setAttribute('webkit-playsinline', 'true');
+      videoEl.setAttribute('autoplay', 'true');
+      videoEl.muted = true;
+    }
+
     function isMobileDevice() {
       var ua = String(navigator.userAgent || '').toLowerCase();
       return ua.indexOf('android') !== -1
@@ -164,9 +176,6 @@
 
       if (preferred) {
         return preferred.id;
-      }
-      if (mobile) {
-        return cameras[cameras.length - 1].id;
       }
       return cameras[0].id;
     }
@@ -251,6 +260,7 @@
           }
         ).then(function () {
           currentCameraId = cameraId || '';
+          enforceVideoInlinePlayback();
           setStatus('Scanner aktiv. Barcode in den markierten Bereich halten.');
         }).catch(function () {
           setStatus('Kamera konnte nicht geöffnet werden. Bitte andere Kamera wählen oder Code manuell eingeben.');
@@ -312,20 +322,30 @@
       activeHandler = config && typeof config.onCode === 'function'
         ? config.onCode
         : function () {};
+      shouldStartOnShow = true;
       modal.show();
-      void startScanner();
     }
 
     function close() {
       if (!ensureModalInstance()) {
         return;
       }
+      shouldStartOnShow = false;
       modal.hide();
       void stopScanner();
       resetState();
     }
 
+    modalEl.addEventListener('shown.bs.modal', function () {
+      if (!shouldStartOnShow) {
+        return;
+      }
+      shouldStartOnShow = false;
+      void startScanner();
+    });
+
     modalEl.addEventListener('hidden.bs.modal', function () {
+      shouldStartOnShow = false;
       void stopScanner().finally(function () {
         resetState();
       });
