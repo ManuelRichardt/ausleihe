@@ -11,8 +11,6 @@
     var logEl = document.getElementById('quickScanLog');
     var manualInputEl = document.getElementById('quickScanManualInput');
     var manualAddEl = document.getElementById('quickScanManualAdd');
-    var cameraSelectEl = document.getElementById('quickScanCameraSelect');
-    var torchToggleEl = document.getElementById('quickScanTorchToggle');
     var feedbackEl = document.getElementById('quickScanFeedback');
 
     var STATUS_MESSAGES = {
@@ -23,7 +21,6 @@
       CAMERA_LIST_UNAVAILABLE: 'Kamera-Liste nicht verfügbar.',
       CAMERA_LIST_FAILED: 'Kameras konnten nicht geladen werden.',
     };
-    var FORCE_BACK_CAMERA = true;
     var SCAN_PAUSE_MS = 700;
     var FEEDBACK_FLASH_MS = 180;
     var LOG_DEDUP_MS = 1200;
@@ -34,19 +31,13 @@
     var activeHandler = function () {};
     var shouldStartOnShow = false;
     var currentCameraId = '';
-    var cameraOptions = [];
     var feedbackTimer = null;
     var knownCodeByNormalized = new Map();
     var knownCodeByIdentifier = new Map();
-    var voteCounts = new Map();
-    var voteOrder = [];
-    var maxVoteWindow = 6;
     var lastDeliveredByCode = new Map();
     var lastLogFingerprint = '';
     var lastLogAt = 0;
     var resumeTimer = null;
-    var torchSupported = false;
-    var torchEnabled = false;
 
     function ensureModalInstance() {
       if (modal) {
@@ -76,6 +67,7 @@
       }
       lastLogFingerprint = fingerprint;
       lastLogAt = now;
+
       var entry = document.createElement('li');
       entry.className = 'list-group-item py-1 px-2' + (levelClass ? (' ' + levelClass) : '');
       entry.textContent = message;
@@ -138,9 +130,10 @@
         if (normalized && normalized !== canonical && !knownCodeByNormalized.has(normalized)) {
           knownCodeByNormalized.set(normalized, canonical);
         }
-        var identifier = normalizeIdentifier(canonical);
-        if (identifier && !knownCodeByIdentifier.has(identifier)) {
-          knownCodeByIdentifier.set(identifier, canonical);
+
+        var canonicalIdentifier = normalizeIdentifier(canonical);
+        if (canonicalIdentifier && !knownCodeByIdentifier.has(canonicalIdentifier)) {
+          knownCodeByIdentifier.set(canonicalIdentifier, canonical);
         }
         if (normalized) {
           var normalizedIdentifier = normalizeIdentifier(normalized);
@@ -178,6 +171,7 @@
           matchedKnown: true,
         };
       }
+
       var identifier = normalizeIdentifier(normalized);
       if (identifier && knownCodeByIdentifier.has(identifier)) {
         return {
@@ -198,59 +192,6 @@
         code: normalized,
         matchedKnown: false,
       };
-    }
-
-    function resetVoteBuffer() {
-      voteCounts = new Map();
-      voteOrder = [];
-    }
-
-    function resolveConfirmedVote(candidateCode, requiredVotes) {
-      if (!candidateCode) {
-        return null;
-      }
-      var minimumVotes = Math.max(parseInt(requiredVotes, 10) || 1, 1);
-      if (minimumVotes <= 1) {
-        resetVoteBuffer();
-        return candidateCode;
-      }
-      voteOrder.push(candidateCode);
-      voteCounts.set(candidateCode, (voteCounts.get(candidateCode) || 0) + 1);
-
-      while (voteOrder.length > maxVoteWindow) {
-        var removed = voteOrder.shift();
-        var nextCount = (voteCounts.get(removed) || 0) - 1;
-        if (nextCount > 0) {
-          voteCounts.set(removed, nextCount);
-        } else {
-          voteCounts.delete(removed);
-        }
-      }
-
-      var bestCode = null;
-      var bestCount = 0;
-      var secondBestCount = 0;
-      voteCounts.forEach(function (count, code) {
-        if (count > bestCount) {
-          secondBestCount = bestCount;
-          bestCount = count;
-          bestCode = code;
-          return;
-        }
-        if (count > secondBestCount) {
-          secondBestCount = count;
-        }
-      });
-
-      if (!bestCode) {
-        return null;
-      }
-      if (bestCount < minimumVotes || bestCount <= secondBestCount) {
-        return null;
-      }
-
-      resetVoteBuffer();
-      return bestCode;
     }
 
     function shouldDeliverCode(code) {
@@ -287,38 +228,6 @@
         clearTimeout(resumeTimer);
         resumeTimer = null;
       }
-    }
-
-    function updateTorchButton() {
-      if (!torchToggleEl) {
-        return;
-      }
-      if (!torchSupported) {
-        torchToggleEl.classList.add('d-none');
-        torchToggleEl.disabled = true;
-        torchToggleEl.setAttribute('aria-pressed', 'false');
-        return;
-      }
-      torchToggleEl.classList.remove('d-none');
-      torchToggleEl.disabled = false;
-      torchToggleEl.classList.toggle('btn-warning', torchEnabled);
-      torchToggleEl.classList.toggle('btn-outline-secondary', !torchEnabled);
-      torchToggleEl.textContent = torchEnabled ? 'Licht an' : 'Licht aus';
-      torchToggleEl.setAttribute('aria-pressed', torchEnabled ? 'true' : 'false');
-    }
-
-    function applyTorchState() {
-      if (!torchSupported || !html5QrCode || typeof html5QrCode.applyVideoConstraints !== 'function') {
-        return Promise.resolve();
-      }
-      return Promise.resolve()
-        .then(function () {
-          return html5QrCode.applyVideoConstraints({ advanced: [{ torch: Boolean(torchEnabled) }] });
-        })
-        .catch(function () {
-          torchEnabled = false;
-          updateTorchButton();
-        });
     }
 
     function pauseAfterScanHit() {
@@ -363,21 +272,13 @@
       clearLog();
       clearFeedback();
       currentCameraId = '';
-      cameraOptions = [];
       resetKnownCodeLookup();
-      resetVoteBuffer();
       lastDeliveredByCode = new Map();
       lastLogFingerprint = '';
       lastLogAt = 0;
       clearResumeTimer();
-      torchSupported = false;
-      torchEnabled = false;
-      updateTorchButton();
       if (manualInputEl) {
         manualInputEl.value = '';
-      }
-      if (cameraSelectEl) {
-        cameraSelectEl.innerHTML = '<option value="">Kamera wird geladen …</option>';
       }
     }
 
@@ -415,9 +316,6 @@
           return null;
         })
         .finally(function () {
-          torchSupported = false;
-          torchEnabled = false;
-          updateTorchButton();
           readerEl.innerHTML = '';
         });
     }
@@ -454,15 +352,6 @@
         || label.indexOf('world') !== -1;
     }
 
-    function isFrontCameraLabel(label) {
-      return label.indexOf('front') !== -1
-        || label.indexOf('user') !== -1
-        || label.indexOf('selfie') !== -1
-        || label.indexOf('face') !== -1
-        || label.indexOf('vorne') !== -1
-        || label.indexOf('vorder') !== -1;
-    }
-
     function getBackCameraId(cameras) {
       if (!Array.isArray(cameras) || !cameras.length) {
         return '';
@@ -485,7 +374,7 @@
     }
 
     function probeBackCameraDeviceId() {
-      if (!FORCE_BACK_CAMERA || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
         return Promise.resolve('');
       }
       var attempts = [
@@ -518,49 +407,6 @@
       return probeAttempt(0);
     }
 
-    function pickDefaultCameraId(cameras) {
-      if (!Array.isArray(cameras) || !cameras.length) {
-        return '';
-      }
-      if (currentCameraId) {
-        var keepCurrent = cameras.find(function (cam) { return cam && cam.id === currentCameraId; });
-        if (keepCurrent && isBackCameraLabel(getCameraLabel(keepCurrent))) {
-          return keepCurrent.id;
-        }
-      }
-
-      var backId = getBackCameraId(cameras);
-      if (backId) {
-        return backId;
-      }
-      return cameras[0].id;
-    }
-
-    function renderCameraOptions(cameras, selectedId) {
-      if (!cameraSelectEl) {
-        return;
-      }
-      cameraSelectEl.innerHTML = '';
-
-      if (!Array.isArray(cameras) || !cameras.length) {
-        var noOption = document.createElement('option');
-        noOption.value = '';
-        noOption.textContent = 'Keine Kamera gefunden';
-        cameraSelectEl.appendChild(noOption);
-        cameraSelectEl.disabled = true;
-        return;
-      }
-
-      cameraSelectEl.disabled = Boolean(FORCE_BACK_CAMERA);
-      cameras.forEach(function (camera, index) {
-        var option = document.createElement('option');
-        option.value = camera.id;
-        option.textContent = camera.label || ('Kamera ' + (index + 1));
-        option.selected = camera.id === selectedId;
-        cameraSelectEl.appendChild(option);
-      });
-    }
-
     function buildScannerConfig() {
       var mobile = isMobileDevice();
       var config = {
@@ -578,6 +424,7 @@
           useBarCodeDetectorIfSupported: false,
         },
       };
+
       if (window.Html5QrcodeSupportedFormats) {
         var formats = window.Html5QrcodeSupportedFormats;
         config.formatsToSupport = [
@@ -602,41 +449,37 @@
 
     function tuneRunningCamera() {
       if (!html5QrCode || typeof html5QrCode.applyVideoConstraints !== 'function') {
-        torchSupported = false;
-        torchEnabled = false;
-        updateTorchButton();
         return;
       }
       try {
         var capabilities = typeof html5QrCode.getRunningTrackCapabilities === 'function'
           ? html5QrCode.getRunningTrackCapabilities()
           : null;
-        torchSupported = Boolean(capabilities && capabilities.torch);
-        if (!torchSupported) {
-          torchEnabled = false;
-        }
-        updateTorchButton();
         var advanced = {};
         if (capabilities && Array.isArray(capabilities.focusMode) && capabilities.focusMode.indexOf('continuous') !== -1) {
           advanced.focusMode = 'continuous';
         }
-        var applyPromise = Promise.resolve();
-        if (Object.keys(advanced).length) {
-          applyPromise = html5QrCode.applyVideoConstraints({ advanced: [advanced] });
+        if (!Object.keys(advanced).length) {
+          return;
         }
-        applyPromise
-          .catch(function () {
-            // best effort only
-          })
-          .finally(function () {
-            void applyTorchState();
-          });
+        html5QrCode.applyVideoConstraints({ advanced: [advanced] }).catch(function () {
+          // best effort only
+        });
       } catch (err) {
         // ignore unsupported capability access
-        torchSupported = false;
-        torchEnabled = false;
-        updateTorchButton();
       }
+    }
+
+    function buildCameraInputs(cameraId) {
+      var cameraInputs = [];
+      if (cameraId) {
+        cameraInputs.push({ deviceId: { exact: cameraId } });
+        cameraInputs.push(cameraId);
+      }
+      cameraInputs.push({ facingMode: { exact: 'environment' } });
+      cameraInputs.push({ facingMode: 'environment' });
+      cameraInputs.push({ facingMode: { ideal: 'environment' } });
+      return cameraInputs;
     }
 
     function startWithCameraId(cameraId) {
@@ -652,32 +495,18 @@
         });
 
         var config = buildScannerConfig();
-        var cameraInputs = [];
-        if (cameraId) {
-          cameraInputs.push({ deviceId: { exact: cameraId } });
-          cameraInputs.push(cameraId);
-        }
-        cameraInputs.push({ facingMode: { exact: 'environment' } });
-        cameraInputs.push({ facingMode: 'environment' });
-        cameraInputs.push({ facingMode: { ideal: 'environment' } });
+        var cameraInputs = buildCameraInputs(cameraId);
 
         var onScanSuccess = function onScanSuccess(decodedText) {
           var resolved = resolveKnownCode(decodedText);
           var resolvedCode = resolved ? normalizeInventoryFormat(resolved.code) : null;
-          if (!resolvedCode) {
-            return;
-          }
-          var confirmedCode = resolveConfirmedVote(resolvedCode, 1);
-          if (!confirmedCode) {
-            return;
-          }
-          if (!shouldDeliverCode(confirmedCode)) {
+          if (!resolvedCode || !shouldDeliverCode(resolvedCode)) {
             return;
           }
           pauseAfterScanHit();
           flashSuccessFeedback();
           if (typeof activeHandler === 'function') {
-            activeHandler(confirmedCode, appendLog);
+            activeHandler(resolvedCode, appendLog);
           }
         };
 
@@ -705,14 +534,6 @@
             currentCameraId = runningSettings && runningSettings.deviceId
               ? String(runningSettings.deviceId)
               : (cameraId || '');
-            if (cameraSelectEl && currentCameraId) {
-              var hasCurrentOption = cameraOptions.some(function (camera) {
-                return camera && camera.id === currentCameraId;
-              });
-              if (hasCurrentOption) {
-                cameraSelectEl.value = currentCameraId;
-              }
-            }
             enforceVideoInlinePlayback();
             tuneRunningCamera();
             setStatus(STATUS_MESSAGES.ACTIVE);
@@ -725,21 +546,15 @@
 
     function loadCameras() {
       if (!window.Html5Qrcode || typeof window.Html5Qrcode.getCameras !== 'function') {
-        renderCameraOptions([], '');
         setStatus(STATUS_MESSAGES.CAMERA_LIST_UNAVAILABLE);
         return Promise.resolve([]);
       }
 
       return window.Html5Qrcode.getCameras()
         .then(function (cameras) {
-          cameraOptions = Array.isArray(cameras) ? cameras : [];
-          var defaultId = pickDefaultCameraId(cameraOptions);
-          renderCameraOptions(cameraOptions, defaultId);
-          return cameraOptions;
+          return Array.isArray(cameras) ? cameras : [];
         })
         .catch(function () {
-          cameraOptions = [];
-          renderCameraOptions([], '');
           setStatus(STATUS_MESSAGES.CAMERA_LIST_FAILED);
           return [];
         });
@@ -748,19 +563,8 @@
     function startScanner() {
       return loadCameras().then(function (cameras) {
         return probeBackCameraDeviceId().then(function (probedBackId) {
-          var selectedId = '';
-          if (FORCE_BACK_CAMERA) {
-            selectedId = probedBackId || getBackCameraId(cameras) || '';
-          } else {
-            selectedId = pickDefaultCameraId(cameras);
-            if (cameraSelectEl && cameraSelectEl.value) {
-              selectedId = cameraSelectEl.value;
-            }
-          }
-          if (cameraSelectEl && selectedId) {
-            cameraSelectEl.value = selectedId;
-          }
-          return startWithCameraId(selectedId);
+          var backCameraId = probedBackId || getBackCameraId(cameras) || '';
+          return startWithCameraId(backCameraId);
         });
       });
     }
@@ -820,38 +624,6 @@
         resetState();
       });
     });
-
-    if (cameraSelectEl) {
-      cameraSelectEl.addEventListener('change', function () {
-        if (FORCE_BACK_CAMERA) {
-          var forcedBackId = getBackCameraId(cameraOptions);
-          if (forcedBackId) {
-            cameraSelectEl.value = forcedBackId;
-            void startWithCameraId(forcedBackId);
-          } else {
-            void startWithCameraId('');
-          }
-          return;
-        }
-        var nextCameraId = String(cameraSelectEl.value || '').trim();
-        if (!nextCameraId) {
-          return;
-        }
-        void startWithCameraId(nextCameraId);
-      });
-    }
-
-    if (torchToggleEl) {
-      updateTorchButton();
-      torchToggleEl.addEventListener('click', function () {
-        if (!torchSupported || !html5QrCode) {
-          return;
-        }
-        torchEnabled = !torchEnabled;
-        updateTorchButton();
-        void applyTorchState();
-      });
-    }
 
     if (manualAddEl && manualInputEl) {
       manualAddEl.addEventListener('click', handleManualSubmit);
