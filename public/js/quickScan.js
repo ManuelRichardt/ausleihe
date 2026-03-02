@@ -12,6 +12,7 @@
     var manualInputEl = document.getElementById('quickScanManualInput');
     var manualAddEl = document.getElementById('quickScanManualAdd');
     var cameraSelectEl = document.getElementById('quickScanCameraSelect');
+    var torchToggleEl = document.getElementById('quickScanTorchToggle');
     var feedbackEl = document.getElementById('quickScanFeedback');
 
     var html5QrCode = null;
@@ -26,6 +27,12 @@
     var voteOrder = [];
     var maxVoteWindow = 6;
     var lastDeliveredByCode = new Map();
+    var lastLogFingerprint = '';
+    var lastLogAt = 0;
+    var resumeTimer = null;
+    var torchSupported = false;
+    var torchEnabled = false;
+    var scanPauseMs = 700;
 
     function ensureModalInstance() {
       if (modal) {
@@ -48,6 +55,13 @@
       if (!logEl) {
         return;
       }
+      var now = Date.now();
+      var fingerprint = String(levelClass || '') + '|' + String(message || '');
+      if (fingerprint === lastLogFingerprint && now - lastLogAt < 1200) {
+        return;
+      }
+      lastLogFingerprint = fingerprint;
+      lastLogAt = now;
       var entry = document.createElement('li');
       entry.className = 'list-group-item py-1 px-2' + (levelClass ? (' ' + levelClass) : '');
       entry.textContent = message;
@@ -60,12 +74,28 @@
     function normalizeCode(value) {
       return String(value || '')
         .trim()
+        .replace(/[–—−]/g, '-')
         .replace(/\s+/g, '')
         .toUpperCase();
     }
 
     function normalizeIdentifier(value) {
       return normalizeCode(value).replace(/[^A-Z0-9]/g, '');
+    }
+
+    function normalizeInventoryFormat(value) {
+      var normalized = normalizeCode(value);
+      if (!normalized) {
+        return '';
+      }
+      var digitsOnly = normalized.replace(/[^0-9]/g, '');
+      if (digitsOnly.length === 9) {
+        return digitsOnly.slice(0, 8) + '-' + digitsOnly.slice(-1);
+      }
+      if (/^[0-9]{8}-[0-9]$/.test(normalized)) {
+        return normalized;
+      }
+      return normalized;
     }
 
     function hasKnownCodeCatalog() {
@@ -84,21 +114,32 @@
       }
       values.forEach(function (rawValue) {
         var normalized = normalizeCode(rawValue);
-        if (!normalized || normalized === '-') {
+        var canonical = normalizeInventoryFormat(rawValue);
+        if (!canonical || canonical === '-') {
           return;
         }
-        if (!knownCodeByNormalized.has(normalized)) {
-          knownCodeByNormalized.set(normalized, normalized);
+        if (!knownCodeByNormalized.has(canonical)) {
+          knownCodeByNormalized.set(canonical, canonical);
         }
-        var identifier = normalizeIdentifier(normalized);
+        if (normalized && normalized !== canonical && !knownCodeByNormalized.has(normalized)) {
+          knownCodeByNormalized.set(normalized, canonical);
+        }
+        var identifier = normalizeIdentifier(canonical);
         if (identifier && !knownCodeByIdentifier.has(identifier)) {
-          knownCodeByIdentifier.set(identifier, normalized);
+          knownCodeByIdentifier.set(identifier, canonical);
+        }
+        if (normalized) {
+          var normalizedIdentifier = normalizeIdentifier(normalized);
+          if (normalizedIdentifier && !knownCodeByIdentifier.has(normalizedIdentifier)) {
+            knownCodeByIdentifier.set(normalizedIdentifier, canonical);
+          }
         }
       });
     }
 
     function resolveKnownCode(rawValue) {
-      var normalized = normalizeCode(rawValue);
+      var normalizedRaw = normalizeCode(rawValue);
+      var normalized = normalizeInventoryFormat(rawValue);
       if (!normalized) {
         return {
           code: null,
@@ -114,6 +155,12 @@
       if (knownCodeByNormalized.has(normalized)) {
         return {
           code: knownCodeByNormalized.get(normalized),
+          matchedKnown: true,
+        };
+      }
+      if (normalizedRaw && knownCodeByNormalized.has(normalizedRaw)) {
+        return {
+          code: knownCodeByNormalized.get(normalizedRaw),
           matchedKnown: true,
         };
       }
@@ -198,7 +245,7 @@
       }
       var now = Date.now();
       var lastSeenAt = lastDeliveredByCode.get(code) || 0;
-      if (now - lastSeenAt < 1200) {
+      if (now - lastSeenAt < 1800) {
         return false;
       }
       lastDeliveredByCode.set(code, now);
@@ -219,6 +266,68 @@
       if (feedbackEl) {
         feedbackEl.classList.remove('is-success');
       }
+    }
+
+    function clearResumeTimer() {
+      if (resumeTimer) {
+        clearTimeout(resumeTimer);
+        resumeTimer = null;
+      }
+    }
+
+    function updateTorchButton() {
+      if (!torchToggleEl) {
+        return;
+      }
+      if (!torchSupported) {
+        torchToggleEl.classList.add('d-none');
+        torchToggleEl.disabled = true;
+        torchToggleEl.setAttribute('aria-pressed', 'false');
+        return;
+      }
+      torchToggleEl.classList.remove('d-none');
+      torchToggleEl.disabled = false;
+      torchToggleEl.classList.toggle('btn-warning', torchEnabled);
+      torchToggleEl.classList.toggle('btn-outline-secondary', !torchEnabled);
+      torchToggleEl.textContent = torchEnabled ? 'Licht an' : 'Licht aus';
+      torchToggleEl.setAttribute('aria-pressed', torchEnabled ? 'true' : 'false');
+    }
+
+    function applyTorchState() {
+      if (!torchSupported || !html5QrCode || typeof html5QrCode.applyVideoConstraints !== 'function') {
+        return Promise.resolve();
+      }
+      return Promise.resolve()
+        .then(function () {
+          return html5QrCode.applyVideoConstraints({ advanced: [{ torch: Boolean(torchEnabled) }] });
+        })
+        .catch(function () {
+          torchEnabled = false;
+          updateTorchButton();
+        });
+    }
+
+    function pauseAfterScanHit() {
+      if (!html5QrCode || typeof html5QrCode.pause !== 'function') {
+        return;
+      }
+      clearResumeTimer();
+      try {
+        html5QrCode.pause(true);
+      } catch (err) {
+        return;
+      }
+      resumeTimer = setTimeout(function () {
+        resumeTimer = null;
+        if (!html5QrCode || typeof html5QrCode.resume !== 'function') {
+          return;
+        }
+        try {
+          html5QrCode.resume();
+        } catch (err) {
+          // best effort
+        }
+      }, scanPauseMs);
     }
 
     function flashSuccessFeedback() {
@@ -244,6 +353,12 @@
       resetKnownCodeLookup();
       resetVoteBuffer();
       lastDeliveredByCode = new Map();
+      lastLogFingerprint = '';
+      lastLogAt = 0;
+      clearResumeTimer();
+      torchSupported = false;
+      torchEnabled = false;
+      updateTorchButton();
       if (manualInputEl) {
         manualInputEl.value = '';
       }
@@ -253,6 +368,7 @@
     }
 
     function stopScanner() {
+      clearResumeTimer();
       if (!html5QrCode) {
         readerEl.innerHTML = '';
         return Promise.resolve();
@@ -285,6 +401,9 @@
           return null;
         })
         .finally(function () {
+          torchSupported = false;
+          torchEnabled = false;
+          updateTorchButton();
           readerEl.innerHTML = '';
         });
     }
@@ -366,8 +485,12 @@
       var config = {
         fps: mobile ? 12 : 10,
         disableFlip: false,
+        videoConstraints: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true,
+          useBarCodeDetectorIfSupported: false,
         },
       };
       if (window.Html5QrcodeSupportedFormats) {
@@ -395,24 +518,46 @@
 
     function tuneRunningCamera() {
       if (!html5QrCode || typeof html5QrCode.applyVideoConstraints !== 'function') {
+        torchSupported = false;
+        torchEnabled = false;
+        updateTorchButton();
         return;
       }
       try {
         var capabilities = typeof html5QrCode.getRunningTrackCapabilities === 'function'
           ? html5QrCode.getRunningTrackCapabilities()
           : null;
+        torchSupported = Boolean(capabilities && capabilities.torch);
+        if (!torchSupported) {
+          torchEnabled = false;
+        }
+        updateTorchButton();
         var advanced = {};
         if (capabilities && Array.isArray(capabilities.focusMode) && capabilities.focusMode.indexOf('continuous') !== -1) {
           advanced.focusMode = 'continuous';
         }
-        if (!Object.keys(advanced).length) {
-          return;
+        if (capabilities && capabilities.zoom && typeof capabilities.zoom.min === 'number' && typeof capabilities.zoom.max === 'number') {
+          var targetZoom = isMobileDevice() ? 1.25 : 1.1;
+          var zoomMin = capabilities.zoom.min;
+          var zoomMax = capabilities.zoom.max;
+          advanced.zoom = Math.min(zoomMax, Math.max(zoomMin, targetZoom));
         }
-        html5QrCode.applyVideoConstraints({ advanced: [advanced] }).catch(function () {
-          // best effort only
-        });
+        var applyPromise = Promise.resolve();
+        if (Object.keys(advanced).length) {
+          applyPromise = html5QrCode.applyVideoConstraints({ advanced: [advanced] });
+        }
+        applyPromise
+          .catch(function () {
+            // best effort only
+          })
+          .finally(function () {
+            void applyTorchState();
+          });
       } catch (err) {
         // ignore unsupported capability access
+        torchSupported = false;
+        torchEnabled = false;
+        updateTorchButton();
       }
     }
 
@@ -440,7 +585,7 @@
 
         var onScanSuccess = function onScanSuccess(decodedText) {
           var resolved = resolveKnownCode(decodedText);
-          var resolvedCode = resolved ? resolved.code : null;
+          var resolvedCode = resolved ? normalizeInventoryFormat(resolved.code) : null;
           if (!resolvedCode) {
             return;
           }
@@ -451,6 +596,7 @@
           if (!shouldDeliverCode(confirmedCode)) {
             return;
           }
+          pauseAfterScanHit();
           flashSuccessFeedback();
           if (typeof activeHandler === 'function') {
             activeHandler(confirmedCode, appendLog);
@@ -536,9 +682,13 @@
       if (!value) {
         return;
       }
+      var normalizedValue = normalizeInventoryFormat(value);
+      if (!normalizedValue) {
+        return;
+      }
       flashSuccessFeedback();
       if (typeof activeHandler === 'function') {
-        activeHandler(value, appendLog);
+        activeHandler(normalizedValue, appendLog);
       }
       manualInputEl.value = '';
       manualInputEl.focus();
@@ -590,6 +740,18 @@
           return;
         }
         void startWithCameraId(nextCameraId);
+      });
+    }
+
+    if (torchToggleEl) {
+      updateTorchButton();
+      torchToggleEl.addEventListener('click', function () {
+        if (!torchSupported || !html5QrCode) {
+          return;
+        }
+        torchEnabled = !torchEnabled;
+        updateTorchButton();
+        void applyTorchState();
       });
     }
 

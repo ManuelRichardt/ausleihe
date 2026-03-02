@@ -175,6 +175,17 @@
   max-height: min(70vh, 560px);
 }
 
+#quickScanModal .quickscan-camera-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#quickScanModal #quickScanTorchToggle {
+  min-width: 96px;
+  white-space: nowrap;
+}
+
 #quickScanModal #quickScanReader {
   width: 100%;
   height: 100%;
@@ -211,6 +222,15 @@
 }
 
 @media (max-width: 575.98px) {
+  #quickScanModal .quickscan-camera-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #quickScanModal #quickScanTorchToggle {
+    width: 100%;
+  }
+
   #quickScanModal .quickscan-reader-wrap {
     aspect-ratio: 3 / 4;
     min-height: 260px;
