@@ -485,7 +485,6 @@
       var config = {
         fps: mobile ? 8 : 10,
         disableFlip: true,
-        aspectRatio: mobile ? 0.75 : 1.7777777778,
         qrbox: function (viewfinderWidth, viewfinderHeight) {
           var width = Math.max(50, Math.floor(viewfinderWidth * 0.94));
           var height = Math.max(50, Math.floor(viewfinderHeight * 0.72));
@@ -495,8 +494,8 @@
           };
         },
         videoConstraints: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         },
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: false,
@@ -580,10 +579,13 @@
         if (cameraId) {
           cameraInputs.push(cameraId);
           cameraInputs.push({ deviceId: { exact: cameraId } });
+          cameraInputs.push({ facingMode: { ideal: 'environment' } });
+          cameraInputs.push({ facingMode: 'environment' });
+        } else {
+          cameraInputs.push({ facingMode: { ideal: 'environment' } });
+          cameraInputs.push({ facingMode: 'environment' });
+          cameraInputs.push({ facingMode: 'user' });
         }
-        cameraInputs.push({ facingMode: { ideal: 'environment' } });
-        cameraInputs.push({ facingMode: 'environment' });
-        cameraInputs.push({ facingMode: 'user' });
 
         var onScanSuccess = function onScanSuccess(decodedText) {
           var resolved = resolveKnownCode(decodedText);
