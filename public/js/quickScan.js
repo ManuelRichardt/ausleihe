@@ -208,23 +208,6 @@
       });
     }
 
-    function getSupportedFormats() {
-      var formats = window.Html5QrcodeSupportedFormats || {};
-      var list = [
-        formats.CODE_128,
-        formats.CODE_39,
-        formats.CODABAR,
-        formats.ITF,
-        formats.EAN_13,
-        formats.EAN_8,
-        formats.UPC_A,
-        formats.UPC_E,
-      ].filter(function (entry) {
-        return typeof entry !== 'undefined';
-      });
-      return list.length ? list : undefined;
-    }
-
     function buildScannerConfig() {
       var mobile = isMobileDevice();
       return {
@@ -257,7 +240,6 @@
       return stopScanner().then(function () {
         setStatus('Scanner wird gestartet …');
         html5QrCode = new window.Html5Qrcode('quickScanReader', {
-          formatsToSupport: getSupportedFormats(),
           verbose: false,
         });
 
