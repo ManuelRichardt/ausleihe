@@ -177,6 +177,9 @@
       if (preferred) {
         return preferred.id;
       }
+      if (mobile) {
+        return cameras[cameras.length - 1].id;
+      }
       return cameras[0].id;
     }
 
@@ -222,6 +225,29 @@
       return list.length ? list : undefined;
     }
 
+    function buildScannerConfig() {
+      var mobile = isMobileDevice();
+      return {
+        fps: mobile ? 14 : 12,
+        aspectRatio: mobile ? 1.3333333333 : 1.7777777778,
+        disableFlip: true,
+        qrbox: function (viewfinderWidth, viewfinderHeight) {
+          var targetWidth = Math.floor(viewfinderWidth * (mobile ? 0.94 : 0.9));
+          var targetHeight = Math.floor(viewfinderHeight * (mobile ? 0.38 : 0.34));
+
+          var width = Math.max(160, Math.min(targetWidth, viewfinderWidth - 8));
+          var height = Math.max(56, Math.min(targetHeight, viewfinderHeight - 8));
+          return {
+            width: width,
+            height: height,
+          };
+        },
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      };
+    }
+
     function startWithCameraId(cameraId) {
       if (!window.Html5Qrcode) {
         setStatus('html5-qrcode ist nicht geladen. Bitte Seite neu laden.');
@@ -235,9 +261,7 @@
           verbose: false,
         });
 
-        var config = {
-          fps: 10,
-        };
+        var config = buildScannerConfig();
 
         return html5QrCode.start(
           cameraId || { facingMode: { ideal: 'environment' } },
