@@ -169,19 +169,30 @@
   background: #000;
   border-radius: 0.5rem;
   overflow: hidden;
-  min-height: 210px;
+  height: 220px;
 }
 
 #quickScanModal #quickScanReader {
-  min-height: 210px;
+  height: 100%;
+}
+
+#quickScanModal #quickScanReader > div {
+  height: 100%;
+}
+
+#quickScanModal #quickScanReader video,
+#quickScanModal #quickScanReader canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
 }
 
 #quickScanModal .quickscan-feedback {
   position: absolute;
-  left: 8%;
-  top: 18%;
-  width: 84%;
-  height: 64%;
+  left: 4%;
+  top: 34%;
+  width: 92%;
+  height: 32%;
   border: 2px solid rgba(255, 255, 255, 0.7);
   border-radius: 12px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
@@ -196,11 +207,16 @@
 
 @media (max-width: 575.98px) {
   #quickScanModal .quickscan-reader-wrap {
-    min-height: 150px;
+    height: 170px;
   }
 
   #quickScanModal #quickScanReader {
-    min-height: 150px;
+    height: 100%;
+  }
+
+  #quickScanModal .quickscan-feedback {
+    top: 31%;
+    height: 38%;
   }
 }
 

@@ -20,8 +20,12 @@
     var currentCameraId = '';
     var cameraOptions = [];
     var feedbackTimer = null;
-    var lastScanValue = '';
-    var lastScanAt = 0;
+    var knownCodeByNormalized = new Map();
+    var knownCodeByIdentifier = new Map();
+    var voteCounts = new Map();
+    var voteOrder = [];
+    var maxVoteWindow = 6;
+    var lastDeliveredByCode = new Map();
 
     function ensureModalInstance() {
       if (modal) {
@@ -51,6 +55,131 @@
       while (logEl.children.length > 12) {
         logEl.removeChild(logEl.lastChild);
       }
+    }
+
+    function normalizeCode(value) {
+      return String(value || '')
+        .trim()
+        .replace(/\s+/g, '')
+        .toUpperCase();
+    }
+
+    function normalizeIdentifier(value) {
+      return normalizeCode(value).replace(/[^A-Z0-9]/g, '');
+    }
+
+    function hasKnownCodeCatalog() {
+      return knownCodeByNormalized.size > 0 || knownCodeByIdentifier.size > 0;
+    }
+
+    function resetKnownCodeLookup() {
+      knownCodeByNormalized = new Map();
+      knownCodeByIdentifier = new Map();
+    }
+
+    function buildKnownCodeLookup(values) {
+      resetKnownCodeLookup();
+      if (!Array.isArray(values)) {
+        return;
+      }
+      values.forEach(function (rawValue) {
+        var normalized = normalizeCode(rawValue);
+        if (!normalized || normalized === '-') {
+          return;
+        }
+        if (!knownCodeByNormalized.has(normalized)) {
+          knownCodeByNormalized.set(normalized, normalized);
+        }
+        var identifier = normalizeIdentifier(normalized);
+        if (identifier && !knownCodeByIdentifier.has(identifier)) {
+          knownCodeByIdentifier.set(identifier, normalized);
+        }
+      });
+    }
+
+    function resolveKnownCode(rawValue) {
+      var normalized = normalizeCode(rawValue);
+      if (!normalized) {
+        return null;
+      }
+      if (!hasKnownCodeCatalog()) {
+        return normalized;
+      }
+      if (knownCodeByNormalized.has(normalized)) {
+        return knownCodeByNormalized.get(normalized);
+      }
+      var identifier = normalizeIdentifier(normalized);
+      if (identifier && knownCodeByIdentifier.has(identifier)) {
+        return knownCodeByIdentifier.get(identifier);
+      }
+      if (/^[0-9]+$/.test(identifier) && identifier.length >= 5) {
+        var withHyphen = identifier.slice(0, -1) + '-' + identifier.slice(-1);
+        if (knownCodeByNormalized.has(withHyphen)) {
+          return knownCodeByNormalized.get(withHyphen);
+        }
+      }
+      return null;
+    }
+
+    function resetVoteBuffer() {
+      voteCounts = new Map();
+      voteOrder = [];
+    }
+
+    function resolveConfirmedVote(candidateCode) {
+      if (!candidateCode) {
+        return null;
+      }
+      voteOrder.push(candidateCode);
+      voteCounts.set(candidateCode, (voteCounts.get(candidateCode) || 0) + 1);
+
+      while (voteOrder.length > maxVoteWindow) {
+        var removed = voteOrder.shift();
+        var nextCount = (voteCounts.get(removed) || 0) - 1;
+        if (nextCount > 0) {
+          voteCounts.set(removed, nextCount);
+        } else {
+          voteCounts.delete(removed);
+        }
+      }
+
+      var bestCode = null;
+      var bestCount = 0;
+      var secondBestCount = 0;
+      voteCounts.forEach(function (count, code) {
+        if (count > bestCount) {
+          secondBestCount = bestCount;
+          bestCount = count;
+          bestCode = code;
+          return;
+        }
+        if (count > secondBestCount) {
+          secondBestCount = count;
+        }
+      });
+
+      if (!bestCode) {
+        return null;
+      }
+      if (bestCount < 2 || bestCount <= secondBestCount) {
+        return null;
+      }
+
+      resetVoteBuffer();
+      return bestCode;
+    }
+
+    function shouldDeliverCode(code) {
+      if (!code) {
+        return false;
+      }
+      var now = Date.now();
+      var lastSeenAt = lastDeliveredByCode.get(code) || 0;
+      if (now - lastSeenAt < 1200) {
+        return false;
+      }
+      lastDeliveredByCode.set(code, now);
+      return true;
     }
 
     function clearLog() {
@@ -89,8 +218,9 @@
       clearFeedback();
       currentCameraId = '';
       cameraOptions = [];
-      lastScanValue = '';
-      lastScanAt = 0;
+      resetKnownCodeLookup();
+      resetVoteBuffer();
+      lastDeliveredByCode = new Map();
       if (manualInputEl) {
         manualInputEl.value = '';
       }
@@ -211,15 +341,15 @@
     function buildScannerConfig() {
       var mobile = isMobileDevice();
       return {
-        fps: mobile ? 14 : 12,
+        fps: mobile ? 12 : 10,
         aspectRatio: mobile ? 1.3333333333 : 1.7777777778,
         disableFlip: true,
         qrbox: function (viewfinderWidth, viewfinderHeight) {
-          var targetWidth = Math.floor(viewfinderWidth * (mobile ? 0.94 : 0.9));
-          var targetHeight = Math.floor(viewfinderHeight * (mobile ? 0.38 : 0.34));
+          var targetWidth = Math.floor(viewfinderWidth * (mobile ? 0.95 : 0.92));
+          var targetHeight = Math.floor(viewfinderHeight * (mobile ? 0.24 : 0.22));
 
           var width = Math.max(160, Math.min(targetWidth, viewfinderWidth - 8));
-          var height = Math.max(56, Math.min(targetHeight, viewfinderHeight - 8));
+          var height = Math.max(52, Math.min(targetHeight, viewfinderHeight - 8));
           return {
             width: width,
             height: height,
@@ -229,6 +359,33 @@
           useBarCodeDetectorIfSupported: true,
         },
       };
+    }
+
+    function tuneRunningCamera() {
+      if (!html5QrCode || typeof html5QrCode.applyVideoConstraints !== 'function') {
+        return;
+      }
+      try {
+        var capabilities = typeof html5QrCode.getRunningTrackCapabilities === 'function'
+          ? html5QrCode.getRunningTrackCapabilities()
+          : null;
+        var advanced = {};
+        if (capabilities && Array.isArray(capabilities.focusMode) && capabilities.focusMode.indexOf('continuous') !== -1) {
+          advanced.focusMode = 'continuous';
+        }
+        if (capabilities && capabilities.zoom && typeof capabilities.zoom.min === 'number' && typeof capabilities.zoom.max === 'number') {
+          var targetZoom = isMobileDevice() ? 1.8 : 1.4;
+          advanced.zoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, targetZoom));
+        }
+        if (!Object.keys(advanced).length) {
+          return;
+        }
+        html5QrCode.applyVideoConstraints({ advanced: [advanced] }).catch(function () {
+          // best effort only
+        });
+      } catch (err) {
+        // ignore unsupported capability access
+      }
     }
 
     function startWithCameraId(cameraId) {
@@ -245,20 +402,28 @@
 
         var config = buildScannerConfig();
 
+        var cameraInput = cameraId
+          ? { deviceId: { exact: cameraId } }
+          : { facingMode: { ideal: 'environment' } };
+
         return html5QrCode.start(
-          cameraId || { facingMode: { ideal: 'environment' } },
+          cameraInput,
           config,
           function onScanSuccess(decodedText) {
-            var now = Date.now();
-            var value = String(decodedText || '');
-            if (value === lastScanValue && now - lastScanAt < 900) {
+            var resolvedCode = resolveKnownCode(decodedText);
+            if (!resolvedCode) {
               return;
             }
-            lastScanValue = value;
-            lastScanAt = now;
+            var confirmedCode = resolveConfirmedVote(resolvedCode);
+            if (!confirmedCode) {
+              return;
+            }
+            if (!shouldDeliverCode(confirmedCode)) {
+              return;
+            }
             flashSuccessFeedback();
             if (typeof activeHandler === 'function') {
-              activeHandler(value, appendLog);
+              activeHandler(confirmedCode, appendLog);
             }
           },
           function onScanError() {
@@ -267,6 +432,7 @@
         ).then(function () {
           currentCameraId = cameraId || '';
           enforceVideoInlinePlayback();
+          tuneRunningCamera();
           setStatus('Scanner aktiv. Barcode in den markierten Bereich halten.');
         }).catch(function () {
           setStatus('Kamera konnte nicht geöffnet werden. Bitte andere Kamera wählen oder Code manuell eingeben.');
@@ -328,6 +494,7 @@
       activeHandler = config && typeof config.onCode === 'function'
         ? config.onCode
         : function () {};
+      buildKnownCodeLookup(config && Array.isArray(config.knownCodes) ? config.knownCodes : []);
       shouldStartOnShow = true;
       modal.show();
     }
