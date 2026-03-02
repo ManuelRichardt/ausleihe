@@ -485,8 +485,6 @@
           }) || items.find(function (item) { return item.kind !== 'bulk'; }) || items[0];
           if (addAsset(exact)) {
             appendLog('Hinzugefügt: ' + (exact.inventoryNumber || exact.serialNumber || exact.id), 'text-success');
-          } else {
-            appendLog('Bereits enthalten: ' + (exact.inventoryNumber || exact.serialNumber || exact.id), 'text-muted');
           }
         })
         .catch(function () {

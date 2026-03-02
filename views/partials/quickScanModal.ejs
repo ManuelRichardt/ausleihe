@@ -6,7 +6,16 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schließen"></button>
       </div>
       <div class="modal-body">
-        <div id="quickScanReader" class="mb-3" aria-label="Barcode Scanner Vorschau"></div>
+        <div class="mb-3">
+          <label for="quickScanCameraSelect" class="form-label">Kamera</label>
+          <select id="quickScanCameraSelect" class="form-select form-select-sm">
+            <option value="">Kamera wird geladen …</option>
+          </select>
+        </div>
+        <div id="quickScanReaderWrap" class="quickscan-reader-wrap mb-3" aria-label="Barcode Scanner Vorschau">
+          <div id="quickScanReader"></div>
+          <div id="quickScanFeedback" class="quickscan-feedback" aria-hidden="true"></div>
+        </div>
         <div id="quickScanStatus" class="small text-muted mb-3">Kamera wird initialisiert …</div>
         <div class="input-group mb-3">
           <input id="quickScanManualInput" type="text" class="form-control" placeholder="Code manuell eingeben">
