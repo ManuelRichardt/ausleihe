@@ -108,17 +108,25 @@
       return Promise.resolve()
         .then(function () {
           if (typeof instance.stop === 'function') {
-            return instance.stop().catch(function () {
-              // best effort
-            });
+            return Promise.resolve()
+              .then(function () {
+                return instance.stop();
+              })
+              .catch(function () {
+                // best effort
+              });
           }
           return null;
         })
         .then(function () {
           if (typeof instance.clear === 'function') {
-            return instance.clear().catch(function () {
-              // best effort
-            });
+            return Promise.resolve()
+              .then(function () {
+                return instance.clear();
+              })
+              .catch(function () {
+                // best effort
+              });
           }
           return null;
         })
