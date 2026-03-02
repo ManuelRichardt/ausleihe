@@ -23,6 +23,7 @@
       CAMERA_LIST_UNAVAILABLE: 'Kamera-Liste nicht verfügbar.',
       CAMERA_LIST_FAILED: 'Kameras konnten nicht geladen werden.',
     };
+    var FORCE_BACK_CAMERA = true;
     var SCAN_PAUSE_MS = 700;
     var FEEDBACK_FLASH_MS = 180;
     var LOG_DEDUP_MS = 1200;
@@ -469,13 +470,52 @@
       var backCamera = cameras.find(function (cam) {
         return isBackCameraLabel(getCameraLabel(cam));
       });
-      if (backCamera) {
-        return backCamera.id;
+      return backCamera ? backCamera.id : '';
+    }
+
+    function stopMediaStream(stream) {
+      if (!stream || typeof stream.getTracks !== 'function') {
+        return;
       }
-      if (isMobileDevice() && cameras.length > 1) {
-        return cameras[cameras.length - 1].id;
+      stream.getTracks().forEach(function (track) {
+        if (track && typeof track.stop === 'function') {
+          track.stop();
+        }
+      });
+    }
+
+    function probeBackCameraDeviceId() {
+      if (!FORCE_BACK_CAMERA || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        return Promise.resolve('');
       }
-      return cameras[0].id;
+      var attempts = [
+        { video: { facingMode: { exact: 'environment' } }, audio: false },
+        { video: { facingMode: { ideal: 'environment' } }, audio: false },
+      ];
+
+      function probeAttempt(index) {
+        if (index >= attempts.length) {
+          return Promise.resolve('');
+        }
+        return navigator.mediaDevices.getUserMedia(attempts[index])
+          .then(function (stream) {
+            try {
+              var track = stream.getVideoTracks && stream.getVideoTracks()[0];
+              var settings = track && typeof track.getSettings === 'function' ? track.getSettings() : null;
+              var deviceId = settings && settings.deviceId ? String(settings.deviceId) : '';
+              stopMediaStream(stream);
+              return deviceId;
+            } catch (err) {
+              stopMediaStream(stream);
+              return '';
+            }
+          })
+          .catch(function () {
+            return probeAttempt(index + 1);
+          });
+      }
+
+      return probeAttempt(0);
     }
 
     function pickDefaultCameraId(cameras) {
@@ -511,7 +551,7 @@
         return;
       }
 
-      cameraSelectEl.disabled = false;
+      cameraSelectEl.disabled = Boolean(FORCE_BACK_CAMERA);
       cameras.forEach(function (camera, index) {
         var option = document.createElement('option');
         option.value = camera.id;
@@ -533,10 +573,6 @@
             width: width,
             height: height,
           };
-        },
-        videoConstraints: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
         },
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: false,
@@ -620,14 +656,10 @@
         if (cameraId) {
           cameraInputs.push({ deviceId: { exact: cameraId } });
           cameraInputs.push(cameraId);
-          cameraInputs.push({ facingMode: { exact: 'environment' } });
-          cameraInputs.push({ facingMode: 'environment' });
-          cameraInputs.push({ facingMode: { ideal: 'environment' } });
-        } else {
-          cameraInputs.push({ facingMode: { exact: 'environment' } });
-          cameraInputs.push({ facingMode: 'environment' });
-          cameraInputs.push({ facingMode: { ideal: 'environment' } });
         }
+        cameraInputs.push({ facingMode: { exact: 'environment' } });
+        cameraInputs.push({ facingMode: 'environment' });
+        cameraInputs.push({ facingMode: { ideal: 'environment' } });
 
         var onScanSuccess = function onScanSuccess(decodedText) {
           var resolved = resolveKnownCode(decodedText);
@@ -715,11 +747,21 @@
 
     function startScanner() {
       return loadCameras().then(function (cameras) {
-        var selectedId = pickDefaultCameraId(cameras);
-        if (cameraSelectEl) {
-          cameraSelectEl.value = selectedId;
-        }
-        return startWithCameraId(selectedId);
+        return probeBackCameraDeviceId().then(function (probedBackId) {
+          var selectedId = '';
+          if (FORCE_BACK_CAMERA) {
+            selectedId = probedBackId || getBackCameraId(cameras) || '';
+          } else {
+            selectedId = pickDefaultCameraId(cameras);
+            if (cameraSelectEl && cameraSelectEl.value) {
+              selectedId = cameraSelectEl.value;
+            }
+          }
+          if (cameraSelectEl && selectedId) {
+            cameraSelectEl.value = selectedId;
+          }
+          return startWithCameraId(selectedId);
+        });
       });
     }
 
@@ -781,16 +823,21 @@
 
     if (cameraSelectEl) {
       cameraSelectEl.addEventListener('change', function () {
+        if (FORCE_BACK_CAMERA) {
+          var forcedBackId = getBackCameraId(cameraOptions);
+          if (forcedBackId) {
+            cameraSelectEl.value = forcedBackId;
+            void startWithCameraId(forcedBackId);
+          } else {
+            void startWithCameraId('');
+          }
+          return;
+        }
         var nextCameraId = String(cameraSelectEl.value || '').trim();
         if (!nextCameraId) {
           return;
         }
-        var backId = getBackCameraId(cameraOptions);
-        var targetCameraId = backId || nextCameraId;
-        if (backId && cameraSelectEl.value !== backId) {
-          cameraSelectEl.value = backId;
-        }
-        void startWithCameraId(targetCameraId);
+        void startWithCameraId(nextCameraId);
       });
     }
 
