@@ -15,6 +15,20 @@
     var torchToggleEl = document.getElementById('quickScanTorchToggle');
     var feedbackEl = document.getElementById('quickScanFeedback');
 
+    var STATUS_MESSAGES = {
+      HTML5_QRCODE_MISSING: 'html5-qrcode ist nicht geladen. Bitte Seite neu laden.',
+      STARTING: 'Scanner wird gestartet …',
+      ACTIVE: 'Scanner aktiv. Barcode in den markierten Bereich halten.',
+      CAMERA_START_FAILED: 'Kamera konnte nicht geöffnet werden. Bitte andere Kamera wählen oder Code manuell eingeben.',
+      CAMERA_LIST_UNAVAILABLE: 'Kamera-Liste nicht verfügbar.',
+      CAMERA_LIST_FAILED: 'Kameras konnten nicht geladen werden.',
+    };
+    var SCAN_PAUSE_MS = 700;
+    var FEEDBACK_FLASH_MS = 180;
+    var LOG_DEDUP_MS = 1200;
+    var LOG_MAX_ENTRIES = 12;
+    var DELIVERY_DEDUP_MS = 1800;
+
     var html5QrCode = null;
     var activeHandler = function () {};
     var shouldStartOnShow = false;
@@ -32,7 +46,6 @@
     var resumeTimer = null;
     var torchSupported = false;
     var torchEnabled = false;
-    var scanPauseMs = 700;
 
     function ensureModalInstance() {
       if (modal) {
@@ -449,28 +462,32 @@
         || label.indexOf('vorder') !== -1;
     }
 
+    function getBackCameraId(cameras) {
+      if (!Array.isArray(cameras) || !cameras.length) {
+        return '';
+      }
+      var backCamera = cameras.find(function (cam) {
+        return isBackCameraLabel(getCameraLabel(cam));
+      });
+      return backCamera ? backCamera.id : '';
+    }
+
     function pickDefaultCameraId(cameras) {
       if (!Array.isArray(cameras) || !cameras.length) {
         return '';
       }
       if (currentCameraId) {
         var keepCurrent = cameras.find(function (cam) { return cam && cam.id === currentCameraId; });
-        if (keepCurrent) {
+        if (keepCurrent && isBackCameraLabel(getCameraLabel(keepCurrent))) {
           return keepCurrent.id;
         }
       }
 
-      var preferred = cameras.find(function (cam) {
-        return isBackCameraLabel(getCameraLabel(cam));
-      });
-
-      if (preferred) {
-        return preferred.id;
+      var backId = getBackCameraId(cameras);
+      if (backId) {
+        return backId;
       }
-      var nonFront = cameras.find(function (cam) {
-        return !isFrontCameraLabel(getCameraLabel(cam));
-      });
-      return (nonFront || cameras[0]).id;
+      return cameras[0].id;
     }
 
     function renderCameraOptions(cameras, selectedId) {
@@ -595,12 +612,15 @@
         var config = buildScannerConfig();
         var cameraInputs = [];
         if (cameraId) {
+          cameraInputs.push({ facingMode: { exact: 'environment' } });
+          cameraInputs.push({ facingMode: 'environment' });
+          cameraInputs.push({ facingMode: { ideal: 'environment' } });
           cameraInputs.push(cameraId);
           cameraInputs.push({ deviceId: { exact: cameraId } });
         } else {
-          cameraInputs.push({ facingMode: { ideal: 'environment' } });
+          cameraInputs.push({ facingMode: { exact: 'environment' } });
           cameraInputs.push({ facingMode: 'environment' });
-          cameraInputs.push({ facingMode: 'user' });
+          cameraInputs.push({ facingMode: { ideal: 'environment' } });
         }
 
         var onScanSuccess = function onScanSuccess(decodedText) {
@@ -690,8 +710,8 @@
     function startScanner() {
       return loadCameras().then(function (cameras) {
         var selectedId = pickDefaultCameraId(cameras);
-        if (cameraSelectEl && cameraSelectEl.value) {
-          selectedId = cameraSelectEl.value;
+        if (cameraSelectEl && selectedId) {
+          cameraSelectEl.value = selectedId;
         }
         return startWithCameraId(selectedId);
       });
@@ -759,7 +779,12 @@
         if (!nextCameraId) {
           return;
         }
-        void startWithCameraId(nextCameraId);
+        var backId = getBackCameraId(cameraOptions);
+        var targetCameraId = backId || nextCameraId;
+        if (backId && cameraSelectEl.value !== backId) {
+          cameraSelectEl.value = backId;
+        }
+        void startWithCameraId(targetCameraId);
       });
     }
 
