@@ -71,7 +71,7 @@
       }
       var now = Date.now();
       var fingerprint = String(levelClass || '') + '|' + String(message || '');
-      if (fingerprint === lastLogFingerprint && now - lastLogAt < 1200) {
+      if (fingerprint === lastLogFingerprint && now - lastLogAt < LOG_DEDUP_MS) {
         return;
       }
       lastLogFingerprint = fingerprint;
@@ -80,7 +80,7 @@
       entry.className = 'list-group-item py-1 px-2' + (levelClass ? (' ' + levelClass) : '');
       entry.textContent = message;
       logEl.prepend(entry);
-      while (logEl.children.length > 12) {
+      while (logEl.children.length > LOG_MAX_ENTRIES) {
         logEl.removeChild(logEl.lastChild);
       }
     }
@@ -259,7 +259,7 @@
       }
       var now = Date.now();
       var lastSeenAt = lastDeliveredByCode.get(code) || 0;
-      if (now - lastSeenAt < 1800) {
+      if (now - lastSeenAt < DELIVERY_DEDUP_MS) {
         return false;
       }
       lastDeliveredByCode.set(code, now);
@@ -341,7 +341,7 @@
         } catch (err) {
           // best effort
         }
-      }, scanPauseMs);
+      }, SCAN_PAUSE_MS);
     }
 
     function flashSuccessFeedback() {
@@ -355,7 +355,7 @@
           feedbackEl.classList.remove('is-success');
         }
         feedbackTimer = null;
-      }, 180);
+      }, FEEDBACK_FLASH_MS);
     }
 
     function resetState() {
@@ -641,12 +641,12 @@
 
     function startWithCameraId(cameraId) {
       if (!window.Html5Qrcode) {
-        setStatus('html5-qrcode ist nicht geladen. Bitte Seite neu laden.');
+        setStatus(STATUS_MESSAGES.HTML5_QRCODE_MISSING);
         return Promise.resolve();
       }
 
       return stopScanner().then(function () {
-        setStatus('Scanner wird gestartet …');
+        setStatus(STATUS_MESSAGES.STARTING);
         html5QrCode = new window.Html5Qrcode('quickScanReader', {
           verbose: false,
         });
@@ -715,10 +715,10 @@
             }
             enforceVideoInlinePlayback();
             tuneRunningCamera();
-            setStatus('Scanner aktiv. Barcode in den markierten Bereich halten.');
+            setStatus(STATUS_MESSAGES.ACTIVE);
           })
           .catch(function () {
-            setStatus('Kamera konnte nicht geöffnet werden. Bitte andere Kamera wählen oder Code manuell eingeben.');
+            setStatus(STATUS_MESSAGES.CAMERA_START_FAILED);
           });
       });
     }
@@ -726,7 +726,7 @@
     function loadCameras() {
       if (!window.Html5Qrcode || typeof window.Html5Qrcode.getCameras !== 'function') {
         renderCameraOptions([], '');
-        setStatus('Kamera-Liste nicht verfügbar.');
+        setStatus(STATUS_MESSAGES.CAMERA_LIST_UNAVAILABLE);
         return Promise.resolve([]);
       }
 
@@ -740,7 +740,7 @@
         .catch(function () {
           cameraOptions = [];
           renderCameraOptions([], '');
-          setStatus('Kameras konnten nicht geladen werden.');
+          setStatus(STATUS_MESSAGES.CAMERA_LIST_FAILED);
           return [];
         });
     }
