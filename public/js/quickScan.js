@@ -483,11 +483,20 @@
     function buildScannerConfig() {
       var mobile = isMobileDevice();
       var config = {
-        fps: mobile ? 12 : 10,
-        disableFlip: false,
+        fps: mobile ? 8 : 10,
+        disableFlip: true,
+        aspectRatio: mobile ? 0.75 : 1.7777777778,
+        qrbox: function (viewfinderWidth, viewfinderHeight) {
+          var width = Math.max(50, Math.floor(viewfinderWidth * 0.94));
+          var height = Math.max(50, Math.floor(viewfinderHeight * 0.72));
+          return {
+            width: width,
+            height: height,
+          };
+        },
         videoConstraints: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: false,
@@ -501,14 +510,13 @@
           formats.CODE_93,
           formats.CODABAR,
           formats.ITF,
+          formats.RSS_14,
+          formats.RSS_EXPANDED,
           formats.EAN_13,
           formats.EAN_8,
           formats.UPC_A,
           formats.UPC_E,
           formats.UPC_EAN_EXTENSION,
-          formats.PDF_417,
-          formats.DATA_MATRIX,
-          formats.QR_CODE,
         ].filter(function (value) {
           return typeof value === 'number';
         });
@@ -535,12 +543,6 @@
         var advanced = {};
         if (capabilities && Array.isArray(capabilities.focusMode) && capabilities.focusMode.indexOf('continuous') !== -1) {
           advanced.focusMode = 'continuous';
-        }
-        if (capabilities && capabilities.zoom && typeof capabilities.zoom.min === 'number' && typeof capabilities.zoom.max === 'number') {
-          var targetZoom = isMobileDevice() ? 1.25 : 1.1;
-          var zoomMin = capabilities.zoom.min;
-          var zoomMax = capabilities.zoom.max;
-          advanced.zoom = Math.min(zoomMax, Math.max(zoomMin, targetZoom));
         }
         var applyPromise = Promise.resolve();
         if (Object.keys(advanced).length) {

@@ -205,10 +205,10 @@
 
 #quickScanModal .quickscan-feedback {
   position: absolute;
-  left: 2%;
-  top: 2%;
-  width: 96%;
-  height: 96%;
+  left: 3%;
+  top: 14%;
+  width: 94%;
+  height: 72%;
   border: 2px solid rgba(255, 255, 255, 0.7);
   border-radius: 12px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
@@ -238,10 +238,10 @@
   }
 
   #quickScanModal .quickscan-feedback {
-    left: 2%;
-    top: 2%;
-    width: 96%;
-    height: 96%;
+    left: 3%;
+    top: 14%;
+    width: 94%;
+    height: 72%;
   }
 }
 
