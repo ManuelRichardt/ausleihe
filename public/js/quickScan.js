@@ -469,7 +469,13 @@
       var backCamera = cameras.find(function (cam) {
         return isBackCameraLabel(getCameraLabel(cam));
       });
-      return backCamera ? backCamera.id : '';
+      if (backCamera) {
+        return backCamera.id;
+      }
+      if (isMobileDevice() && cameras.length > 1) {
+        return cameras[cameras.length - 1].id;
+      }
+      return cameras[0].id;
     }
 
     function pickDefaultCameraId(cameras) {
@@ -612,11 +618,11 @@
         var config = buildScannerConfig();
         var cameraInputs = [];
         if (cameraId) {
+          cameraInputs.push({ deviceId: { exact: cameraId } });
+          cameraInputs.push(cameraId);
           cameraInputs.push({ facingMode: { exact: 'environment' } });
           cameraInputs.push({ facingMode: 'environment' });
           cameraInputs.push({ facingMode: { ideal: 'environment' } });
-          cameraInputs.push(cameraId);
-          cameraInputs.push({ deviceId: { exact: cameraId } });
         } else {
           cameraInputs.push({ facingMode: { exact: 'environment' } });
           cameraInputs.push({ facingMode: 'environment' });
@@ -710,7 +716,7 @@
     function startScanner() {
       return loadCameras().then(function (cameras) {
         var selectedId = pickDefaultCameraId(cameras);
-        if (cameraSelectEl && selectedId) {
+        if (cameraSelectEl) {
           cameraSelectEl.value = selectedId;
         }
         return startWithCameraId(selectedId);
