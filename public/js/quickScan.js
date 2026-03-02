@@ -344,17 +344,6 @@
         fps: mobile ? 12 : 10,
         aspectRatio: mobile ? 1.3333333333 : 1.7777777778,
         disableFlip: true,
-        qrbox: function (viewfinderWidth, viewfinderHeight) {
-          var targetWidth = Math.floor(viewfinderWidth * (mobile ? 0.95 : 0.92));
-          var targetHeight = Math.floor(viewfinderHeight * (mobile ? 0.24 : 0.22));
-
-          var width = Math.max(160, Math.min(targetWidth, viewfinderWidth - 8));
-          var height = Math.max(52, Math.min(targetHeight, viewfinderHeight - 8));
-          return {
-            width: width,
-            height: height,
-          };
-        },
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true,
         },
