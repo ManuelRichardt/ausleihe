@@ -427,6 +427,28 @@
         || ua.indexOf('mobile') !== -1;
     }
 
+    function getCameraLabel(camera) {
+      return String(camera && camera.label ? camera.label : '').toLowerCase();
+    }
+
+    function isBackCameraLabel(label) {
+      return label.indexOf('back') !== -1
+        || label.indexOf('rear') !== -1
+        || label.indexOf('environment') !== -1
+        || label.indexOf('rück') !== -1
+        || label.indexOf('rueck') !== -1
+        || label.indexOf('world') !== -1;
+    }
+
+    function isFrontCameraLabel(label) {
+      return label.indexOf('front') !== -1
+        || label.indexOf('user') !== -1
+        || label.indexOf('selfie') !== -1
+        || label.indexOf('face') !== -1
+        || label.indexOf('vorne') !== -1
+        || label.indexOf('vorder') !== -1;
+    }
+
     function pickDefaultCameraId(cameras) {
       if (!Array.isArray(cameras) || !cameras.length) {
         return '';
@@ -438,21 +460,17 @@
         }
       }
 
-      var mobile = isMobileDevice();
       var preferred = cameras.find(function (cam) {
-        var label = String(cam && cam.label ? cam.label : '').toLowerCase();
-        return label.indexOf('back') !== -1
-          || label.indexOf('rear') !== -1
-          || label.indexOf('environment') !== -1;
+        return isBackCameraLabel(getCameraLabel(cam));
       });
 
       if (preferred) {
         return preferred.id;
       }
-      if (mobile) {
-        return cameras[cameras.length - 1].id;
-      }
-      return cameras[0].id;
+      var nonFront = cameras.find(function (cam) {
+        return !isFrontCameraLabel(getCameraLabel(cam));
+      });
+      return (nonFront || cameras[0]).id;
     }
 
     function renderCameraOptions(cameras, selectedId) {
@@ -579,8 +597,6 @@
         if (cameraId) {
           cameraInputs.push(cameraId);
           cameraInputs.push({ deviceId: { exact: cameraId } });
-          cameraInputs.push({ facingMode: { ideal: 'environment' } });
-          cameraInputs.push({ facingMode: 'environment' });
         } else {
           cameraInputs.push({ facingMode: { ideal: 'environment' } });
           cameraInputs.push({ facingMode: 'environment' });
