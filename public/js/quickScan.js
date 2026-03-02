@@ -14,6 +14,7 @@
 
     var scannerInstance = null;
     var activeHandler = function () {};
+    var shouldStartOnShow = false;
 
     function ensureModalInstance() {
       if (modal) {
@@ -86,7 +87,6 @@
 
         var config = {
           fps: 10,
-          qrbox: { width: 320, height: 180 },
           rememberLastUsedCamera: true,
         };
         if (window.Html5QrcodeScanType && typeof window.Html5QrcodeScanType.SCAN_TYPE_CAMERA !== 'undefined') {
@@ -131,20 +131,30 @@
         ? config.onCode
         : function () {};
 
+      shouldStartOnShow = true;
       modal.show();
-      void startScanner();
     }
 
     function close() {
       if (!ensureModalInstance()) {
         return;
       }
+      shouldStartOnShow = false;
       modal.hide();
       void stopScanner();
       resetState();
     }
 
+    modalEl.addEventListener('shown.bs.modal', function () {
+      if (!shouldStartOnShow) {
+        return;
+      }
+      shouldStartOnShow = false;
+      void startScanner();
+    });
+
     modalEl.addEventListener('hidden.bs.modal', function () {
+      shouldStartOnShow = false;
       void stopScanner().finally(function () {
         resetState();
       });
