@@ -169,14 +169,19 @@
   background: #000;
   border-radius: 0.5rem;
   overflow: hidden;
-  height: 220px;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  min-height: 240px;
+  max-height: min(70vh, 560px);
 }
 
 #quickScanModal #quickScanReader {
+  width: 100%;
   height: 100%;
 }
 
 #quickScanModal #quickScanReader > div {
+  width: 100%;
   height: 100%;
 }
 
@@ -184,7 +189,7 @@
 #quickScanModal #quickScanReader canvas {
   width: 100% !important;
   height: 100% !important;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 #quickScanModal .quickscan-feedback {
@@ -207,11 +212,9 @@
 
 @media (max-width: 575.98px) {
   #quickScanModal .quickscan-reader-wrap {
-    height: 170px;
-  }
-
-  #quickScanModal #quickScanReader {
-    height: 100%;
+    aspect-ratio: 3 / 4;
+    min-height: 260px;
+    max-height: 62vh;
   }
 
   #quickScanModal .quickscan-feedback {

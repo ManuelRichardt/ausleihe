@@ -100,25 +100,43 @@
     function resolveKnownCode(rawValue) {
       var normalized = normalizeCode(rawValue);
       if (!normalized) {
-        return null;
+        return {
+          code: null,
+          matchedKnown: false,
+        };
       }
       if (!hasKnownCodeCatalog()) {
-        return normalized;
+        return {
+          code: normalized,
+          matchedKnown: false,
+        };
       }
       if (knownCodeByNormalized.has(normalized)) {
-        return knownCodeByNormalized.get(normalized);
+        return {
+          code: knownCodeByNormalized.get(normalized),
+          matchedKnown: true,
+        };
       }
       var identifier = normalizeIdentifier(normalized);
       if (identifier && knownCodeByIdentifier.has(identifier)) {
-        return knownCodeByIdentifier.get(identifier);
+        return {
+          code: knownCodeByIdentifier.get(identifier),
+          matchedKnown: true,
+        };
       }
       if (/^[0-9]+$/.test(identifier) && identifier.length >= 5) {
         var withHyphen = identifier.slice(0, -1) + '-' + identifier.slice(-1);
         if (knownCodeByNormalized.has(withHyphen)) {
-          return knownCodeByNormalized.get(withHyphen);
+          return {
+            code: knownCodeByNormalized.get(withHyphen),
+            matchedKnown: true,
+          };
         }
       }
-      return null;
+      return {
+        code: normalized,
+        matchedKnown: false,
+      };
     }
 
     function resetVoteBuffer() {
@@ -126,9 +144,14 @@
       voteOrder = [];
     }
 
-    function resolveConfirmedVote(candidateCode) {
+    function resolveConfirmedVote(candidateCode, requiredVotes) {
       if (!candidateCode) {
         return null;
+      }
+      var minimumVotes = Math.max(parseInt(requiredVotes, 10) || 1, 1);
+      if (minimumVotes <= 1) {
+        resetVoteBuffer();
+        return candidateCode;
       }
       voteOrder.push(candidateCode);
       voteCounts.set(candidateCode, (voteCounts.get(candidateCode) || 0) + 1);
@@ -161,7 +184,7 @@
       if (!bestCode) {
         return null;
       }
-      if (bestCount < 2 || bestCount <= secondBestCount) {
+      if (bestCount < minimumVotes || bestCount <= secondBestCount) {
         return null;
       }
 
@@ -340,14 +363,34 @@
 
     function buildScannerConfig() {
       var mobile = isMobileDevice();
-      return {
+      var config = {
         fps: mobile ? 12 : 10,
-        aspectRatio: mobile ? 1.3333333333 : 1.7777777778,
-        disableFlip: true,
+        disableFlip: false,
         experimentalFeatures: {
           useBarCodeDetectorIfSupported: true,
         },
       };
+      if (window.Html5QrcodeSupportedFormats) {
+        var formats = window.Html5QrcodeSupportedFormats;
+        config.formatsToSupport = [
+          formats.CODE_128,
+          formats.CODE_39,
+          formats.CODE_93,
+          formats.CODABAR,
+          formats.ITF,
+          formats.EAN_13,
+          formats.EAN_8,
+          formats.UPC_A,
+          formats.UPC_E,
+          formats.UPC_EAN_EXTENSION,
+          formats.PDF_417,
+          formats.DATA_MATRIX,
+          formats.QR_CODE,
+        ].filter(function (value) {
+          return typeof value === 'number';
+        });
+      }
+      return config;
     }
 
     function tuneRunningCamera() {
@@ -361,10 +404,6 @@
         var advanced = {};
         if (capabilities && Array.isArray(capabilities.focusMode) && capabilities.focusMode.indexOf('continuous') !== -1) {
           advanced.focusMode = 'continuous';
-        }
-        if (capabilities && capabilities.zoom && typeof capabilities.zoom.min === 'number' && typeof capabilities.zoom.max === 'number') {
-          var targetZoom = isMobileDevice() ? 1.8 : 1.4;
-          advanced.zoom = Math.min(capabilities.zoom.max, Math.max(capabilities.zoom.min, targetZoom));
         }
         if (!Object.keys(advanced).length) {
           return;
@@ -390,42 +429,73 @@
         });
 
         var config = buildScannerConfig();
+        var cameraInputs = [];
+        if (cameraId) {
+          cameraInputs.push(cameraId);
+          cameraInputs.push({ deviceId: { exact: cameraId } });
+        }
+        cameraInputs.push({ facingMode: { ideal: 'environment' } });
+        cameraInputs.push({ facingMode: 'environment' });
+        cameraInputs.push({ facingMode: 'user' });
 
-        var cameraInput = cameraId
-          ? { deviceId: { exact: cameraId } }
-          : { facingMode: { ideal: 'environment' } };
-
-        return html5QrCode.start(
-          cameraInput,
-          config,
-          function onScanSuccess(decodedText) {
-            var resolvedCode = resolveKnownCode(decodedText);
-            if (!resolvedCode) {
-              return;
-            }
-            var confirmedCode = resolveConfirmedVote(resolvedCode);
-            if (!confirmedCode) {
-              return;
-            }
-            if (!shouldDeliverCode(confirmedCode)) {
-              return;
-            }
-            flashSuccessFeedback();
-            if (typeof activeHandler === 'function') {
-              activeHandler(confirmedCode, appendLog);
-            }
-          },
-          function onScanError() {
-            // ignore per-frame decode errors
+        var onScanSuccess = function onScanSuccess(decodedText) {
+          var resolved = resolveKnownCode(decodedText);
+          var resolvedCode = resolved ? resolved.code : null;
+          if (!resolvedCode) {
+            return;
           }
-        ).then(function () {
-          currentCameraId = cameraId || '';
-          enforceVideoInlinePlayback();
-          tuneRunningCamera();
-          setStatus('Scanner aktiv. Barcode in den markierten Bereich halten.');
-        }).catch(function () {
-          setStatus('Kamera konnte nicht geöffnet werden. Bitte andere Kamera wählen oder Code manuell eingeben.');
-        });
+          var confirmedCode = resolveConfirmedVote(resolvedCode, 1);
+          if (!confirmedCode) {
+            return;
+          }
+          if (!shouldDeliverCode(confirmedCode)) {
+            return;
+          }
+          flashSuccessFeedback();
+          if (typeof activeHandler === 'function') {
+            activeHandler(confirmedCode, appendLog);
+          }
+        };
+
+        function tryStartWithInput(index) {
+          if (index >= cameraInputs.length) {
+            throw new Error('camera-start-failed');
+          }
+          return html5QrCode.start(
+            cameraInputs[index],
+            config,
+            onScanSuccess,
+            function onScanError() {
+              // ignore per-frame decode errors
+            }
+          ).catch(function () {
+            return tryStartWithInput(index + 1);
+          });
+        }
+
+        return tryStartWithInput(0)
+          .then(function () {
+            var runningSettings = typeof html5QrCode.getRunningTrackSettings === 'function'
+              ? html5QrCode.getRunningTrackSettings()
+              : null;
+            currentCameraId = runningSettings && runningSettings.deviceId
+              ? String(runningSettings.deviceId)
+              : (cameraId || '');
+            if (cameraSelectEl && currentCameraId) {
+              var hasCurrentOption = cameraOptions.some(function (camera) {
+                return camera && camera.id === currentCameraId;
+              });
+              if (hasCurrentOption) {
+                cameraSelectEl.value = currentCameraId;
+              }
+            }
+            enforceVideoInlinePlayback();
+            tuneRunningCamera();
+            setStatus('Scanner aktiv. Barcode in den markierten Bereich halten.');
+          })
+          .catch(function () {
+            setStatus('Kamera konnte nicht geöffnet werden. Bitte andere Kamera wählen oder Code manuell eingeben.');
+          });
       });
     }
 
