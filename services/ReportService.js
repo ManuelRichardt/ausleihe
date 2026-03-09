@@ -3,6 +3,7 @@ const bwipjs = require('bwip-js');
 const fs = require('fs');
 const path = require('path');
 const { Op } = require('sequelize');
+const CM_TO_PT = 72 / 2.54;
 
 function pad(value) {
   return String(value).padStart(2, '0');
@@ -20,7 +21,6 @@ function formatDateTime(value) {
 }
 
 const dataMatrixBufferCache = new Map();
-const DEFAULT_LABEL_HEADER = 'HOCHSCHULE FULDA';
 const LABEL_LOGO_PATH = path.resolve(__dirname, '..', 'public', 'images', 'rundlogoSchwarz.png');
 let labelLogoBuffer;
 
@@ -32,17 +32,6 @@ function normalizeLabelCode(value) {
 function normalizeLabelText(value, fallback = '-') {
   const normalized = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
   return normalized || fallback;
-}
-
-function resolveLabelHeader(lendingLocationName) {
-  const location = normalizeLabelText(lendingLocationName, '');
-  if (!location) {
-    return DEFAULT_LABEL_HEADER;
-  }
-  if (location.toLowerCase() === 'hochschule fulda') {
-    return DEFAULT_LABEL_HEADER;
-  }
-  return location.toUpperCase();
 }
 
 function resolveAssetDesignation(asset) {
@@ -389,58 +378,76 @@ class ReportService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
 
-      const labelWidth = 270;
-      const labelHeight = 90;
-      const gapX = 12;
-      const gapY = 10;
-      const startX = 18;
-      const startY = 30;
+      const labelWidth = 4.5 * CM_TO_PT;
+      const labelHeight = 2 * CM_TO_PT;
+      const gapX = 0.2 * CM_TO_PT;
+      const gapY = 0.2 * CM_TO_PT;
+      const startX = doc.page.margins.left;
+      const startY = doc.page.margins.top;
+      const printableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      const printableHeight = doc.page.height - doc.page.margins.top - doc.page.margins.bottom;
+      const columns = Math.max(1, Math.floor((printableWidth + gapX) / (labelWidth + gapX)));
+      const rows = Math.max(1, Math.floor((printableHeight + gapY) / (labelHeight + gapY)));
+      const labelsPerPage = columns * rows;
+      const locationText = normalizeLabelText(lendingLocationName);
+
       const renderLabels = async () => {
         for (let index = 0; index < assets.length; index += 1) {
           const asset = assets[index];
-          const col = index % 2;
-          const row = Math.floor((index % 14) / 2);
-          const pageIndex = Math.floor(index / 14);
-          if (index > 0 && index % 14 === 0) {
+          if (index > 0 && index % labelsPerPage === 0) {
             doc.addPage();
           }
+          const indexOnPage = index % labelsPerPage;
+          const col = indexOnPage % columns;
+          const row = Math.floor(indexOnPage / columns);
 
           const x = startX + (col * (labelWidth + gapX));
           const y = startY + (row * (labelHeight + gapY));
+          const model = asset.model || {};
           const inventoryValue = normalizeLabelCode(asset.inventoryNumber || asset.serialNumber || asset.id);
-          const designation = resolveAssetDesignation(asset);
-          const headerText = resolveLabelHeader(lendingLocationName);
+          const manufacturerText = normalizeLabelText(model.manufacturer ? model.manufacturer.name : '-');
+          const assetText = resolveAssetDesignation(asset);
           const matrixBuffer = await createDataMatrixBuffer(inventoryValue);
 
-          doc.roundedRect(x, y, labelWidth, labelHeight, 8).strokeColor('#333').lineWidth(0.8).stroke();
+          doc.roundedRect(x, y, labelWidth, labelHeight, 3).strokeColor('#333').lineWidth(0.6).stroke();
 
-          const matrixSize = 52;
-          const matrixX = x + 8;
-          const matrixY = y + 8;
-          const inventoryX = x + 8;
-          const inventoryY = y + 66;
-          const inventoryWidth = 118;
-          const textX = x + 70;
-          const logoSize = 16;
-          const rightPadding = 8;
-          const logoGap = 4;
-          const headerWidth = labelWidth - (textX - x) - rightPadding - logoSize - logoGap;
-          const designationWidth = labelWidth - (textX - x) - rightPadding;
+          const padding = 2.5;
+          const inventoryTextHeight = 8;
+          const matrixGap = 2.5;
+          const matrixSize = Math.max(20, labelHeight - (2 * padding) - inventoryTextHeight);
+          const matrixX = x + padding;
+          const matrixY = y + padding;
+          const inventoryX = matrixX;
+          const inventoryY = y + labelHeight - padding - 6.4;
 
-          doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text(headerText, textX, y + 8, {
+          const logoSize = 9;
+          const logoGap = 2;
+          const textX = matrixX + matrixSize + matrixGap;
+          const textRightPadding = padding;
+          const textWidth = labelWidth - (textX - x) - textRightPadding;
+          const headerWidth = Math.max(16, textWidth - logoSize - logoGap);
+          const lineStartY = y + padding + 0.6;
+          const lineHeight = 8.5;
+
+          doc.font('Helvetica').fontSize(6.2).fillColor('#000').text(locationText, textX, lineStartY, {
             width: headerWidth,
             lineBreak: false,
             ellipsis: true,
           });
-          drawLabelLogo(doc, x + labelWidth - rightPadding - logoSize, y + 7, logoSize);
-          doc.font('Helvetica-Bold').fontSize(10).fillColor('#111').text(designation, textX, y + 24, {
-            width: designationWidth,
-            height: 36,
-            lineGap: 1,
+          drawLabelLogo(doc, x + labelWidth - textRightPadding - logoSize, lineStartY - 0.5, logoSize);
+          doc.font('Helvetica').fontSize(6.2).fillColor('#000').text(manufacturerText, textX, lineStartY + lineHeight, {
+            width: textWidth,
+            lineBreak: false,
             ellipsis: true,
           });
-          doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text(inventoryValue, inventoryX, inventoryY, {
-            width: inventoryWidth,
+          doc.font('Helvetica-Bold').fontSize(6.6).fillColor('#111').text(assetText, textX, lineStartY + (2 * lineHeight), {
+            width: textWidth,
+            lineBreak: false,
+            ellipsis: true,
+          });
+          doc.font('Helvetica-Bold').fontSize(7.0).fillColor('#000').text(inventoryValue, inventoryX, inventoryY, {
+            width: matrixSize,
+            align: 'center',
             lineBreak: false,
             ellipsis: true,
           });
@@ -450,10 +457,6 @@ class ReportService {
             align: 'center',
             valign: 'center',
           });
-
-          if (pageIndex > 0 && col === 0 && row === 0) {
-            doc.font('Helvetica').fontSize(7).fillColor('#666').text(`Seite ${pageIndex + 1}`, 18, 12);
-          }
         }
 
         if (!assets.length) {
