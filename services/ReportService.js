@@ -1,6 +1,8 @@
 const PDFDocument = require('pdfkit');
+const bwipjs = require('bwip-js');
+const fs = require('fs');
+const path = require('path');
 const { Op } = require('sequelize');
-const { drawCode128, normalizeCode128Input } = require('../utils/code128');
 
 function pad(value) {
   return String(value).padStart(2, '0');
@@ -15,6 +17,89 @@ function formatDateTime(value) {
     return '-';
   }
   return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+const dataMatrixBufferCache = new Map();
+const DEFAULT_LABEL_HEADER = 'HOCHSCHULE FULDA';
+const LABEL_LOGO_PATH = path.resolve(__dirname, '..', 'public', 'images', 'rundlogoSchwarz.png');
+let labelLogoBuffer;
+
+function normalizeLabelCode(value) {
+  const normalized = String(value == null ? '' : value).trim();
+  return normalized || 'UNKNOWN';
+}
+
+function normalizeLabelText(value, fallback = '-') {
+  const normalized = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
+  return normalized || fallback;
+}
+
+function resolveLabelHeader(lendingLocationName) {
+  const location = normalizeLabelText(lendingLocationName, '');
+  if (!location) {
+    return DEFAULT_LABEL_HEADER;
+  }
+  if (location.toLowerCase() === 'hochschule fulda') {
+    return DEFAULT_LABEL_HEADER;
+  }
+  return location.toUpperCase();
+}
+
+function resolveAssetDesignation(asset) {
+  const model = asset && asset.model ? asset.model : {};
+  return normalizeLabelText(model.name || 'Asset');
+}
+
+function getLabelLogoBuffer() {
+  if (typeof labelLogoBuffer !== 'undefined') {
+    return labelLogoBuffer;
+  }
+  try {
+    labelLogoBuffer = fs.readFileSync(LABEL_LOGO_PATH);
+  } catch (err) {
+    labelLogoBuffer = null;
+  }
+  return labelLogoBuffer;
+}
+
+function drawLabelLogo(doc, x, y, size) {
+  const logoBuffer = getLabelLogoBuffer();
+  if (!logoBuffer) {
+    return;
+  }
+  doc.image(logoBuffer, x, y, {
+    fit: [size, size],
+    align: 'center',
+    valign: 'center',
+  });
+}
+
+function createDataMatrixBuffer(value) {
+  const text = normalizeLabelCode(value);
+  if (dataMatrixBufferCache.has(text)) {
+    return dataMatrixBufferCache.get(text);
+  }
+
+  const bufferPromise = new Promise((resolve, reject) => {
+    bwipjs.toBuffer(
+      {
+        bcid: 'datamatrix',
+        text,
+        scale: 3,
+        includetext: false,
+      },
+      (err, png) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(png);
+      }
+    );
+  });
+
+  dataMatrixBufferCache.set(text, bufferPromise);
+  return bufferPromise;
 }
 
 class ReportService {
@@ -310,62 +395,75 @@ class ReportService {
       const gapY = 10;
       const startX = 18;
       const startY = 30;
+      const renderLabels = async () => {
+        for (let index = 0; index < assets.length; index += 1) {
+          const asset = assets[index];
+          const col = index % 2;
+          const row = Math.floor((index % 14) / 2);
+          const pageIndex = Math.floor(index / 14);
+          if (index > 0 && index % 14 === 0) {
+            doc.addPage();
+          }
 
-      assets.forEach((asset, index) => {
-        const col = index % 2;
-        const row = Math.floor((index % 14) / 2);
-        const pageIndex = Math.floor(index / 14);
-        if (index > 0 && index % 14 === 0) {
-          doc.addPage();
-        }
+          const x = startX + (col * (labelWidth + gapX));
+          const y = startY + (row * (labelHeight + gapY));
+          const inventoryValue = normalizeLabelCode(asset.inventoryNumber || asset.serialNumber || asset.id);
+          const designation = resolveAssetDesignation(asset);
+          const headerText = resolveLabelHeader(lendingLocationName);
+          const matrixBuffer = await createDataMatrixBuffer(inventoryValue);
 
-        const x = startX + (col * (labelWidth + gapX));
-        const y = startY + (row * (labelHeight + gapY));
+          doc.roundedRect(x, y, labelWidth, labelHeight, 8).strokeColor('#333').lineWidth(0.8).stroke();
 
-        doc.rect(x, y, labelWidth, labelHeight).strokeColor('#333').lineWidth(0.8).stroke();
-        const model = asset.model || {};
-        const manufacturer = model.manufacturer ? model.manufacturer.name : '';
-        const barcodeValue = normalizeCode128Input(asset.inventoryNumber || asset.serialNumber || asset.id);
+          const matrixSize = 52;
+          const matrixX = x + 8;
+          const matrixY = y + 8;
+          const inventoryX = x + 8;
+          const inventoryY = y + 66;
+          const inventoryWidth = 118;
+          const textX = x + 70;
+          const logoSize = 16;
+          const rightPadding = 8;
+          const logoGap = 4;
+          const headerWidth = labelWidth - (textX - x) - rightPadding - logoSize - logoGap;
+          const designationWidth = labelWidth - (textX - x) - rightPadding;
 
-        doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text(model.name || 'Asset', x + 8, y + 6, {
-          width: labelWidth - 16,
-          lineBreak: false,
-          ellipsis: true,
-        });
-        doc.font('Helvetica').fontSize(8).fillColor('#222').text(manufacturer || '-', x + 8, y + 20, {
-          width: labelWidth - 16,
-          lineBreak: false,
-          ellipsis: true,
-        });
-        doc.font('Helvetica').fontSize(8).fillColor('#222').text(`Inv: ${asset.inventoryNumber || '-'}`, x + 8, y + 32);
-        if (lendingLocationName) {
-          doc.text(lendingLocationName, x + 8, y + 42, {
-            width: labelWidth - 16,
+          doc.font('Helvetica-Bold').fontSize(11).fillColor('#000').text(headerText, textX, y + 8, {
+            width: headerWidth,
             lineBreak: false,
             ellipsis: true,
           });
+          drawLabelLogo(doc, x + labelWidth - rightPadding - logoSize, y + 7, logoSize);
+          doc.font('Helvetica-Bold').fontSize(10).fillColor('#111').text(designation, textX, y + 24, {
+            width: designationWidth,
+            height: 36,
+            lineGap: 1,
+            ellipsis: true,
+          });
+          doc.font('Helvetica-Bold').fontSize(10).fillColor('#000').text(inventoryValue, inventoryX, inventoryY, {
+            width: inventoryWidth,
+            lineBreak: false,
+            ellipsis: true,
+          });
+
+          doc.image(matrixBuffer, matrixX, matrixY, {
+            fit: [matrixSize, matrixSize],
+            align: 'center',
+            valign: 'center',
+          });
+
+          if (pageIndex > 0 && col === 0 && row === 0) {
+            doc.font('Helvetica').fontSize(7).fillColor('#666').text(`Seite ${pageIndex + 1}`, 18, 12);
+          }
         }
 
-        const barcodeX = x + 10;
-        const barcodeY = y + 54;
-        const barcodeWidth = labelWidth - 20;
-        const barcodeHeight = 22;
-        drawCode128(doc, barcodeValue, barcodeX, barcodeY, barcodeWidth, barcodeHeight);
-        doc.font('Helvetica').fontSize(8).fillColor('#000').text(barcodeValue, barcodeX, barcodeY + barcodeHeight + 2, {
-          width: barcodeWidth,
-          align: 'center',
-          lineBreak: false,
-        });
-        if (pageIndex > 0 && col === 0 && row === 0) {
-          doc.font('Helvetica').fontSize(7).fillColor('#666').text(`Seite ${pageIndex + 1}`, 18, 12);
+        if (!assets.length) {
+          doc.font('Helvetica').fontSize(12).text('Keine Assets für Etiketten gefunden.', 36, 50);
         }
-      });
 
-      if (!assets.length) {
-        doc.font('Helvetica').fontSize(12).text('Keine Assets für Etiketten gefunden.', 36, 50);
-      }
+        doc.end();
+      };
 
-      doc.end();
+      renderLabels().catch(reject);
     });
   }
 }

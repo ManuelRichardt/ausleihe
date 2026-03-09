@@ -7,6 +7,7 @@
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "bwip-js": "^4.8.0",
     "connect-flash": "^0.1.1",
     "cookie-parser": "~1.4.6",
     "csrf-csrf": "^4.0.3",
@@ -21,8 +22,8 @@
     "express-rate-limit": "^7.4.1",
     "express-session": "^1.18.0",
     "express-validator": "^7.0.1",
-    "html5-qrcode": "^2.3.8",
     "helmet": "^7.1.0",
+    "html5-qrcode": "^2.3.8",
     "http-errors": "~2.0.0",
     "ldapts": "^7.3.5",
     "mariadb": "^3.3.2",

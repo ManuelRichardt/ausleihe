@@ -428,6 +428,7 @@
       if (window.Html5QrcodeSupportedFormats) {
         var formats = window.Html5QrcodeSupportedFormats;
         config.formatsToSupport = [
+          formats.DATA_MATRIX,
           formats.CODE_128,
           formats.CODE_39,
           formats.CODE_93,
