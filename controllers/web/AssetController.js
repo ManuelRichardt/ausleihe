@@ -20,6 +20,7 @@ class AssetController {
         manufacturerId: filters.manufacturerId || undefined,
         lendingLocationId: filters.lendingLocationId || undefined,
         isActive: true,
+        onlyLoanable: true,
       };
       const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 6), 48);
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);

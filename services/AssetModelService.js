@@ -247,6 +247,21 @@ class AssetModelService {
       });
     }
     applyIsActiveFilter(where, filter);
+    if (filter.onlyLoanable) {
+      where[Op.and] = where[Op.and] || [];
+      where[Op.and].push(
+        this.models.sequelize.literal(`(
+          AssetModel.tracking_type <> 'serialized'
+          OR EXISTS (
+            SELECT 1
+            FROM assets
+            WHERE assets.asset_model_id = AssetModel.id
+              AND assets.is_active = 1
+              AND assets.deleted_at IS NULL
+          )
+        )`)
+      );
+    }
     const listOptions = buildListOptions(options);
     applyIncludeDeleted(listOptions, filter);
     return this.models.AssetModel.findAll({
@@ -301,6 +316,21 @@ class AssetModelService {
       });
     }
     applyIsActiveFilter(where, filter);
+    if (filter.onlyLoanable) {
+      where[Op.and] = where[Op.and] || [];
+      where[Op.and].push(
+        this.models.sequelize.literal(`(
+          AssetModel.tracking_type <> 'serialized'
+          OR EXISTS (
+            SELECT 1
+            FROM assets
+            WHERE assets.asset_model_id = AssetModel.id
+              AND assets.is_active = 1
+              AND assets.deleted_at IS NULL
+          )
+        )`)
+      );
+    }
     const countOptions = {};
     if (filter.includeDeleted) {
       countOptions.paranoid = false;
