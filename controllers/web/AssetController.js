@@ -19,6 +19,7 @@ class AssetController {
         categoryId: filters.categoryId || undefined,
         manufacturerId: filters.manufacturerId || undefined,
         lendingLocationId: filters.lendingLocationId || undefined,
+        isActive: true,
       };
       const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 6), 48);
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -36,12 +37,16 @@ class AssetController {
         isActive: true,
         lendingLocationId: filters.lendingLocationId || undefined,
       });
+      const lendingLocations = await services.lendingLocationService.getAll({
+        isActive: true,
+      });
 
       return renderPage(res, 'assets/index', req, {
         breadcrumbs: [{ label: 'Assets', href: '/assets' }],
         assetModels,
         manufacturers,
         categories,
+        lendingLocations,
         filters,
         viewMode,
         sortBy,
@@ -61,6 +66,11 @@ class AssetController {
   async show(req, res, next) {
     try {
       const assetModel = await services.assetModelService.getById(req.params.id);
+      if (!assetModel.isActive) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
       const customFieldDefinitions = await services.customFieldDefinitionService.getAll({
         scope: 'global',
         isActive: true,
@@ -102,6 +112,11 @@ class AssetController {
   async reserve(req, res, next) {
     try {
       const assetModel = await services.assetModelService.getById(req.params.id);
+      if (!assetModel.isActive) {
+        const err = new Error('AssetModel not found');
+        err.status = 404;
+        throw err;
+      }
       const trackingType = assetModel.trackingType || 'serialized';
       const bundleDefinition = trackingType === 'bundle'
         ? await services.bundleService.getByAssetModel(assetModel.id, assetModel.lendingLocationId)

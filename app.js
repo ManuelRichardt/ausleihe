@@ -29,12 +29,23 @@ function getPrivacyCleanupIntervalMs() {
   return minutes * 60 * 1000;
 }
 
+function getMailReminderIntervalMs() {
+  const raw = parseInt(process.env.MAIL_REMINDER_INTERVAL_MINUTES || '15', 10);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return null;
+  }
+  const minutes = Math.max(raw, 5);
+  return minutes * 60 * 1000;
+}
+
 function initializeAppLifecycle(runtimeServices) {
   const runtimeState = {
     lifecyclePhase: 'startup',
     privacyCleanupTimer: null,
     isPrivacyCleanupInFlight: false,
     arePrivacyCleanupHooksRegistered: false,
+    mailReminderTimer: null,
+    isMailReminderInFlight: false,
   };
 
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,9 +58,24 @@ function initializeAppLifecycle(runtimeServices) {
     runtimeState.privacyCleanupTimer = null;
   };
 
+  const stopMailReminderJob = () => {
+    if (!runtimeState.mailReminderTimer) {
+      return;
+    }
+    clearInterval(runtimeState.mailReminderTimer);
+    runtimeState.mailReminderTimer = null;
+  };
+
   const waitForInFlightCleanup = async (timeoutMs = 10000) => {
     const startedAt = Date.now();
     while (runtimeState.isPrivacyCleanupInFlight && Date.now() - startedAt < timeoutMs) {
+      await wait(100);
+    }
+  };
+
+  const waitForInFlightReminders = async (timeoutMs = 10000) => {
+    const startedAt = Date.now();
+    while (runtimeState.isMailReminderInFlight && Date.now() - startedAt < timeoutMs) {
       await wait(100);
     }
   };
@@ -71,6 +97,28 @@ function initializeAppLifecycle(runtimeServices) {
     }
   };
 
+  const runMailReminders = async () => {
+    if (runtimeState.isMailReminderInFlight || runtimeState.lifecyclePhase === 'shutdown') {
+      return;
+    }
+    runtimeState.isMailReminderInFlight = true;
+    try {
+      const config = await runtimeServices.mailConfigService.getConfig({ createIfMissing: true });
+      if (!config || !config.isEnabled) {
+        return;
+      }
+      await runtimeServices.mailService.queueAutomaticReminders({ limit: 300 });
+      await runtimeServices.mailService.processPending(200);
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'test') {
+        // eslint-disable-next-line no-console
+        console.error('Mail reminders failed:', err.message || err);
+      }
+    } finally {
+      runtimeState.isMailReminderInFlight = false;
+    }
+  };
+
   const startPrivacyCleanupJob = () => {
     if (runtimeState.privacyCleanupTimer || process.env.NODE_ENV === 'test') {
       return;
@@ -83,13 +131,28 @@ function initializeAppLifecycle(runtimeServices) {
     }
   };
 
+  const startMailReminderJob = () => {
+    const intervalMs = getMailReminderIntervalMs();
+    if (!intervalMs || runtimeState.mailReminderTimer || process.env.NODE_ENV === 'test') {
+      return;
+    }
+    runtimeState.lifecyclePhase = 'active';
+    void runMailReminders();
+    runtimeState.mailReminderTimer = setInterval(runMailReminders, intervalMs);
+    if (typeof runtimeState.mailReminderTimer.unref === 'function') {
+      runtimeState.mailReminderTimer.unref();
+    }
+  };
+
   const shutdownLifecycle = async (signal) => {
     if (runtimeState.lifecyclePhase === 'shutdown') {
       return;
     }
     runtimeState.lifecyclePhase = 'shutdown';
     stopPrivacyCleanupJob();
+    stopMailReminderJob();
     await waitForInFlightCleanup();
+    await waitForInFlightReminders();
     if (signal && process.env.NODE_ENV !== 'test') {
       process.exit(0);
     }
@@ -110,6 +173,7 @@ function initializeAppLifecycle(runtimeServices) {
 
   return {
     startPrivacyCleanupJob,
+    startMailReminderJob,
     registerShutdownHooks,
   };
 }
@@ -172,6 +236,7 @@ app.use('/api/v1', apiV1Router);
       await db.sequelize.sync();
     }
     appLifecycle.startPrivacyCleanupJob();
+    appLifecycle.startMailReminderJob();
   } catch (err) {
     if (process.env.NODE_ENV !== 'test') {
       // eslint-disable-next-line no-console

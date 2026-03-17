@@ -536,9 +536,10 @@ class LoanPortalService {
         order: [['inventoryNumber', 'ASC'], ['serialNumber', 'ASC']],
       }
     );
+    const activeModelAssets = assets.filter((asset) => asset && asset.model && asset.model.isActive !== false);
     const bulkModelIds = Array.from(
       new Set(
-        assets
+        activeModelAssets
           .filter((asset) => asset && asset.model && asset.model.trackingType === 'bulk')
           .map((asset) => asset.assetModelId)
           .filter(Boolean)
@@ -562,7 +563,7 @@ class LoanPortalService {
       );
     }
 
-    return assets.map((asset) => {
+    return activeModelAssets.map((asset) => {
       const model = asset.model || null;
       const manufacturerName = model && model.manufacturer ? model.manufacturer.name : '';
       const isBulk = Boolean(model && model.trackingType === 'bulk');
@@ -596,6 +597,15 @@ class LoanPortalService {
         lendingLocationId,
         isActive: true,
       },
+      include: [
+        {
+          model: this.models.AssetModel,
+          as: 'model',
+          where: { isActive: true },
+          attributes: [],
+          required: true,
+        },
+      ],
       attributes: ['inventoryNumber', 'serialNumber'],
       order: [['inventoryNumber', 'ASC'], ['serialNumber', 'ASC']],
       limit: safeLimit,

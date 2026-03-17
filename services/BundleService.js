@@ -99,7 +99,10 @@ class BundleService {
       const requiredQty = Math.max(parseInt(item.quantity, 10) || 1, 1);
       let componentAvailable = false;
       let availableCount = 0;
-      if (componentModel.trackingType === 'bulk') {
+      if (componentModel.isActive === false) {
+        componentAvailable = false;
+        availableCount = 0;
+      } else if (componentModel.trackingType === 'bulk') {
         const stock = await this.inventoryStockService.getStock(componentModel.id, lendingLocationId);
         availableCount = stock ? stock.quantityAvailable : 0;
         componentAvailable = availableCount >= requiredQty;

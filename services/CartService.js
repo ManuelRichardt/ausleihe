@@ -37,6 +37,9 @@ class CartService {
         throw new Error('Bundle ist erforderlich');
       }
       const bundle = await this.bundleService.getBundleDefinition(data.bundleDefinitionId);
+      if (bundle.bundleModel && bundle.bundleModel.isActive === false) {
+        throw new Error('AssetModel ist nicht ausleihbar');
+      }
       const lendingLocationId = data.lendingLocationId || bundle.lendingLocationId || (bundle.bundleModel && bundle.bundleModel.lendingLocationId);
       await assertOpenForRange(this.models, lendingLocationId, reservedFrom, reservedUntil);
       const availability = await this.bundleService.computeBundleAvailability(
@@ -63,6 +66,9 @@ class CartService {
     const model = await this.models.AssetModel.findByPk(data.assetModelId);
     if (!model) {
       throw new Error('AssetModel not found');
+    }
+    if (!model.isActive) {
+      throw new Error('AssetModel ist nicht ausleihbar');
     }
     const trackingType = model.trackingType || 'serialized';
     if (kind !== trackingType && !(kind === 'serialized' && trackingType === 'serialized')) {
@@ -110,6 +116,9 @@ class CartService {
 
     if (item.kind === 'bundle') {
       const bundle = await this.bundleService.getBundleDefinition(item.bundleDefinitionId);
+      if (bundle.bundleModel && bundle.bundleModel.isActive === false) {
+        throw new Error('AssetModel ist nicht ausleihbar');
+      }
       const lendingLocationId = item.lendingLocationId || bundle.lendingLocationId || (bundle.bundleModel && bundle.bundleModel.lendingLocationId);
       await assertOpenForRange(this.models, lendingLocationId, reservedFrom, reservedUntil);
       const availability = await this.bundleService.computeBundleAvailability(
@@ -124,6 +133,9 @@ class CartService {
       const model = await this.models.AssetModel.findByPk(item.assetModelId);
       if (!model) {
         throw new Error('AssetModel not found');
+      }
+      if (!model.isActive) {
+        throw new Error('AssetModel ist nicht ausleihbar');
       }
       await assertOpenForRange(this.models, model.lendingLocationId, reservedFrom, reservedUntil);
       if ((item.kind || model.trackingType) === 'bulk') {

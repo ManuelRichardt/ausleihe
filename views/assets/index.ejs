@@ -63,6 +63,15 @@
           </select>
         </div>
         <div class="col-md-3">
+          <label class="form-label" for="lendingLocationId">Ausleihstelle</label>
+          <select id="lendingLocationId" name="lendingLocationId" class="form-select">
+            <option value="">Alle</option>
+            <% (lendingLocations || []).forEach(function(location) { %>
+              <option value="<%= location.id %>" <%= safeFilters.lendingLocationId === location.id ? 'selected' : '' %>><%= location.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-md-3">
           <label class="form-label" for="sortBy">Sortierung</label>
           <select id="sortBy" name="sortBy" class="form-select">
             <option value="name" <%= sortBy === 'name' ? 'selected' : '' %>>Name</option>
@@ -83,7 +92,6 @@
       </div>
       <input type="hidden" name="view" value="<%= viewModeValue %>">
       <input type="hidden" name="limit" value="<%= safePagination.limit %>">
-      <input type="hidden" name="lendingLocationId" value="<%= safeFilters.lendingLocationId || '' %>">
     </div>
   </form>
 

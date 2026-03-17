@@ -349,6 +349,9 @@ class LoanService {
       if (!asset) {
         throw new Error('Asset not found');
       }
+      if (!asset.isActive) {
+        throw new Error('Asset ist nicht ausleihbar');
+      }
       if (asset.lendingLocationId !== reservationCommand.lendingLocationId) {
         throw new Error('Asset does not belong to lending location');
       }
@@ -364,6 +367,9 @@ class LoanService {
       reservationCommand.lendingLocationId,
       transaction
     );
+    if (!model.isActive) {
+      throw new Error('AssetModel ist nicht ausleihbar');
+    }
 
     return { model, selectedAssetId };
   }

@@ -150,6 +150,20 @@
   background-color: #f8f9fa;
 }
 
+.category-card-image,
+.category-card-image-placeholder {
+  height: 400px;
+}
+
+.category-card-image {
+  width: 100%;
+  object-fit: cover;
+}
+
+.category-card-image-placeholder {
+  background-color: #f8f9fa;
+}
+
 #assetGalleryModal .asset-gallery-modal-image {
   width: auto;
   max-width: 100%;
