@@ -110,9 +110,7 @@ class AuthConfigController {
         searchScope: req.body.searchScope || 'sub',
         bindDn: req.body.bindDn || '',
         bindPassword: req.body.bindPassword || '',
-        tlsRejectUnauthorized: req.body.tlsRejectUnauthorized === undefined
-          ? true
-          : req.body.tlsRejectUnauthorized === 'on' || req.body.tlsRejectUnauthorized === 'true',
+        tlsRejectUnauthorized: req.body.tlsRejectUnauthorized === 'on' || req.body.tlsRejectUnauthorized === 'true',
         attrUsername: req.body.attrUsername || 'uid',
         attrEmail: req.body.attrEmail || 'mail',
         attrDisplayName: req.body.attrDisplayName || 'displayName',
@@ -182,7 +180,7 @@ class AuthConfigController {
       return res.redirect('/system/auth-config');
     } catch (err) {
       if (typeof req.flash === 'function') {
-        req.flash('error', 'LDAP Test fehlgeschlagen');
+        req.flash('error', `LDAP Test fehlgeschlagen: ${err.message || 'Unbekannter Fehler'}`);
       }
       return res.redirect('/system/auth-config');
     }
