@@ -221,6 +221,17 @@ fi
 sudo ufw allow OpenSSH
 sudo ufw allow 80
 sudo ufw allow 443
+sudo ufw allow out 389/tcp
+
+# Docker-Traffic ist bei UFW oft "routed" und wird sonst durch die Default-Policy blockiert.
+# Wir erlauben daher gezielt ausgehenden Container-Traffic auf LDAP Port 389 ohne feste Ziel-IP.
+PRIMARY_IF=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
+if [ -n "$PRIMARY_IF" ]; then
+    sudo ufw route allow in on docker0 out on "$PRIMARY_IF" to any port 389 proto tcp
+else
+    echo "Warnung: Konnte WAN-Interface nicht automatisch ermitteln. UFW route-Regel fuer LDAP (389) wurde uebersprungen."
+fi
+
 sudo ufw --force enable
 
 # 3. Projekt klonen
