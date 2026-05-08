@@ -10,6 +10,8 @@ const { TRACKING_TYPE } = require('../../../config/dbConstants');
 const { assertOwnedByLendingLocation } = require('../../../utils/lendingLocationGuardHelper');
 const { parseBooleanToken } = require('../../../utils/valueParsing');
 
+const adminAssetVisibilityOptions = { includeInactiveLendingLocation: true };
+
 class AssetModelAdminController {
   normalizeAttachmentTitle(value) {
     const text = String(value || '').trim();
@@ -40,7 +42,7 @@ class AssetModelAdminController {
         lendingLocationId: req.lendingLocationId,
         isActive: true,
       },
-      { order: [['name', 'ASC']] }
+      { ...adminAssetVisibilityOptions, order: [['name', 'ASC']] }
     );
     const componentModels = componentModelsAll.filter(
       (entry) => (entry.trackingType || TRACKING_TYPE.SERIALIZED) !== TRACKING_TYPE.BUNDLE
@@ -58,7 +60,7 @@ class AssetModelAdminController {
         bundleDefinition: null,
       };
     }
-    const model = await services.assetModelService.getById(req.params.id);
+    const model = await services.assetModelService.getById(req.params.id, adminAssetVisibilityOptions);
     this.assertModelOwnership(model, req.lendingLocationId);
     const stock = await services.inventoryStockService.getStock(model.id, model.lendingLocationId);
     const bundleDefinition = await services.bundleService.getByAssetModel(model.id, model.lendingLocationId);
@@ -98,8 +100,13 @@ class AssetModelAdminController {
         filter.includeDeleted = true;
       }
 
-      const total = await services.assetModelService.countAssetModels(filter);
-      const models = await services.assetModelService.getAll(filter, { limit, offset, order });
+      const total = await services.assetModelService.countAssetModels(filter, adminAssetVisibilityOptions);
+      const models = await services.assetModelService.getAll(filter, {
+        ...adminAssetVisibilityOptions,
+        limit,
+        offset,
+        order,
+      });
       const manufacturers = await services.manufacturerService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
       const categories = await services.assetCategoryService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
 
@@ -129,7 +136,7 @@ class AssetModelAdminController {
 
   async show(req, res, next) {
     try {
-      const model = await services.assetModelService.getById(req.params.id);
+      const model = await services.assetModelService.getById(req.params.id, adminAssetVisibilityOptions);
       this.assertModelOwnership(model, req.lendingLocationId);
       const customFieldDefinitions = await services.assetModelService.getGlobalCustomFieldDefinitions({
         onlyActive: false,
@@ -226,7 +233,7 @@ class AssetModelAdminController {
     try {
       const model = res.locals.viewData && res.locals.viewData.model
         ? res.locals.viewData.model
-        : await services.assetModelService.getById(req.params.id);
+        : await services.assetModelService.getById(req.params.id, adminAssetVisibilityOptions);
       this.assertModelOwnership(model, req.lendingLocationId);
       const customFieldData = await services.assetModelService.resolveCustomFieldData(req.body.customFields || {});
       const trackingType = req.body.trackingType || TRACKING_TYPE.SERIALIZED;
@@ -252,7 +259,7 @@ class AssetModelAdminController {
 
   async remove(req, res, next) {
     try {
-      const model = await services.assetModelService.getById(req.params.id);
+      const model = await services.assetModelService.getById(req.params.id, adminAssetVisibilityOptions);
       this.assertModelOwnership(model, req.lendingLocationId);
       await services.assetModelService.deleteAssetModel(model.id);
       if (typeof req.flash === 'function') {
@@ -267,7 +274,10 @@ class AssetModelAdminController {
   async restore(req, res, next) {
     try {
       const includeDeleted = parseIncludeDeleted(req) || req.body.includeDeleted === '1';
-      const model = await services.assetModelService.getById(req.params.id, { includeDeleted: true });
+      const model = await services.assetModelService.getById(req.params.id, {
+        ...adminAssetVisibilityOptions,
+        includeDeleted: true,
+      });
       this.assertModelOwnership(model, req.lendingLocationId);
       await services.assetModelService.restoreAssetModel(model.id);
       if (typeof req.flash === 'function') {
@@ -281,7 +291,7 @@ class AssetModelAdminController {
 
   async updateAttachment(req, res, next) {
     try {
-      const model = await services.assetModelService.getById(req.params.id);
+      const model = await services.assetModelService.getById(req.params.id, adminAssetVisibilityOptions);
       this.assertModelOwnership(model, req.lendingLocationId);
       const attachment = await services.assetAttachmentService.getById(req.params.attachmentId);
       if (attachment.assetModelId !== model.id) {
@@ -323,7 +333,7 @@ class AssetModelAdminController {
 
   async removeAttachment(req, res, next) {
     try {
-      const model = await services.assetModelService.getById(req.params.id);
+      const model = await services.assetModelService.getById(req.params.id, adminAssetVisibilityOptions);
       this.assertModelOwnership(model, req.lendingLocationId);
       const attachment = await services.assetAttachmentService.getById(req.params.attachmentId);
       if (attachment.assetModelId !== model.id) {
@@ -418,7 +428,7 @@ class AssetModelAdminController {
   }
 
   async ensurePrimaryModelImage(modelId) {
-    const model = await services.assetModelService.getById(modelId);
+    const model = await services.assetModelService.getById(modelId, adminAssetVisibilityOptions);
     const images = await services.assetAttachmentService.getAll({
       assetModelId: modelId,
       kind: 'image',
@@ -528,7 +538,7 @@ class AssetModelAdminController {
 
   async updateStock(req, res, next) {
     try {
-      const model = await services.assetModelService.getById(req.params.id);
+      const model = await services.assetModelService.getById(req.params.id, adminAssetVisibilityOptions);
       this.assertModelOwnership(model, req.lendingLocationId);
       await services.inventoryStockService.updateStock(
         model.id,

@@ -1,11 +1,13 @@
 const { services, renderPage, handleError } = require('../controllerUtils');
 
+const adminAssetVisibilityOptions = { includeInactiveLendingLocation: true };
+
 class AssetAdminController {
   async assets(req, res, next) {
     try {
       const assets = await services.assetInstanceService.getAll({
         lendingLocationId: req.lendingLocationId || undefined,
-      });
+      }, adminAssetVisibilityOptions);
       const manufacturers = await services.manufacturerService.getAll({ isActive: true });
       return renderPage(res, 'admin/assets/index', req, {
         breadcrumbs: [
@@ -22,7 +24,7 @@ class AssetAdminController {
 
   async models(req, res, next) {
     try {
-      const models = await services.assetModelService.getAll({ isActive: true });
+      const models = await services.assetModelService.getAll({ isActive: true }, adminAssetVisibilityOptions);
       const manufacturers = await services.manufacturerService.getAll({ isActive: true });
       const categories = await services.assetCategoryService.getAll({ isActive: true });
       return renderPage(res, 'admin/models/index', req, {
@@ -44,7 +46,7 @@ class AssetAdminController {
       const customFields = await services.customFieldDefinitionService.getByLendingLocation(
         req.lendingLocationId
       );
-      const assetModels = await services.assetModelService.getAll({ isActive: true });
+      const assetModels = await services.assetModelService.getAll({ isActive: true }, adminAssetVisibilityOptions);
       return renderPage(res, 'admin/custom-fields/index', req, {
         breadcrumbs: [
           { label: 'Admin', href: '/admin/assets' },

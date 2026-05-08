@@ -67,6 +67,15 @@ class AssetInstanceService {
   }
 
   async getById(id, options = {}) {
+    const includeLendingLocation = {
+      model: this.models.LendingLocation,
+      as: 'lendingLocation',
+    };
+    if (!options.includeInactiveLendingLocation) {
+      includeLendingLocation.required = true;
+      includeLendingLocation.where = { isActive: true };
+    }
+
     const findOptions = {
       include: [
         {
@@ -77,12 +86,7 @@ class AssetInstanceService {
             { model: this.models.AssetCategory, as: 'category' },
           ],
         },
-        {
-          model: this.models.LendingLocation,
-          as: 'lendingLocation',
-          required: true,
-          where: { isActive: true },
-        },
+        includeLendingLocation,
         { model: this.models.StorageLocation, as: 'storageLocation' },
         { model: this.models.AssetAttachment, as: 'attachments' },
         {
@@ -119,6 +123,15 @@ class AssetInstanceService {
     }
     const listOptions = buildListOptions(options);
     applyIncludeDeleted(listOptions, filter);
+    const includeLendingLocation = {
+      model: this.models.LendingLocation,
+      as: 'lendingLocation',
+    };
+    if (!options.includeInactiveLendingLocation) {
+      includeLendingLocation.required = true;
+      includeLendingLocation.where = { isActive: true };
+    }
+
     return this.models.Asset.findAll({
       where,
       include: [
@@ -127,19 +140,14 @@ class AssetInstanceService {
           as: 'model',
           include: [{ model: this.models.Manufacturer, as: 'manufacturer' }],
         },
-        {
-          model: this.models.LendingLocation,
-          as: 'lendingLocation',
-          required: true,
-          where: { isActive: true },
-        },
+        includeLendingLocation,
         { model: this.models.StorageLocation, as: 'storageLocation' },
       ],
       ...listOptions,
     });
   }
 
-  async countAssets(filter = {}) {
+  async countAssets(filter = {}, options = {}) {
     const where = {};
     applyIsActiveFilter(where, filter);
     if (filter.lendingLocationId) {
@@ -155,20 +163,22 @@ class AssetInstanceService {
     if (filter.includeDeleted) {
       countOptions.paranoid = false;
     }
-    countOptions.include = [
-      {
-        model: this.models.LendingLocation,
-        as: 'lendingLocation',
-        required: true,
-        where: { isActive: true },
-      },
-    ];
+    if (!options.includeInactiveLendingLocation) {
+      countOptions.include = [
+        {
+          model: this.models.LendingLocation,
+          as: 'lendingLocation',
+          required: true,
+          where: { isActive: true },
+        },
+      ];
+    }
     return this.models.Asset.count({ where, ...countOptions });
   }
 
   async searchAssets(filter = {}, options = {}) {
     const { Asset } = this.models;
-    const { where, include, paranoid } = this.buildSearchQuery(filter);
+    const { where, include, paranoid } = this.buildSearchQuery(filter, options);
     const listOptions = buildListOptions(options);
     if (paranoid === false) {
       listOptions.paranoid = false;
@@ -176,9 +186,9 @@ class AssetInstanceService {
     return Asset.findAll({ where, include, ...listOptions });
   }
 
-  async countSearchAssets(filter = {}) {
+  async countSearchAssets(filter = {}, options = {}) {
     const { Asset } = this.models;
-    const { where, include, paranoid } = this.buildSearchQuery(filter);
+    const { where, include, paranoid } = this.buildSearchQuery(filter, options);
     const countOptions = { distinct: true };
     if (paranoid === false) {
       countOptions.paranoid = false;
@@ -201,7 +211,16 @@ class AssetInstanceService {
     return where;
   }
 
-  buildSearchInclude(filter = {}) {
+  buildSearchInclude(filter = {}, options = {}) {
+    const includeLendingLocation = {
+      model: this.models.LendingLocation,
+      as: 'lendingLocation',
+    };
+    if (!options.includeInactiveLendingLocation) {
+      includeLendingLocation.required = true;
+      includeLendingLocation.where = { isActive: true };
+    }
+
     const include = [
       {
         model: this.models.AssetModel,
@@ -211,12 +230,7 @@ class AssetInstanceService {
           { model: this.models.AssetCategory, as: 'category' },
         ],
       },
-      {
-        model: this.models.LendingLocation,
-        as: 'lendingLocation',
-        required: true,
-        where: { isActive: true },
-      },
+      includeLendingLocation,
       { model: this.models.StorageLocation, as: 'storageLocation' },
     ];
     if (filter.categoryId) {
@@ -271,9 +285,9 @@ class AssetInstanceService {
     return searchPredicates;
   }
 
-  buildSearchQuery(filter = {}) {
+  buildSearchQuery(filter = {}, options = {}) {
     const where = this.buildBaseSearchWhere(filter);
-    const include = this.buildSearchInclude(filter);
+    const include = this.buildSearchInclude(filter, options);
     const { sequelize } = this.models;
     const searchPredicates = this.buildSearchPredicates(filter);
 

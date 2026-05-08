@@ -50,6 +50,7 @@ const registerRbacRoutes = require('./admin/modules/rbacRoutes');
 
 const router = express.Router();
 const services = createServices();
+const adminAssetVisibilityOptions = { includeInactiveLendingLocation: true };
 const OPENING_HOUR_ID_PARAM = ':id([0-9a-fA-F-]{36})';
 const PERMISSION_KEYS = Object.freeze({
   inventoryManage: 'inventory.manage',
@@ -293,14 +294,14 @@ async function loadAssetModelFormData(req, res, next) {
         lendingLocationId: req.lendingLocationId,
         isActive: true,
       },
-      { order: [['name', 'ASC']] }
+      { ...adminAssetVisibilityOptions, order: [['name', 'ASC']] }
     );
     res.locals.viewData.componentModels = componentModelsAll.filter(
       (entry) => (entry.trackingType || 'serialized') !== 'bundle'
     );
 
     if (req.params.id) {
-      const model = await services.assetModelService.getById(req.params.id);
+      const model = await services.assetModelService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && model.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('AssetModel not found');
         err.status = 404;
@@ -322,13 +323,13 @@ async function loadAssetFormData(req, res, next) {
     res.locals.viewData.models = await services.assetModelService.getAll({
       lendingLocationId: req.lendingLocationId,
       isActive: true,
-    });
+    }, adminAssetVisibilityOptions);
     res.locals.viewData.storageLocations = await services.storageLocationService.getAll({
       lendingLocationId: req.lendingLocationId,
       isActive: true,
     });
     if (req.params.id) {
-      const asset = await services.assetInstanceService.getById(req.params.id);
+      const asset = await services.assetInstanceService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;

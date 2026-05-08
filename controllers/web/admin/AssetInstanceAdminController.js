@@ -7,6 +7,8 @@ const {
   buildPagination,
 } = require('../controllerUtils');
 
+const adminAssetVisibilityOptions = { includeInactiveLendingLocation: true };
+
 class AssetInstanceAdminController {
   async index(req, res, next) {
     try {
@@ -36,7 +38,10 @@ class AssetInstanceAdminController {
         filter.includeDeleted = true;
       }
 
-      const models = await services.assetModelService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+      const models = await services.assetModelService.getAll(
+        { lendingLocationId: req.lendingLocationId, isActive: true },
+        adminAssetVisibilityOptions
+      );
       const storageLocations = await services.storageLocationService.getAll({
         lendingLocationId: req.lendingLocationId,
         isActive: true,
@@ -44,11 +49,21 @@ class AssetInstanceAdminController {
       let assets = [];
       let total = 0;
       if (filter.query) {
-        assets = await services.assetInstanceService.searchAssets(filter, { limit, offset, order });
-        total = await services.assetInstanceService.countSearchAssets(filter);
+        assets = await services.assetInstanceService.searchAssets(filter, {
+          ...adminAssetVisibilityOptions,
+          limit,
+          offset,
+          order,
+        });
+        total = await services.assetInstanceService.countSearchAssets(filter, adminAssetVisibilityOptions);
       } else {
-        assets = await services.assetInstanceService.getAll(filter, { limit, offset, order });
-        total = await services.assetInstanceService.countAssets(filter);
+        assets = await services.assetInstanceService.getAll(filter, {
+          ...adminAssetVisibilityOptions,
+          limit,
+          offset,
+          order,
+        });
+        total = await services.assetInstanceService.countAssets(filter, adminAssetVisibilityOptions);
       }
 
       return renderPage(res, 'admin/assets/index', req, {
@@ -77,7 +92,7 @@ class AssetInstanceAdminController {
 
   async show(req, res, next) {
     try {
-      const asset = await services.assetInstanceService.getById(req.params.id);
+      const asset = await services.assetInstanceService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;
@@ -100,7 +115,10 @@ class AssetInstanceAdminController {
     try {
       const models = res.locals.viewData && res.locals.viewData.models
         ? res.locals.viewData.models
-        : await services.assetModelService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+        : await services.assetModelService.getAll(
+          { lendingLocationId: req.lendingLocationId, isActive: true },
+          adminAssetVisibilityOptions
+        );
       const storageLocations = res.locals.viewData && res.locals.viewData.storageLocations
         ? res.locals.viewData.storageLocations
         : await services.storageLocationService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
@@ -142,7 +160,7 @@ class AssetInstanceAdminController {
     try {
       const asset = res.locals.viewData && res.locals.viewData.asset
         ? res.locals.viewData.asset
-        : await services.assetInstanceService.getById(req.params.id);
+        : await services.assetInstanceService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;
@@ -150,7 +168,10 @@ class AssetInstanceAdminController {
       }
       const models = res.locals.viewData && res.locals.viewData.models
         ? res.locals.viewData.models
-        : await services.assetModelService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
+        : await services.assetModelService.getAll(
+          { lendingLocationId: req.lendingLocationId, isActive: true },
+          adminAssetVisibilityOptions
+        );
       const storageLocations = res.locals.viewData && res.locals.viewData.storageLocations
         ? res.locals.viewData.storageLocations
         : await services.storageLocationService.getAll({ lendingLocationId: req.lendingLocationId, isActive: true });
@@ -174,7 +195,7 @@ class AssetInstanceAdminController {
     try {
       const asset = res.locals.viewData && res.locals.viewData.asset
         ? res.locals.viewData.asset
-        : await services.assetInstanceService.getById(req.params.id);
+        : await services.assetInstanceService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;
@@ -199,7 +220,7 @@ class AssetInstanceAdminController {
 
   async remove(req, res, next) {
     try {
-      const asset = await services.assetInstanceService.getById(req.params.id);
+      const asset = await services.assetInstanceService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;
@@ -218,7 +239,10 @@ class AssetInstanceAdminController {
   async restore(req, res, next) {
     try {
       const includeDeleted = parseIncludeDeleted(req) || req.body.includeDeleted === '1';
-      const asset = await services.assetInstanceService.getById(req.params.id, { includeDeleted: true });
+      const asset = await services.assetInstanceService.getById(req.params.id, {
+        ...adminAssetVisibilityOptions,
+        includeDeleted: true,
+      });
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;
@@ -236,7 +260,7 @@ class AssetInstanceAdminController {
 
   async reportMaintenance(req, res, next) {
     try {
-      const asset = await services.assetInstanceService.getById(req.params.id);
+      const asset = await services.assetInstanceService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;
@@ -257,7 +281,7 @@ class AssetInstanceAdminController {
 
   async startMaintenance(req, res, next) {
     try {
-      const asset = await services.assetInstanceService.getById(req.params.id);
+      const asset = await services.assetInstanceService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;
@@ -285,7 +309,7 @@ class AssetInstanceAdminController {
 
   async completeMaintenance(req, res, next) {
     try {
-      const asset = await services.assetInstanceService.getById(req.params.id);
+      const asset = await services.assetInstanceService.getById(req.params.id, adminAssetVisibilityOptions);
       if (req.lendingLocationId && asset.lendingLocationId !== req.lendingLocationId) {
         const err = new Error('Asset not found');
         err.status = 404;

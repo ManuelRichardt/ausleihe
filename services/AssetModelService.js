@@ -270,45 +270,53 @@ class AssetModelService {
     }
     const listOptions = buildListOptions(options);
     applyIncludeDeleted(listOptions, filter);
+    const includeLendingLocation = {
+      model: this.models.LendingLocation,
+      as: 'lendingLocation',
+    };
+    if (!options.includeInactiveLendingLocation) {
+      includeLendingLocation.required = true;
+      includeLendingLocation.where = { isActive: true };
+    }
+
     return this.models.AssetModel.findAll({
       where,
       include: [
         { model: this.models.Manufacturer, as: 'manufacturer' },
         { model: this.models.AssetCategory, as: 'category' },
-        {
-          model: this.models.LendingLocation,
-          as: 'lendingLocation',
-          required: true,
-          where: { isActive: true },
-        },
+        includeLendingLocation,
         { model: this.models.AssetAttachment, as: 'attachments' },
       ],
       ...listOptions,
     });
   }
 
-  async getByIds(ids) {
+  async getByIds(ids, options = {}) {
     await this.ensureJsonColumnsSanitized();
     if (!Array.isArray(ids) || !ids.length) {
       return [];
     }
+    const includeLendingLocation = {
+      model: this.models.LendingLocation,
+      as: 'lendingLocation',
+    };
+    if (!options.includeInactiveLendingLocation) {
+      includeLendingLocation.required = true;
+      includeLendingLocation.where = { isActive: true };
+    }
+
     return this.models.AssetModel.findAll({
       where: { id: ids },
       include: [
         { model: this.models.Manufacturer, as: 'manufacturer' },
         { model: this.models.AssetCategory, as: 'category' },
-        {
-          model: this.models.LendingLocation,
-          as: 'lendingLocation',
-          required: true,
-          where: { isActive: true },
-        },
+        includeLendingLocation,
         { model: this.models.AssetAttachment, as: 'attachments' },
       ],
     });
   }
 
-  async countAssetModels(filter = {}) {
+  async countAssetModels(filter = {}, options = {}) {
     const where = {};
     applyLendingLocationFilter(where, filter);
     if (filter.manufacturerId) {
@@ -351,14 +359,16 @@ class AssetModelService {
     if (filter.includeDeleted) {
       countOptions.paranoid = false;
     }
-    countOptions.include = [
-      {
-        model: this.models.LendingLocation,
-        as: 'lendingLocation',
-        required: true,
-        where: { isActive: true },
-      },
-    ];
+    if (!options.includeInactiveLendingLocation) {
+      countOptions.include = [
+        {
+          model: this.models.LendingLocation,
+          as: 'lendingLocation',
+          required: true,
+          where: { isActive: true },
+        },
+      ];
+    }
     return this.models.AssetModel.count({ where, ...countOptions });
   }
 

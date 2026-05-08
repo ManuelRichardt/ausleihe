@@ -226,7 +226,7 @@ app.get('/healthz', (req, res) => {
 });
 
 app.use('/', webRouter);
-app.use('/api/v1', apiV1Router);
+//app.use('/api/v1', apiV1Router);
 
 // Initialize database connection without blocking server startup
 (async () => {
