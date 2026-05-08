@@ -219,7 +219,13 @@ class AssetModelService {
     if (options.includeDeleted) {
       findOptions.paranoid = false;
     }
-    return findByPkOrThrow(this.models.AssetModel, id, 'AssetModel not found', findOptions);
+    const assetModel = await findByPkOrThrow(this.models.AssetModel, id, 'AssetModel not found', findOptions);
+    if (!options.includeInactiveLendingLocation && (!assetModel.lendingLocation || !assetModel.lendingLocation.isActive)) {
+      const err = new Error('AssetModel not found');
+      err.status = 404;
+      throw err;
+    }
+    return assetModel;
   }
 
   async getAll(filter = {}, options = {}) {
@@ -269,7 +275,12 @@ class AssetModelService {
       include: [
         { model: this.models.Manufacturer, as: 'manufacturer' },
         { model: this.models.AssetCategory, as: 'category' },
-        { model: this.models.LendingLocation, as: 'lendingLocation' },
+        {
+          model: this.models.LendingLocation,
+          as: 'lendingLocation',
+          required: true,
+          where: { isActive: true },
+        },
         { model: this.models.AssetAttachment, as: 'attachments' },
       ],
       ...listOptions,
@@ -286,7 +297,12 @@ class AssetModelService {
       include: [
         { model: this.models.Manufacturer, as: 'manufacturer' },
         { model: this.models.AssetCategory, as: 'category' },
-        { model: this.models.LendingLocation, as: 'lendingLocation' },
+        {
+          model: this.models.LendingLocation,
+          as: 'lendingLocation',
+          required: true,
+          where: { isActive: true },
+        },
         { model: this.models.AssetAttachment, as: 'attachments' },
       ],
     });
@@ -335,6 +351,14 @@ class AssetModelService {
     if (filter.includeDeleted) {
       countOptions.paranoid = false;
     }
+    countOptions.include = [
+      {
+        model: this.models.LendingLocation,
+        as: 'lendingLocation',
+        required: true,
+        where: { isActive: true },
+      },
+    ];
     return this.models.AssetModel.count({ where, ...countOptions });
   }
 

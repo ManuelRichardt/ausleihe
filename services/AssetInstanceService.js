@@ -77,7 +77,12 @@ class AssetInstanceService {
             { model: this.models.AssetCategory, as: 'category' },
           ],
         },
-        { model: this.models.LendingLocation, as: 'lendingLocation' },
+        {
+          model: this.models.LendingLocation,
+          as: 'lendingLocation',
+          required: true,
+          where: { isActive: true },
+        },
         { model: this.models.StorageLocation, as: 'storageLocation' },
         { model: this.models.AssetAttachment, as: 'attachments' },
         {
@@ -122,7 +127,12 @@ class AssetInstanceService {
           as: 'model',
           include: [{ model: this.models.Manufacturer, as: 'manufacturer' }],
         },
-        { model: this.models.LendingLocation, as: 'lendingLocation' },
+        {
+          model: this.models.LendingLocation,
+          as: 'lendingLocation',
+          required: true,
+          where: { isActive: true },
+        },
         { model: this.models.StorageLocation, as: 'storageLocation' },
       ],
       ...listOptions,
@@ -145,6 +155,14 @@ class AssetInstanceService {
     if (filter.includeDeleted) {
       countOptions.paranoid = false;
     }
+    countOptions.include = [
+      {
+        model: this.models.LendingLocation,
+        as: 'lendingLocation',
+        required: true,
+        where: { isActive: true },
+      },
+    ];
     return this.models.Asset.count({ where, ...countOptions });
   }
 
@@ -193,7 +211,12 @@ class AssetInstanceService {
           { model: this.models.AssetCategory, as: 'category' },
         ],
       },
-      { model: this.models.LendingLocation, as: 'lendingLocation' },
+      {
+        model: this.models.LendingLocation,
+        as: 'lendingLocation',
+        required: true,
+        where: { isActive: true },
+      },
       { model: this.models.StorageLocation, as: 'storageLocation' },
     ];
     if (filter.categoryId) {
