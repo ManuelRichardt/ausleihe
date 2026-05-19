@@ -398,9 +398,20 @@ class PrivacyService {
   }
 
   async isEligibleForExternalCleanup(userId) {
-    const { activeLoanCount, returnedLoanCount } = await this.#getLoanStateCountsForUser(userId);
-    // Eligibility requires zero active and zero returned loans before anonymization.
-    return activeLoanCount === 0 && returnedLoanCount === 0;
+    const config = await this.getConfig({ createIfMissing: true });
+    const retentionMonths = Math.max(parseInt(config.returnedLoanRetentionMonths || 3, 10), 1);
+    const retentionCutoff = new Date();
+    retentionCutoff.setMonth(retentionCutoff.getMonth() - retentionMonths);
+
+    const { activeLoanCount, recentReturnedLoanCount, disallowedLendingRoleCount } =
+      await this.#getExternalCleanupEligibilityState(userId, retentionCutoff);
+
+    // External users may only be deleted if all policy constraints are satisfied.
+    return (
+      activeLoanCount === 0
+      && recentReturnedLoanCount === 0
+      && disallowedLendingRoleCount === 0
+    );
   }
 
   async deleteStaleExternalUsers() {
@@ -426,21 +437,59 @@ class PrivacyService {
     return { deletedUsers };
   }
 
-  async #countLoansByStatuses(userId, statuses) {
+  async #countActiveLoans(userId) {
     return this.models.Loan.count({
       where: {
         userId,
-        status: { [Op.in]: statuses },
+        status: { [Op.in]: ACTIVE_LOAN_STATUSES },
       },
     });
   }
 
-  async #getLoanStateCountsForUser(userId) {
-    const [activeLoanCount, returnedLoanCount] = await Promise.all([
-      this.#countLoansByStatuses(userId, ACTIVE_LOAN_STATUSES),
-      this.#countLoansByStatuses(userId, [LOAN_STATUS.RETURNED]),
+  async #countReturnedLoansWithinRetention(userId, retentionCutoff) {
+    return this.models.Loan.count({
+      where: {
+        userId,
+        status: LOAN_STATUS.RETURNED,
+        [Op.or]: [
+          { returnedAt: null },
+          { returnedAt: { [Op.gt]: retentionCutoff } },
+        ],
+      },
+    });
+  }
+
+  async #countDisallowedLendingRoles(userId) {
+    return this.models.UserRole.count({
+      where: {
+        userId,
+        lendingLocationId: { [Op.not]: null },
+      },
+      include: [
+        {
+          model: this.models.Role,
+          as: 'role',
+          required: true,
+          where: this.models.sequelize.where(
+            this.models.sequelize.fn('LOWER', this.models.sequelize.col('role.name')),
+            { [Op.ne]: 'student' }
+          ),
+        },
+      ],
+    });
+  }
+
+  async #getExternalCleanupEligibilityState(userId, retentionCutoff) {
+    const [activeLoanCount, recentReturnedLoanCount, disallowedLendingRoleCount] = await Promise.all([
+      this.#countActiveLoans(userId),
+      this.#countReturnedLoansWithinRetention(userId, retentionCutoff),
+      this.#countDisallowedLendingRoles(userId),
     ]);
-    return { activeLoanCount, returnedLoanCount };
+    return {
+      activeLoanCount,
+      recentReturnedLoanCount,
+      disallowedLendingRoleCount,
+    };
   }
 
   async anonymizeAndDeleteUser(userId, options = {}) {
