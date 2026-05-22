@@ -128,7 +128,18 @@ function buildSwitchLanguageUrl(req) {
   };
 }
 
-function patchRender(res, next, locale, phraseTranslations) {
+function shouldApplyPhraseFallback(req, locale) {
+  if (locale !== 'en') {
+    return false;
+  }
+  const requestPath = String((req && req.path) || '');
+  if (requestPath.startsWith('/system/ui-texts')) {
+    return false;
+  }
+  return true;
+}
+
+function patchRender(req, res, next, locale, phraseTranslations) {
   const originalRender = res.render.bind(res);
   res.render = function patchedRender(view, options, callback) {
     let renderOptions = options;
@@ -145,7 +156,9 @@ function patchRender(res, next, locale, phraseTranslations) {
         }
         return next(err);
       }
-      const localizedHtml = locale === 'en' ? translateMarkup(html, phraseTranslations) : html;
+      const localizedHtml = shouldApplyPhraseFallback(req, locale)
+        ? translateMarkup(html, phraseTranslations)
+        : html;
       if (hasCallback) {
         return cb(null, localizedHtml);
       }
@@ -182,7 +195,7 @@ module.exports = async function i18nMiddleware(req, res, next) {
     res.locals.switchLanguageUrl = switchLanguageUrl;
 
     // Render patch is request-scoped and must be applied once per request.
-    patchRender(res, next, locale, phraseTranslations);
+    patchRender(req, res, next, locale, phraseTranslations);
 
     return next();
   } catch (err) {
