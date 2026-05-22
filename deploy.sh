@@ -10,7 +10,7 @@ MAIL="deine-mail@beispiel.de"
 EAB_KID="DEINE_KEY_ID"
 EAB_HMAC="DEIN_HMAC_KEY"
 API_URL="https://api.dein-rechenzentrum.de/acme"
-DOMAIN="deine-domain.de"
+DOMAINS=("deine-domain.de")
 
 # Modus auslesen
 MODE=${1:-}
@@ -259,20 +259,31 @@ if [ "$MODE" == "--dev" ]; then
     SERVER_NAME="_"
 else
     echo "Modus PROD: Fordere Zertifikat via EAB an..."
+
+    if [ "${#DOMAINS[@]}" -eq 0 ] || [ -z "${DOMAINS[0]}" ]; then
+        echo "Fehler: Mindestens eine Domain in DOMAINS muss gesetzt sein."
+        exit 1
+    fi
+
+    CERTBOT_DOMAIN_ARGS=()
+    for domain in "${DOMAINS[@]}"; do
+        CERTBOT_DOMAIN_ARGS+=(--domain "$domain")
+    done
+
     sudo certbot certonly --standalone --non-interactive --agree-tos \
       --email "$MAIL" \
       --eab-kid "$EAB_KID" \
       --eab-hmac-key "$EAB_HMAC" \
       --server "$API_URL" \
-      --domain "$DOMAIN"
-    CERT_PATH="/etc/letsencrypt/live/$DOMAIN/fullchain.pem"
-    KEY_PATH="/etc/letsencrypt/live/$DOMAIN/privkey.pem"
-    SERVER_NAME="$DOMAIN"
+      "${CERTBOT_DOMAIN_ARGS[@]}"
+    CERT_PATH="/etc/letsencrypt/live/${DOMAINS[0]}/fullchain.pem"
+    KEY_PATH="/etc/letsencrypt/live/${DOMAINS[0]}/privkey.pem"
+    SERVER_NAME="${DOMAINS[*]}"
 fi
 
 # 5. Nginx Konfiguration
 echo "Konfiguriere Nginx..."
-NGINX_CONF="/etc/nginx/sites-available/nodejs-app"
+NGINX_CONF="/etc/nginx/conf.d/nodejs-app.conf"
 sudo bash -c "cat > $NGINX_CONF" <<EOF
 server {
     listen 80;
@@ -301,7 +312,6 @@ server {
 }
 EOF
 
-sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 
 # 6. Docker Compose starten
