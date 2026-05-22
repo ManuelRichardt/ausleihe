@@ -1,5 +1,7 @@
 const { LOAN_ITEM_TYPE, LOAN_ITEM_STATUS, LOAN_STATUS } = require('../config/dbConstants');
 
+const ADMIN_ASSET_VISIBILITY_OPTIONS = Object.freeze({ includeInactiveLendingLocation: true });
+
 class LoanPortalService {
   constructor(models, loanService, assetModelService, assetInstanceService) {
     this.models = models;
@@ -462,7 +464,11 @@ class LoanPortalService {
       lendingLocationId,
       query: q,
       isActive: true,
-    }, { limit: 12, order: [['name', 'ASC']] });
+    }, {
+      ...ADMIN_ASSET_VISIBILITY_OPTIONS,
+      limit: 12,
+      order: [['name', 'ASC']],
+    });
     return models.map((model) => ({
       id: model.id,
       name: model.name,
@@ -532,6 +538,7 @@ class LoanPortalService {
         isActive: true,
       },
       {
+        ...ADMIN_ASSET_VISIBILITY_OPTIONS,
         limit: 20,
         order: [['inventoryNumber', 'ASC'], ['serialNumber', 'ASC']],
       }
