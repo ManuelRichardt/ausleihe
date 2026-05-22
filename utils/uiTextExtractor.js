@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const ATTRIBUTE_REGEX = /\b(?:placeholder|title|aria-label|alt|value|data-bs-title)\s*=\s*["']([^"']+)["']/gi;
+const TRANSLATOR_CALL_REGEX = /\b(?:t|tr)\s*\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*\)/g;
 
 function normalizeText(value) {
   return String(value || '')
@@ -82,6 +83,29 @@ function extractCandidatesFromContent(content) {
   return Array.from(candidates);
 }
 
+function extractTranslatorEntriesFromContent(content, relativePath) {
+  const entries = new Map();
+  const source = String(content || '');
+  TRANSLATOR_CALL_REGEX.lastIndex = 0;
+
+  let callMatch = TRANSLATOR_CALL_REGEX.exec(source);
+  while (callMatch) {
+    const key = String(callMatch[1] || '').trim();
+    const fallback = normalizeText(callMatch[2] || '');
+    if (key && shouldIncludeText(fallback)) {
+      entries.set(key, {
+        key,
+        de: fallback,
+        en: fallback,
+        source: relativePath,
+      });
+    }
+    callMatch = TRANSLATOR_CALL_REGEX.exec(source);
+  }
+
+  return Array.from(entries.values());
+}
+
 function walkViewFiles(rootDir, acc = []) {
   const entries = fs.readdirSync(rootDir, { withFileTypes: true });
   entries.forEach((entry) => {
@@ -103,6 +127,13 @@ function extractUiTextEntriesFromViews(viewsRoot) {
   files.forEach((filePath) => {
     const relativePath = path.relative(viewsRoot, filePath).replace(/\\/g, '/');
     const content = fs.readFileSync(filePath, 'utf8');
+    const translatorEntries = extractTranslatorEntriesFromContent(content, relativePath);
+    translatorEntries.forEach((entry) => {
+      if (!byKey.has(entry.key)) {
+        byKey.set(entry.key, entry);
+      }
+    });
+
     const candidates = extractCandidatesFromContent(content);
     candidates.forEach((text) => {
       const key = toUiTextKey(text);

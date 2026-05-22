@@ -151,6 +151,8 @@ const uiTextSeed = [
   { key: 'nav.select_lending_location', de: 'Ausleihe wählen', en: 'Choose lending location' },
   { key: 'common.select', de: 'Bitte wählen', en: 'Please select' },
   { key: 'common.apply', de: 'Setzen', en: 'Apply' },
+  { key: 'assets.actions.reserve', de: 'Reservieren', en: 'Reserve' },
+  { key: 'assets.actions.back_to_list', de: 'Zurück zur Liste', en: 'Back to list' },
   { key: 'admin.sidebar.title', de: 'Admin-Panel', en: 'Admin panel' },
   { key: 'admin.sidebar.close', de: 'Admin-Panel schließen', en: 'Close admin panel' },
   { key: 'admin.sidebar.inventory_management', de: 'Inventar Verwaltung', en: 'Inventory management' },

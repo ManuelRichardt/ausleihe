@@ -283,11 +283,11 @@
 
       <div class="d-flex flex-wrap gap-2 mt-4">
         <% if (can('loan.create') && !(trackingType === 'bundle' && !safeBundleDefinition)) { %>
-          <a class="btn btn-primary" href="/assets/<%= model.id %>/reserve">Reservieren</a>
+          <a class="btn btn-primary" href="/assets/<%= model.id %>/reserve"><%= t('assets.actions.reserve', 'Reservieren') %></a>
         <% } else if (trackingType === 'bundle' && !safeBundleDefinition) { %>
           <button class="btn btn-secondary" type="button" disabled>Bundle nicht konfiguriert</button>
         <% } %>
-        <a class="btn btn-outline-secondary" href="/assets">Zurueck zur Liste</a>
+        <a class="btn btn-outline-secondary" href="/assets"><%= t('assets.actions.back_to_list', 'Zurück zur Liste') %></a>
       </div>
     </div>
   </div>
