@@ -20,6 +20,21 @@
   const customFieldDefinitionsList = Array.isArray(customFieldDefinitions) ? customFieldDefinitions : [];
   const componentModelOptions = Array.isArray(componentModels) ? componentModels : [];
   const safeBundleDefinition = (typeof bundleDefinition !== 'undefined' && bundleDefinition) ? bundleDefinition : null;
+  const modelAttachments = Array.isArray(safeModel.attachments) ? safeModel.attachments : [];
+  const modelImageAttachments = modelAttachments.filter(function (item) {
+    return item && item.kind === 'image';
+  });
+  const modelManualAttachments = modelAttachments.filter(function (item) {
+    return item && item.kind === 'manual';
+  });
+  const modelDocumentAttachments = modelAttachments.filter(function (item) {
+    return item && item.kind === 'document';
+  });
+  const modelOtherAttachments = modelAttachments.filter(function (item) {
+    return item && item.kind === 'other';
+  });
+  const hasEditableAttachments = modelImageAttachments.length || modelManualAttachments.length || modelDocumentAttachments.length || modelOtherAttachments.length;
+  const editReturnToPath = safeModel && safeModel.id ? `/admin/asset-models/${safeModel.id}/edit` : '';
 
   const toArray = function (value) {
     if (Array.isArray(value)) {
@@ -505,6 +520,7 @@
           multiple: true,
           errorFor,
         }) %>
+
       </div>
     </div>
 
@@ -529,4 +545,119 @@
       </div>
     </div>
   </form>
+
+  <% if (isEditMode && safeModel.id && hasEditableAttachments) { %>
+    <div class="card shadow-sm mt-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Vorhandene Anhänge bearbeiten</h2>
+
+        <% if (modelImageAttachments.length) { %>
+          <div class="mb-4">
+            <div class="fw-semibold mb-2">Bilder</div>
+            <div class="d-grid gap-3">
+              <% modelImageAttachments.forEach(function (file) { %>
+                <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="border rounded p-3 bg-white">
+                  <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+                  <input type="hidden" name="returnTo" value="<%= editReturnToPath %>">
+                  <div class="row g-3 align-items-center">
+                    <div class="col-md-3">
+                      <a href="<%= file.url %>" target="_blank" rel="noreferrer">
+                        <img src="<%= file.url %>" alt="Asset Model Bild" class="img-thumbnail w-100">
+                      </a>
+                    </div>
+                    <div class="col-md-5">
+                      <label class="form-label mb-1">Titel</label>
+                      <input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel">
+                    </div>
+                    <div class="col-md-2">
+                      <label class="form-label mb-1">Typ</label>
+                      <select name="kind" class="form-select form-select-sm">
+                        <option value="image" selected>image</option>
+                        <option value="manual">manual</option>
+                        <option value="document">document</option>
+                        <option value="other">other</option>
+                      </select>
+                    </div>
+                    <div class="col-md-2 d-flex justify-content-end gap-2">
+                      <div class="form-check mt-1">
+                        <input class="form-check-input" type="checkbox" name="isPrimary" value="1" <%= file.isPrimary ? 'checked' : '' %> title="Primärbild">
+                      </div>
+                      <button type="submit" class="btn btn-outline-primary btn-sm" title="Speichern"><i class="bi bi-check2"></i></button>
+                      <button
+                        type="submit"
+                        formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete"
+                        formmethod="post"
+                        class="btn btn-outline-danger btn-sm"
+                        title="Löschen"
+                      ><i class="bi bi-trash3-fill"></i></button>
+                    </div>
+                  </div>
+                </form>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (modelManualAttachments.length) { %>
+          <div class="mb-4">
+            <div class="fw-semibold mb-2">Manuals</div>
+            <div class="list-group">
+              <% modelManualAttachments.forEach(function (file) { %>
+                <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="list-group-item">
+                  <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+                  <input type="hidden" name="returnTo" value="<%= editReturnToPath %>">
+                  <div class="row g-2 align-items-center">
+                    <div class="col-md-4"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
+                    <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual" selected>manual</option><option value="document">document</option><option value="other">other</option></select></div>
+                    <div class="col-md-3"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                    <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
+                  </div>
+                </form>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (modelDocumentAttachments.length) { %>
+          <div class="mb-4">
+            <div class="fw-semibold mb-2">Documents</div>
+            <div class="list-group">
+              <% modelDocumentAttachments.forEach(function (file) { %>
+                <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="list-group-item">
+                  <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+                  <input type="hidden" name="returnTo" value="<%= editReturnToPath %>">
+                  <div class="row g-2 align-items-center">
+                    <div class="col-md-4"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
+                    <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual">manual</option><option value="document" selected>document</option><option value="other">other</option></select></div>
+                    <div class="col-md-3"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                    <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
+                  </div>
+                </form>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+
+        <% if (modelOtherAttachments.length) { %>
+          <div>
+            <div class="fw-semibold mb-2">Other</div>
+            <div class="list-group">
+              <% modelOtherAttachments.forEach(function (file) { %>
+                <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="list-group-item">
+                  <input type="hidden" name="csrfToken" value="<%= safeCsrf %>">
+                  <input type="hidden" name="returnTo" value="<%= editReturnToPath %>">
+                  <div class="row g-2 align-items-center">
+                    <div class="col-md-4"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
+                    <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual">manual</option><option value="document">document</option><option value="other" selected>other</option></select></div>
+                    <div class="col-md-3"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                    <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
+                  </div>
+                </form>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
 </section>

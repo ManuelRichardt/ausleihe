@@ -13,6 +13,21 @@ const { parseBooleanToken } = require('../../../utils/valueParsing');
 const adminAssetVisibilityOptions = { includeInactiveLendingLocation: true };
 
 class AssetModelAdminController {
+  resolveAttachmentReturnPath(req, modelId) {
+    const fallbackPath = `/admin/asset-models/${modelId}`;
+    const requestedPath = req && req.body && typeof req.body.returnTo === 'string'
+      ? req.body.returnTo.trim()
+      : '';
+    if (!requestedPath) {
+      return fallbackPath;
+    }
+    const allowedEditPath = `/admin/asset-models/${modelId}/edit`;
+    if (requestedPath === allowedEditPath) {
+      return requestedPath;
+    }
+    return fallbackPath;
+  }
+
   normalizeAttachmentTitle(value) {
     const text = String(value || '').trim();
     if (!text) {
@@ -325,7 +340,7 @@ class AssetModelAdminController {
       if (typeof req.flash === 'function') {
         req.flash('success', 'Anhang gespeichert');
       }
-      return res.redirect(`/admin/asset-models/${model.id}`);
+      return res.redirect(this.resolveAttachmentReturnPath(req, model.id));
     } catch (err) {
       return handleError(res, next, req, err);
     }
@@ -348,7 +363,7 @@ class AssetModelAdminController {
       if (typeof req.flash === 'function') {
         req.flash('success', 'Anhang gelöscht');
       }
-      return res.redirect(`/admin/asset-models/${model.id}`);
+      return res.redirect(this.resolveAttachmentReturnPath(req, model.id));
     } catch (err) {
       return handleError(res, next, req, err);
     }
