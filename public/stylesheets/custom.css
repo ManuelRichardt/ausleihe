@@ -150,6 +150,18 @@
   background-color: #f8f9fa;
 }
 
+.assets .asset-card-image,
+.assets .asset-card-image-placeholder {
+  height: 250px;
+}
+
+@media (min-width: 1200px) {
+  .assets .assets-grid-col {
+    flex: 0 0 20%;
+    max-width: 20%;
+  }
+}
+
 .category-card-image,
 .category-card-image-placeholder {
   height: 400px;

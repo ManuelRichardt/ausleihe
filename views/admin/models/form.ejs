@@ -31,10 +31,13 @@
     return item && item.kind === 'document';
   });
   const modelOtherAttachments = modelAttachments.filter(function (item) {
-    return item && item.kind === 'other';
+    return item && item.kind !== 'image' && item.kind !== 'manual' && item.kind !== 'document';
   });
-  const hasEditableAttachments = modelImageAttachments.length || modelManualAttachments.length || modelDocumentAttachments.length || modelOtherAttachments.length;
+  const hasEditableAttachments = modelAttachments.length;
   const editReturnToPath = safeModel && safeModel.id ? `/admin/asset-models/${safeModel.id}/edit` : '';
+  const hasAttachmentUrl = function (item) {
+    return Boolean(item && typeof item.url === 'string' && item.url.trim());
+  };
 
   const toArray = function (value) {
     if (Array.isArray(value)) {
@@ -561,9 +564,13 @@
                   <input type="hidden" name="returnTo" value="<%= editReturnToPath %>">
                   <div class="row g-3 align-items-center">
                     <div class="col-md-3">
-                      <a href="<%= file.url %>" target="_blank" rel="noreferrer">
-                        <img src="<%= file.url %>" alt="Asset Model Bild" class="img-thumbnail w-100">
-                      </a>
+                      <% if (hasAttachmentUrl(file)) { %>
+                        <a href="<%= file.url %>" target="_blank" rel="noreferrer">
+                          <img src="<%= file.url %>" alt="Asset Model Bild" class="img-thumbnail w-100">
+                        </a>
+                      <% } else { %>
+                        <div class="border rounded p-3 text-muted small">Dateipfad fehlt oder ist ungültig.</div>
+                      <% } %>
                     </div>
                     <div class="col-md-5">
                       <label class="form-label mb-1">Titel</label>
@@ -609,7 +616,13 @@
                   <div class="row g-2 align-items-center">
                     <div class="col-md-4"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
                     <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual" selected>manual</option><option value="document">document</option><option value="other">other</option></select></div>
-                    <div class="col-md-3"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                    <div class="col-md-3">
+                      <% if (hasAttachmentUrl(file)) { %>
+                        <a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a>
+                      <% } else { %>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" disabled>Pfad fehlt</button>
+                      <% } %>
+                    </div>
                     <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
                   </div>
                 </form>
@@ -629,7 +642,13 @@
                   <div class="row g-2 align-items-center">
                     <div class="col-md-4"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
                     <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual">manual</option><option value="document" selected>document</option><option value="other">other</option></select></div>
-                    <div class="col-md-3"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                    <div class="col-md-3">
+                      <% if (hasAttachmentUrl(file)) { %>
+                        <a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a>
+                      <% } else { %>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" disabled>Pfad fehlt</button>
+                      <% } %>
+                    </div>
                     <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
                   </div>
                 </form>
@@ -640,7 +659,7 @@
 
         <% if (modelOtherAttachments.length) { %>
           <div>
-            <div class="fw-semibold mb-2">Other</div>
+            <div class="fw-semibold mb-2">Other / Unbekannt</div>
             <div class="list-group">
               <% modelOtherAttachments.forEach(function (file) { %>
                 <form method="post" action="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>" class="list-group-item">
@@ -648,8 +667,14 @@
                   <input type="hidden" name="returnTo" value="<%= editReturnToPath %>">
                   <div class="row g-2 align-items-center">
                     <div class="col-md-4"><input type="text" name="title" class="form-control form-control-sm" value="<%= file.title || '' %>" placeholder="Titel"></div>
-                    <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual">manual</option><option value="document">document</option><option value="other" selected>other</option></select></div>
-                    <div class="col-md-3"><a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a></div>
+                    <div class="col-md-3"><select name="kind" class="form-select form-select-sm"><option value="image">image</option><option value="manual">manual</option><option value="document">document</option><option value="other" <%= file.kind === 'other' || !file.kind ? 'selected' : '' %>>other</option></select></div>
+                    <div class="col-md-3">
+                      <% if (hasAttachmentUrl(file)) { %>
+                        <a class="btn btn-outline-secondary btn-sm w-100" href="<%= file.url %>" target="_blank" rel="noreferrer">Öffnen</a>
+                      <% } else { %>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100" disabled>Pfad fehlt</button>
+                      <% } %>
+                    </div>
                     <div class="col-md-2 d-flex justify-content-end gap-2"><button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2"></i></button><button type="submit" formaction="/admin/asset-models/<%= safeModel.id %>/attachments/<%= file.id %>/delete" formmethod="post" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash3-fill"></i></button></div>
                   </div>
                 </form>

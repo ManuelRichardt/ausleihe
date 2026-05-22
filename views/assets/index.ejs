@@ -143,7 +143,7 @@
             const primaryImage = attachments.find(function(att) { return att.kind === 'image' && att.isPrimary; }) || attachments.find(function(att) { return att.kind === 'image'; });
             const imageUrl = primaryImage ? primaryImage.url : (model.imageUrl || null);
           %>
-          <div class="col-12 col-md-6 col-xl-4">
+          <div class="col-12 col-md-6 col-xl-4 assets-grid-col">
             <div class="card h-100 shadow-sm">
               <% if (imageUrl) { %>
                 <a href="/assets/<%= model.id %>">
