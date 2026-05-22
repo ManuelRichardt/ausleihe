@@ -4,6 +4,8 @@ set -euo pipefail
 # --- ALLGEMEINE KONFIGURATION ---
 GIT_REPO="https://github.com/ManuelRichardt/ausleihe.git"
 APP_DIR="/var/www/app"
+DEPLOY_USER="${SUDO_USER:-$USER}"
+DEPLOY_GROUP="$(id -gn "$DEPLOY_USER")"
 
 # --- PROD SPEZIFISCH (Wird nur bei --prod genutzt) ---
 MAIL="deine-mail@beispiel.de"
@@ -21,6 +23,14 @@ if [[ "$MODE" != "--dev" && "$MODE" != "--prod" ]]; then
 fi
 
 echo "Starte Deployment im Modus: ${MODE#--}"
+
+run_as_deploy_user() {
+    if [ "$(id -un)" = "$DEPLOY_USER" ]; then
+        "$@"
+    else
+        sudo -u "$DEPLOY_USER" "$@"
+    fi
+}
 
 prepare_env_file() {
     local compose_file="$APP_DIR/docker-compose.yml"
@@ -204,7 +214,7 @@ PY
 sudo apt update && sudo apt install -y curl git nginx openssl python3-certbot-nginx
 if ! command -v docker &> /dev/null; then
     curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
-    sudo usermod -aG docker $USER
+    sudo usermod -aG docker "$DEPLOY_USER"
 fi
 
 DOCKER_COMPOSE_CMD=(docker compose)
@@ -232,12 +242,12 @@ sudo ufw route allow proto tcp from any to any port 389
 sudo ufw --force enable
 
 # 3. Projekt klonen
-sudo mkdir -p $APP_DIR
-sudo chown $USER:$USER $APP_DIR
+sudo mkdir -p "$APP_DIR"
+sudo chown -R "$DEPLOY_USER:$DEPLOY_GROUP" "$APP_DIR"
 if [ ! -d "$APP_DIR/.git" ]; then
-    git clone $GIT_REPO $APP_DIR
+    run_as_deploy_user git clone "$GIT_REPO" "$APP_DIR"
 else
-    git -C "$APP_DIR" pull --ff-only
+    run_as_deploy_user git -C "$APP_DIR" pull --ff-only
 fi
 
 prepare_env_file
