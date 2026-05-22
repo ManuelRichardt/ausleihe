@@ -123,7 +123,11 @@
           <h2 class="h6 mb-0">Beschreibung</h2>
         </div>
         <div class="card-body">
-          <p class="mb-0 preserve-text-format"><%= model.description || 'Keine Beschreibung vorhanden.' %></p>
+          <% if (model.description && String(model.description).trim()) { %>
+            <div class="mb-0 richtext-render"><%- model.description %></div>
+          <% } else { %>
+            <p class="mb-0">Keine Beschreibung vorhanden.</p>
+          <% } %>
         </div>
       </div>
 
@@ -133,7 +137,7 @@
             <h2 class="h6 mb-0">Technische Beschreibung</h2>
           </div>
           <div class="card-body">
-            <p class="mb-0 preserve-text-format"><%= model.technicalDescription %></p>
+            <div class="mb-0 richtext-render"><%- model.technicalDescription %></div>
           </div>
         </div>
       <% } %>

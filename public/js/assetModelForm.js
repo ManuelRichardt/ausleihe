@@ -30,6 +30,58 @@
     return '<table><tbody>' + rows.join('') + '</tbody></table><p><br></p>';
   }
 
+  function normalizeQuillHtmlForStorage(html) {
+    var source = String(html || '').trim();
+    if (!source) {
+      return '';
+    }
+
+    var container = document.createElement('div');
+    container.innerHTML = source;
+    var olNodes = container.querySelectorAll('ol');
+
+    olNodes.forEach(function (olNode) {
+      var items = Array.prototype.slice.call(olNode.children || []).filter(function (child) {
+        return child && child.tagName === 'LI';
+      });
+      if (!items.length) {
+        return;
+      }
+
+      var hasQuillListMetadata = items.some(function (li) {
+        return li.hasAttribute('data-list');
+      });
+      if (!hasQuillListMetadata) {
+        return;
+      }
+
+      var replacementFragment = document.createDocumentFragment();
+      var currentList = null;
+      var currentListType = '';
+
+      items.forEach(function (li) {
+        var listToken = String(li.getAttribute('data-list') || 'bullet').toLowerCase();
+        var targetListType = listToken === 'ordered' ? 'ol' : 'ul';
+
+        if (!currentList || currentListType !== targetListType) {
+          currentList = document.createElement(targetListType);
+          currentListType = targetListType;
+          replacementFragment.appendChild(currentList);
+        }
+
+        var targetLi = document.createElement('li');
+        targetLi.innerHTML = li.innerHTML;
+        currentList.appendChild(targetLi);
+      });
+
+      if (olNode.parentNode) {
+        olNode.parentNode.replaceChild(replacementFragment, olNode);
+      }
+    });
+
+    return container.innerHTML.trim();
+  }
+
   function bindQuillEditors() {
     var wrappers = document.querySelectorAll('[data-quill-editor]');
     if (!wrappers.length) {
@@ -95,9 +147,13 @@
 
     form.addEventListener('submit', function () {
       editors.forEach(function (entry) {
-        entry.hiddenField.value = isQuillContentEmpty(entry.quill)
-          ? ''
-          : String(entry.quill.root.innerHTML || '').trim();
+        if (isQuillContentEmpty(entry.quill)) {
+          entry.hiddenField.value = '';
+          return;
+        }
+
+        var normalizedHtml = normalizeQuillHtmlForStorage(entry.quill.root.innerHTML || '');
+        entry.hiddenField.value = normalizedHtml;
       });
     });
   }
