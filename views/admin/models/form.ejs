@@ -207,27 +207,75 @@
           errorFor,
         }) %>
 
-        <%- include('../../partials/forms/field', {
-          variant: 'bootstrap',
-          as: 'textarea',
-          wrapperClass: 'col-12',
-          name: 'description',
-          label: 'Beschreibung',
-          value: values.description || '',
-          rows: 3,
-          errorFor,
-        }) %>
+        <div class="col-12">
+          <label for="description" class="form-label">Beschreibung</label>
+          <div class="asset-model-richtext" data-quill-editor="description">
+            <div class="asset-model-richtext-toolbar" data-quill-toolbar>
+              <span class="ql-formats">
+                <button type="button" class="ql-bold" title="Fett"></button>
+                <button type="button" class="ql-italic" title="Kursiv"></button>
+                <button type="button" class="ql-underline" title="Unterstrichen"></button>
+              </span>
+              <span class="ql-formats">
+                <button type="button" class="ql-list" value="ordered" title="Nummerierte Liste"></button>
+                <button type="button" class="ql-list" value="bullet" title="Aufzählung"></button>
+              </span>
+              <span class="ql-formats">
+                <select class="ql-header" title="Überschrift">
+                  <option value="3">H3</option>
+                  <option value="4">H4</option>
+                  <option value="5">H5</option>
+                  <option value="6">H6</option>
+                  <option selected></option>
+                </select>
+              </span>
+              <span class="ql-formats">
+                <button type="button" class="ql-insertTable" title="Tabelle einfügen">Tabelle</button>
+                <button type="button" class="ql-clean" title="Format löschen"></button>
+              </span>
+            </div>
+            <div class="asset-model-richtext-content <%= errorFor('description') ? 'is-invalid' : '' %>" data-quill-content></div>
+            <textarea id="description" name="description" class="d-none" aria-hidden="true"><%= values.description || '' %></textarea>
+          </div>
+          <% if (errorFor('description')) { %>
+            <div class="invalid-feedback d-block"><%= errorFor('description') %></div>
+          <% } %>
+        </div>
 
-        <%- include('../../partials/forms/field', {
-          variant: 'bootstrap',
-          as: 'textarea',
-          wrapperClass: 'col-12',
-          name: 'technicalDescription',
-          label: 'Technische Beschreibung',
-          value: values.technicalDescription || '',
-          rows: 3,
-          errorFor,
-        }) %>
+        <div class="col-12">
+          <label for="technicalDescription" class="form-label">Technische Beschreibung</label>
+          <div class="asset-model-richtext" data-quill-editor="technicalDescription">
+            <div class="asset-model-richtext-toolbar" data-quill-toolbar>
+              <span class="ql-formats">
+                <button type="button" class="ql-bold" title="Fett"></button>
+                <button type="button" class="ql-italic" title="Kursiv"></button>
+                <button type="button" class="ql-underline" title="Unterstrichen"></button>
+              </span>
+              <span class="ql-formats">
+                <button type="button" class="ql-list" value="ordered" title="Nummerierte Liste"></button>
+                <button type="button" class="ql-list" value="bullet" title="Aufzählung"></button>
+              </span>
+              <span class="ql-formats">
+                <select class="ql-header" title="Überschrift">
+                  <option value="3">H3</option>
+                  <option value="4">H4</option>
+                  <option value="5">H5</option>
+                  <option value="6">H6</option>
+                  <option selected></option>
+                </select>
+              </span>
+              <span class="ql-formats">
+                <button type="button" class="ql-insertTable" title="Tabelle einfügen">Tabelle</button>
+                <button type="button" class="ql-clean" title="Format löschen"></button>
+              </span>
+            </div>
+            <div class="asset-model-richtext-content <%= errorFor('technicalDescription') ? 'is-invalid' : '' %>" data-quill-content></div>
+            <textarea id="technicalDescription" name="technicalDescription" class="d-none" aria-hidden="true"><%= values.technicalDescription || '' %></textarea>
+          </div>
+          <% if (errorFor('technicalDescription')) { %>
+            <div class="invalid-feedback d-block"><%= errorFor('technicalDescription') %></div>
+          <% } %>
+        </div>
 
         <div class="col-12" data-tracking-panel="bulk">
           <div class="card border-0 bg-light">

@@ -5,6 +5,7 @@ const {
 } = require('../config/dbConstants');
 const { parseBooleanToken } = require('../utils/valueParsing');
 const { DEFAULT_ITEM_QUANTITY, parsePositiveQuantity } = require('../utils/quantity');
+const { normalizeRichTextInput } = require('../utils/richTextSanitizer');
 
 const CSV_HEADERS = Object.freeze({
   MANUFACTURER: ['Manufacturer'],
@@ -528,8 +529,10 @@ class CsvImportService {
         manufacturerId: manufacturer.id,
         categoryId: category.id,
         lendingLocationId: rowContext.lendingLocationId,
-        description: this.readColumn(rowContext.row, ...CSV_HEADERS.DESCRIPTION),
-        technicalDescription: this.readColumn(rowContext.row, ...CSV_HEADERS.TECHNICAL_DESCRIPTION),
+        description: normalizeRichTextInput(this.readColumn(rowContext.row, ...CSV_HEADERS.DESCRIPTION)),
+        technicalDescription: normalizeRichTextInput(
+          this.readColumn(rowContext.row, ...CSV_HEADERS.TECHNICAL_DESCRIPTION)
+        ),
         imageUrl: this.readColumn(rowContext.row, ...CSV_HEADERS.IMAGE_URL),
         isActive: this.parseBoolean(this.readColumn(rowContext.row, ...CSV_HEADERS.IS_ACTIVE)),
         trackingType: rowContext.trackingType,

@@ -2,6 +2,106 @@
   var TARGET_UPLOAD_IMAGE_HEIGHT = 1000;
   var RESIZABLE_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
+  function isQuillContentEmpty(quill) {
+    if (!quill) {
+      return true;
+    }
+    var text = String(quill.getText() || '').replace(/\u00a0/g, ' ').trim();
+    var html = String(quill.root && quill.root.innerHTML ? quill.root.innerHTML : '').trim();
+    if (text) {
+      return false;
+    }
+    if (/<table[\s>]/i.test(html)) {
+      return false;
+    }
+    return !html || html === '<br>' || html === '<p><br></p>';
+  }
+
+  function buildTableMarkup(rowCount, columnCount) {
+    var rows = [];
+    for (var rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      var cells = [];
+      for (var columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+        var cellTag = rowIndex === 0 ? 'th' : 'td';
+        cells.push('<' + cellTag + '> </' + cellTag + '>');
+      }
+      rows.push('<tr>' + cells.join('') + '</tr>');
+    }
+    return '<table><tbody>' + rows.join('') + '</tbody></table><p><br></p>';
+  }
+
+  function bindQuillEditors() {
+    var wrappers = document.querySelectorAll('[data-quill-editor]');
+    if (!wrappers.length) {
+      return;
+    }
+
+    if (!window.Quill) {
+      window.console.error('Quill konnte nicht geladen werden.');
+      return;
+    }
+
+    var editors = [];
+
+    wrappers.forEach(function (wrapper) {
+      var targetInputId = wrapper.getAttribute('data-quill-editor');
+      var hiddenField = targetInputId ? document.getElementById(targetInputId) : null;
+      var editorContainer = wrapper.querySelector('[data-quill-content]');
+      var toolbarContainer = wrapper.querySelector('[data-quill-toolbar]');
+      if (!hiddenField || !editorContainer || !toolbarContainer) {
+        return;
+      }
+
+      var quill = new window.Quill(editorContainer, {
+        theme: 'snow',
+        modules: {
+          toolbar: {
+            container: toolbarContainer,
+            handlers: {
+              insertTable: function () {
+                var rowsInput = window.prompt('Anzahl Zeilen (inkl. Kopfzeile):', '2');
+                if (rowsInput === null) {
+                  return;
+                }
+                var colsInput = window.prompt('Anzahl Spalten:', '2');
+                if (colsInput === null) {
+                  return;
+                }
+                var rowCount = Math.max(parseInt(rowsInput, 10) || 0, 1);
+                var columnCount = Math.max(parseInt(colsInput, 10) || 0, 1);
+                var selection = quill.getSelection(true);
+                var index = selection ? selection.index : quill.getLength();
+                quill.clipboard.dangerouslyPasteHTML(index, buildTableMarkup(rowCount, columnCount), 'user');
+              },
+            },
+          },
+        },
+      });
+
+      if (hiddenField.value) {
+        quill.clipboard.dangerouslyPasteHTML(hiddenField.value);
+      }
+
+      editors.push({
+        quill: quill,
+        hiddenField: hiddenField,
+      });
+    });
+
+    var form = document.getElementById('assetModelForm');
+    if (!form) {
+      return;
+    }
+
+    form.addEventListener('submit', function () {
+      editors.forEach(function (entry) {
+        entry.hiddenField.value = isQuillContentEmpty(entry.quill)
+          ? ''
+          : String(entry.quill.root.innerHTML || '').trim();
+      });
+    });
+  }
+
   function isResizableImageFile(file) {
     var mimeType = String(file && file.type ? file.type : '').toLowerCase();
     return RESIZABLE_IMAGE_MIME_TYPES.indexOf(mimeType) !== -1;
@@ -382,6 +482,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    bindQuillEditors();
     var trackingTypeSelect = document.getElementById('trackingType');
     if (trackingTypeSelect) {
       trackingTypeSelect.addEventListener('change', updatePanels);

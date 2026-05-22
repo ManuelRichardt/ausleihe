@@ -1,5 +1,6 @@
 const { Op } = require('sequelize');
 const { parseBooleanToken } = require('../utils/valueParsing');
+const { normalizeRichTextInput } = require('../utils/richTextSanitizer');
 const {
   pickDefined,
   applyIsActiveFilter,
@@ -153,8 +154,8 @@ class AssetModelService {
       manufacturerId: data.manufacturerId,
       categoryId: data.categoryId,
       name: data.name,
-      description: data.description || null,
-      technicalDescription: data.technicalDescription || null,
+      description: normalizeRichTextInput(data.description),
+      technicalDescription: normalizeRichTextInput(data.technicalDescription),
       specs:
         data.specs && typeof data.specs === 'object'
           ? data.specs
@@ -375,6 +376,12 @@ class AssetModelService {
   async updateAssetModel(id, updates) {
     const assetModel = await this.getById(id);
     const allowedUpdates = this.pickAssetModelUpdates(updates);
+    if (Object.prototype.hasOwnProperty.call(allowedUpdates, 'description')) {
+      allowedUpdates.description = normalizeRichTextInput(allowedUpdates.description);
+    }
+    if (Object.prototype.hasOwnProperty.call(allowedUpdates, 'technicalDescription')) {
+      allowedUpdates.technicalDescription = normalizeRichTextInput(allowedUpdates.technicalDescription);
+    }
     if (allowedUpdates.lendingLocationId && allowedUpdates.lendingLocationId !== assetModel.lendingLocationId) {
       throw new Error('LendingLocation cannot be changed');
     }
