@@ -247,9 +247,9 @@ class AssetModelService {
       where[Op.and] = where[Op.and] || [];
       where[Op.and].push({
         [Op.or]: [
-          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('name')), { [Op.like]: likeValue }),
-          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('description')), { [Op.like]: likeValue }),
-          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('technical_description')), { [Op.like]: likeValue }),
+          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('AssetModel.name')), { [Op.like]: likeValue }),
+          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('AssetModel.description')), { [Op.like]: likeValue }),
+          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('AssetModel.technical_description')), { [Op.like]: likeValue }),
         ],
       });
     }
@@ -334,9 +334,9 @@ class AssetModelService {
       where[Op.and] = where[Op.and] || [];
       where[Op.and].push({
         [Op.or]: [
-          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('name')), { [Op.like]: likeValue }),
-          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('description')), { [Op.like]: likeValue }),
-          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('technical_description')), { [Op.like]: likeValue }),
+          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('AssetModel.name')), { [Op.like]: likeValue }),
+          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('AssetModel.description')), { [Op.like]: likeValue }),
+          this.models.sequelize.where(this.models.sequelize.fn('LOWER', this.models.sequelize.col('AssetModel.technical_description')), { [Op.like]: likeValue }),
         ],
       });
     }
