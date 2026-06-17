@@ -50,7 +50,12 @@
             <tbody>
               <% safeLoan.loanItems.forEach(function (item) { %>
                 <tr>
-                  <td><%= item.asset ? item.asset.inventoryNumber : item.assetId %></td>
+                  <td>
+                    <%= item.asset ? item.asset.inventoryNumber : item.assetId %>
+                    <% if (item.asset && item.asset.assetName) { %>
+                      <div class="small text-muted"><%= item.asset.assetName %></div>
+                    <% } %>
+                  </td>
                   <td><%= item.asset && item.asset.model ? item.asset.model.name : '-' %></td>
                   <td><%= item.asset && item.asset.model && item.asset.model.manufacturer ? item.asset.model.manufacturer.name : '-' %></td>
                   <td><%= item.status %></td>

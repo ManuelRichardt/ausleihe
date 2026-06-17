@@ -23,6 +23,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(100),
         allowNull: true,
       },
+      assetName: {
+        type: DataTypes.STRING(150),
+        allowNull: true,
+      },
       serialNumber: {
         type: DataTypes.STRING(150),
         allowNull: true,

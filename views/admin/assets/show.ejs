@@ -5,6 +5,9 @@
   const manufacturerName = safeAsset.model && safeAsset.model.manufacturer ? safeAsset.model.manufacturer.name : '-';
   const categoryName = safeAsset.model && safeAsset.model.category ? safeAsset.model.category.name : '-';
   const storageLocationName = safeAsset.storageLocation ? safeAsset.storageLocation.name : '-';
+  const titleText = safeAsset.assetName
+    ? `${safeAsset.assetName}${safeAsset.inventoryNumber ? ` | ${safeAsset.inventoryNumber}` : ''}`
+    : (safeAsset.inventoryNumber || 'Asset');
   const maintenanceList = Array.isArray(safeAsset.maintenances) ? safeAsset.maintenances : [];
   const fmt = function (value) {
     if (!value) return '-';
@@ -18,7 +21,7 @@
 <section class="admin assets">
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
-      <h1 class="h3 mb-1"><%= safeAsset.inventoryNumber || 'Asset' %></h1>
+      <h1 class="h3 mb-1"><%= titleText %></h1>
       <p class="text-muted mb-0">Modell: <%= modelName %></p>
     </div>
     <div class="d-flex gap-2">
@@ -32,6 +35,10 @@
       <dl class="row mb-0">
         <dt class="col-sm-3">Inventarnummer</dt>
         <dd class="col-sm-9"><%= safeAsset.inventoryNumber || '-' %></dd>
+        <% if (safeAsset.assetName) { %>
+          <dt class="col-sm-3">Individueller Name</dt>
+          <dd class="col-sm-9"><%= safeAsset.assetName %></dd>
+        <% } %>
         <dt class="col-sm-3">Seriennummer</dt>
         <dd class="col-sm-9"><%= safeAsset.serialNumber || '-' %></dd>
         <dt class="col-sm-3">Modell</dt>

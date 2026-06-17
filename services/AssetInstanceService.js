@@ -12,6 +12,11 @@ class AssetInstanceService {
     this.models = models;
   }
 
+  normalizeOptionalText(value) {
+    const text = String(value || '').trim();
+    return text || null;
+  }
+
   async createAsset(data) {
     const {
       LendingLocation,
@@ -49,6 +54,7 @@ class AssetInstanceService {
           assetModelId: data.assetModelId,
           storageLocationId: data.storageLocationId || null,
           inventoryNumber: data.inventoryNumber || null,
+          assetName: this.normalizeOptionalText(data.assetName),
           serialNumber: data.serialNumber || null,
           condition: data.condition || 'good',
           isActive: data.isActive !== undefined ? data.isActive : true,
@@ -252,6 +258,7 @@ class AssetInstanceService {
       // sequelize.col uses raw DB snake_case column names here.
       searchPredicates.push(
         sequelize.where(sequelize.fn('LOWER', sequelize.col('inventory_number')), { [Op.like]: likeValue }),
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('asset_name')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('serial_number')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('model.name')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('model.description')), { [Op.like]: likeValue }),
@@ -273,6 +280,13 @@ class AssetInstanceService {
       searchPredicates.push(
         sequelize.where(sequelize.fn('LOWER', sequelize.col('model.description')), { [Op.like]: likeValue }),
         sequelize.where(sequelize.fn('LOWER', sequelize.col('model.technical_description')), { [Op.like]: likeValue })
+      );
+    }
+    if (filter.assetName) {
+      searchPredicates.push(
+        sequelize.where(sequelize.fn('LOWER', sequelize.col('asset_name')), {
+          [Op.like]: `%${String(filter.assetName).toLowerCase()}%`,
+        })
       );
     }
     if (filter.manufacturer) {
@@ -332,12 +346,16 @@ class AssetInstanceService {
         'assetModelId',
         'storageLocationId',
         'inventoryNumber',
+        'assetName',
         'serialNumber',
         'condition',
         'isActive',
       ]);
       if (allowed.inventoryNumber === '') {
         allowed.inventoryNumber = null;
+      }
+      if (Object.prototype.hasOwnProperty.call(allowed, 'assetName')) {
+        allowed.assetName = this.normalizeOptionalText(allowed.assetName);
       }
       if (allowed.serialNumber === '') {
         allowed.serialNumber = null;

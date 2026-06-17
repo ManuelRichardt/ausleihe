@@ -48,6 +48,11 @@
           <% if (errorFor('inventoryNumber')) { %><div class="invalid-feedback"><%= errorFor('inventoryNumber') %></div><% } %>
         </div>
         <div class="col-md-6">
+          <label for="assetName" class="form-label">Individueller Name</label>
+          <input type="text" class="form-control <%= errorFor('assetName') ? 'is-invalid' : '' %>" id="assetName" name="assetName" value="<%= values.assetName || '' %>" placeholder="Optional">
+          <% if (errorFor('assetName')) { %><div class="invalid-feedback"><%= errorFor('assetName') %></div><% } %>
+        </div>
+        <div class="col-md-6">
           <label for="storageLocationId" class="form-label">Lagerort</label>
           <select id="storageLocationId" name="storageLocationId" class="form-select <%= errorFor('storageLocationId') ? 'is-invalid' : '' %>">
             <option value="">Kein Lagerort</option>

@@ -22,7 +22,12 @@
   <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
     <div>
       <h1 class="h3 mb-1">Asset bearbeiten</h1>
-      <p class="text-muted mb-0"><%= safeAsset.inventoryNumber || '' %></p>
+      <p class="text-muted mb-0">
+        <%= safeAsset.inventoryNumber || '' %>
+        <% if (safeAsset.assetName) { %>
+          | <%= safeAsset.assetName %>
+        <% } %>
+      </p>
     </div>
     <div class="d-flex gap-2">
       <a href="/admin/assets/<%= safeAsset.id %>" class="btn btn-outline-secondary">Zurück</a>
@@ -47,6 +52,11 @@
           <label for="inventoryNumber" class="form-label">Inventarnummer</label>
           <input type="text" class="form-control <%= errorFor('inventoryNumber') ? 'is-invalid' : '' %>" id="inventoryNumber" name="inventoryNumber" value="<%= values.inventoryNumber || '' %>">
           <% if (errorFor('inventoryNumber')) { %><div class="invalid-feedback"><%= errorFor('inventoryNumber') %></div><% } %>
+        </div>
+        <div class="col-md-6">
+          <label for="assetName" class="form-label">Individueller Name</label>
+          <input type="text" class="form-control <%= errorFor('assetName') ? 'is-invalid' : '' %>" id="assetName" name="assetName" value="<%= values.assetName || '' %>" placeholder="Optional">
+          <% if (errorFor('assetName')) { %><div class="invalid-feedback"><%= errorFor('assetName') %></div><% } %>
         </div>
         <div class="col-md-6">
           <label for="storageLocationId" class="form-label">Lagerort</label>

@@ -84,7 +84,12 @@
               <tr>
                 <td><input type="checkbox" name="itemIds" value="<%= item.id %>" class="return-item-checkbox"></td>
                 <td><%= item.asset ? (item.asset.inventoryNumber || item.asset.serialNumber || item.asset.id) : '-' %></td>
-                <td><%= model ? model.name : '-' %></td>
+                <td>
+                  <%= model ? model.name : '-' %>
+                  <% if (item.asset && item.asset.assetName) { %>
+                    <div class="small text-muted"><%= item.asset.assetName %></div>
+                  <% } %>
+                </td>
                 <td><%= manufacturer ? manufacturer.name : '-' %></td>
                 <td><%= toItemQuantity(item) %></td>
                 <td>

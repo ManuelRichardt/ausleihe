@@ -575,21 +575,25 @@ class LoanPortalService {
       const manufacturerName = model && model.manufacturer ? model.manufacturer.name : '';
       const isBulk = Boolean(model && model.trackingType === 'bulk');
       const availableQuantity = isBulk ? (bulkStockByModelId.get(asset.assetModelId) || 0) : 1;
+      const displayModelName = asset.assetName
+        ? `${asset.assetName} | ${model ? model.name : ''}`
+        : (model ? model.name : '');
 
       return {
         kind: isBulk ? 'bulk' : 'serialized',
         id: asset.id,
         assetId: isBulk ? null : asset.id,
         assetModelId: asset.assetModelId,
+        assetName: asset.assetName || '',
         inventoryNumber: asset.inventoryNumber || '',
         serialNumber: asset.serialNumber || '',
         modelId: asset.assetModelId,
-        modelName: model ? model.name : '',
+        modelName: displayModelName,
         manufacturerName,
         availableQuantity,
         label: [
           asset.inventoryNumber || asset.serialNumber || asset.id,
-          model ? model.name : null,
+          displayModelName || null,
           manufacturerName || null,
           isBulk ? `${availableQuantity} verfügbar` : null,
         ].filter(Boolean).join(' — '),

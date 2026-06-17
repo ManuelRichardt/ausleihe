@@ -76,6 +76,7 @@ class LoanAdminController {
           kind: 'bulk',
           assetModelId,
           quantity: normalizeQuantity(entry.quantity),
+          assetName: entry.assetName || '',
           inventoryNumber: entry.inventoryNumber || '',
           serialNumber: entry.serialNumber || '',
           modelName: entry.modelName || '',
@@ -85,6 +86,7 @@ class LoanAdminController {
       return {
         kind: 'serialized',
         assetId: entry.assetId || entry.id || null,
+        assetName: entry.assetName || '',
         inventoryNumber: entry.inventoryNumber || '',
         serialNumber: entry.serialNumber || '',
         modelName: entry.modelName || '',

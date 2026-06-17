@@ -81,6 +81,10 @@ const assetValidation = [
     .optional({ nullable: true, checkFalsy: true })
     .isString()
     .trim(),
+  body('assetName')
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .trim(),
   body('serialNumber')
     .optional({ nullable: true, checkFalsy: true })
     .isString(),

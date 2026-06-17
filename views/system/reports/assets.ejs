@@ -7,6 +7,7 @@
         <tr>
           <th>ID</th>
           <th>Inventarnummer</th>
+          <th>Individueller Name</th>
           <th>Modell</th>
           <th>Status</th>
         </tr>
@@ -16,6 +17,7 @@
           <tr>
             <td><%= asset.id %></td>
             <td><%= asset.inventoryNumber %></td>
+            <td><%= asset.assetName || '-' %></td>
             <td><%= asset.model ? asset.model.name : asset.assetModelId %></td>
             <td><%= asset.condition %></td>
           </tr>

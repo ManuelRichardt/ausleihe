@@ -19,6 +19,9 @@ const search = handle((req) => {
   if (req.query.name) {
     filter.name = req.query.name;
   }
+  if (req.query.assetName) {
+    filter.assetName = req.query.assetName;
+  }
   if (req.query.manufacturer) {
     filter.manufacturer = req.query.manufacturer;
   }

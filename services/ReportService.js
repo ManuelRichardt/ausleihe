@@ -36,7 +36,12 @@ function normalizeLabelText(value, fallback = '-') {
 
 function resolveAssetDesignation(asset) {
   const model = asset && asset.model ? asset.model : {};
-  return normalizeLabelText(model.name || 'Asset');
+  const assetName = asset && asset.assetName ? String(asset.assetName).trim() : '';
+  const modelName = model && model.name ? String(model.name).trim() : '';
+  if (assetName && modelName) {
+    return normalizeLabelText(`${assetName} | ${modelName}`);
+  }
+  return normalizeLabelText(assetName || modelName || 'Asset');
 }
 
 function getLabelLogoBuffer() {
@@ -139,9 +144,12 @@ class ReportService {
           }));
 
         assetsWithInventory.forEach((asset) => {
+          const inventoryText = asset.assetName
+            ? `${asset.inventoryNumber} (${asset.assetName})`
+            : asset.inventoryNumber;
           rows.push({
             ...baseRow,
-            inventoryOrStock: asset.inventoryNumber,
+            inventoryOrStock: inventoryText,
             storageLocation: asset.storageLocation ? asset.storageLocation.name : '-',
             isActive: Boolean(asset.isActive),
           });
@@ -228,6 +236,7 @@ class ReportService {
       const q = `%${String(filters.query).trim()}%`;
       where[Op.or] = [
         { inventoryNumber: { [Op.like]: q } },
+        { assetName: { [Op.like]: q } },
         { serialNumber: { [Op.like]: q } },
       ];
     }
@@ -345,9 +354,12 @@ class ReportService {
         }
         const asset = entry.asset || {};
         const model = asset.model || {};
+        const assetLabel = asset.assetName
+          ? `${asset.inventoryNumber || '-'} (${asset.assetName})`
+          : (asset.inventoryNumber || '-');
         const values = [
           formatDateTime(entry.reportedAt),
-          asset.inventoryNumber || '-',
+          assetLabel,
           model.name || '-',
           entry.status || '-',
           entry.completedAt ? formatDateTime(entry.completedAt) : '-',

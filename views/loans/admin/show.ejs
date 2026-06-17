@@ -145,11 +145,14 @@
                     <select class="form-select form-select-sm" name="items[<%= index %>][assetId]">
                       <option value="">Bitte wählen</option>
                       <% assignable.forEach(function (asset) { %>
-                        <option value="<%= asset.id %>" data-scan-code="<%= asset.inventoryNumber || asset.serialNumber || asset.id %>" <%= item.assetId === asset.id ? 'selected' : '' %>><%= asset.inventoryNumber || asset.serialNumber || asset.id %></option>
+                        <option value="<%= asset.id %>" data-scan-code="<%= asset.inventoryNumber || asset.serialNumber || asset.id %>" <%= item.assetId === asset.id ? 'selected' : '' %>><%= asset.inventoryNumber || asset.serialNumber || asset.id %><%= asset.assetName ? (' | ' + asset.assetName) : '' %></option>
                       <% }) %>
                     </select>
                   <% } else { %>
-                    <%= item.asset ? (item.asset.inventoryNumber || item.asset.serialNumber || item.asset.id) : '-' %>
+                      <%= item.asset ? (item.asset.inventoryNumber || item.asset.serialNumber || item.asset.id) : '-' %>
+                      <% if (item.asset && item.asset.assetName) { %>
+                        <div class="small text-muted"><%= item.asset.assetName %></div>
+                      <% } %>
                   <% } %>
                 </td>
                 <td><%= model ? model.name : '-' %></td>

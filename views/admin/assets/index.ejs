@@ -36,7 +36,7 @@
     <input type="hidden" name="includeDeleted" value="<%= includeDeleted ? '1' : '' %>">
     <div class="col-12 col-md-4">
       <label for="q" class="form-label">Suche</label>
-      <input type="text" class="form-control" id="q" name="q" value="<%= query.q || '' %>" placeholder="Inventarnummer, Modell, Hersteller">
+      <input type="text" class="form-control" id="q" name="q" value="<%= query.q || '' %>" placeholder="Inventarnummer, Name, Modell, Hersteller">
     </div>
     <div class="col-12 col-md-3">
       <label for="assetModelId" class="form-label">Modell</label>
@@ -116,7 +116,12 @@
             <% assets.forEach(function(a) { %>
               <tr>
                 <td><%= a.inventoryNumber %></td>
-                <td><%= (a.model && a.model.name) ? a.model.name : '-' %></td>
+                <td>
+                  <div><%= (a.model && a.model.name) ? a.model.name : '-' %></div>
+                  <% if (a.assetName) { %>
+                    <div class="small text-muted"><%= a.assetName %></div>
+                  <% } %>
+                </td>
                 <td><%= (a.model && a.model.manufacturer && a.model.manufacturer.name) ? a.model.manufacturer.name : '-' %></td>
                 <td><%= (a.storageLocation && a.storageLocation.name) ? a.storageLocation.name : '-' %></td>
                 <td><%= a.serialNumber || '-' %></td>
