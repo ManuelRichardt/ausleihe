@@ -234,6 +234,8 @@ sudo ufw allow 443
 sudo ufw allow out 389/tcp
 sudo ufw allow 161/udp
 sudo ufw allow 162/udp
+sudo ufw allow 1514/tcp
+sudo ufw allow 1515/tcp
 
 # Docker-Traffic ist bei UFW oft "routed" und wird sonst durch die Default-Policy blockiert.
 # Interface-agnostische Forward-Regel, damit auch Compose-Netze (z. B. br-*) abgedeckt sind.
